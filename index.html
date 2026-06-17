@@ -1003,9 +1003,11 @@ function calcSqzMomAO(klines,diWin){
     if(so&&fV&&fA&&ADX[i]>20&&dimX&&DIM[i]>DIP[i])bearSignal=true;
     if(adxX&&DIP[i]>20)bullAdxBrk=true;
     if(adxX&&DIM[i]>20)bearAdxBrk=true;
-    // DI крос — свеж само ако е во последните diWin затворени свеки
-    // 4h/1d/1w: diWin=1 (само последната), 1h и помали: diWin=2 (последните 2)
-    if(i>=n-diWin){
+    // DI крос — само затворени свекки (i<n-1), во последните diWin
+    // n-1=тековна отворена, n-2=последна затворена
+    // diWin=1 (4h/1d/1w): само i==n-2 (последна затворена)
+    // diWin=2 (1h/15m/5m/1m): i==n-2 или i==n-3 (последните 2 затворени)
+    if(i>=n-1-diWin&&i<n-1){
       if(DIP[i]>DIM[i]&&DIP[i-1]<=DIM[i-1])diCrossUp=true;
       if(DIM[i]>DIP[i]&&DIM[i-1]<=DIP[i-1])diCrossDown=true;
     }
