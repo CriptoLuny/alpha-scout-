@@ -488,8 +488,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 <!-- SETUPS VIEW -->
 <div class="setups-view" id="setupsView">
   <div class="su-hdr">
-    <div class="su-title">📊 TRADE SETUPS</div>
-    <div class="su-ts" id="suTs">— Скенирај за да добиеш препораки</div>
+    <div>
+      <div class="su-title">📊 TRADE SETUPS</div>
+      <div class="su-ts" id="suTs">— Скенирај за да добиеш препораки</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:3px;font-family:var(--mono)">MAX % OD HIGH/LOW</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="range" id="suMaxPct" min="5" max="50" value="30" step="5"
+            style="width:80px;accent-color:var(--accent)"
+            oninput="document.getElementById('suMaxPctVal').textContent=this.value+'%';refilterSetups()">
+          <span id="suMaxPctVal" style="font-family:var(--mono);font-size:12px;color:var(--accent);min-width:32px">30%</span>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="su-body" id="suBody">
     <div class="su-empty">📊<br>Притисни СКЕНИРАЈ прво<br><span style="font-size:10px">Потоа отвори СЕТАПИ за препораки</span></div>
@@ -1914,6 +1927,16 @@ async function analyzeSetup(s) {
   if (ma1) setupScore += 3;
   if (ma4) setupScore += 3;
 
+  // TF confluence label
+  const tfConf = dir1 !== 'neutral' && dir4 !== 'neutral' && dir1 === dir4
+    ? (dir1 === 'bull' ? '1h+4h BULL' : '1h+4h BEAR')
+    : dir1 !== 'neutral' ? '1h ' + dir1.toUpperCase()
+    : dir4 !== 'neutral' ? '4h ' + dir4.toUpperCase() : '';
+
+  const pctFromHighLow = structCtx
+    ? (finalDir === 'bear' ? parseFloat(structCtx.pctFromHigh) : parseFloat(structCtx.pctFromLow))
+    : null;
+
   return {
     coin, price, finalDir, isMega, isGood, isBasic,
     entry, sl, tp1, tp2, rr,
@@ -1922,8 +1945,17 @@ async function analyzeSetup(s) {
     score1h: r1.score || 0, score4h: r4.score || 0,
     maSq1h: ma1, maSq4h: ma4,
     maW1h: r1.maSqueezeWidth || 0, maW4h: r4.maSqueezeWidth || 0,
+    tfConf, pctFromHighLow, structCtx,
     ts: new Date().toLocaleTimeString('mk-MK', {hour: '2-digit', minute: '2-digit'})
   };
+}
+
+
+// -- SETUP REFILTER (MAX % slider) --
+function refilterSetups() {
+  if (document.getElementById('setupsView').classList.contains('active')) {
+    renderSetups();
+  }
 }
 
 function renderSetups() {
@@ -1945,9 +1977,17 @@ function renderSetups() {
 
   ts.textContent = 'Анализирано: ' + new Date().toLocaleTimeString('mk-MK', {hour: '2-digit', minute: '2-digit'}) + ' . 1h+4h confluence';
 
-  const mega = S_setups.filter(function(s) { return s.isMega; });
-  const longs = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bull'; }).slice(0, 6);
-  const shorts = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bear'; }).slice(0, 6);
+  const maxPctEl = document.getElementById('suMaxPct');
+  const maxPct = maxPctEl ? parseFloat(maxPctEl.value) : 30;
+
+  const passFilter = function(s) {
+    if (s.pctFromHighLow === null || s.pctFromHighLow === undefined) return true;
+    return s.pctFromHighLow <= maxPct;
+  };
+
+  const mega = S_setups.filter(function(s) { return s.isMega && passFilter(s); });
+  const longs = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bull' && passFilter(s); }).slice(0, 6);
+  const shorts = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bear' && passFilter(s); }).slice(0, 6);
 
   let html = '';
 
@@ -1989,6 +2029,9 @@ function setupCardHTML(s) {
   const dirTxt = s.isMega ? '🎯 MEGA ' + (isLong ? 'LONG' : 'SHORT') : isLong ? '▲ LONG' : '▼ SHORT';
   const maTag = s.maSq1h && s.maSq4h ? '<span class="ctag ct-megasq">💎TIGHT SQ</span> ' : s.maSq1h ? '<span class="ctag ct-masq">💎1h SQ</span> ' : s.maSq4h ? '<span class="ctag ct-masq">💎4h SQ</span> ' : '';
   const alphaTag = s.coin && isAlpha(s.coin) ? '<span class="ctag ct-alpha">🅐</span> ' : '';
+  const tfConfCol = s.finalDir === 'bull' ? 'var(--green)' : 'var(--red)';
+  const tfConfTag = s.tfConf ? '<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-family:var(--mono);font-weight:bold;background:rgba(128,128,128,.1);color:' + tfConfCol + '">' + s.tfConf + '</span> ' : '';
+  const pctTag = s.pctFromHighLow !== null ? '<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-family:var(--mono);font-weight:bold;background:rgba(128,128,128,.08);color:var(--muted)">' + (s.finalDir === 'bear' ? '-' : '+') + s.pctFromHighLow.toFixed(1) + '% od ' + (s.finalDir === 'bear' ? 'high' : 'low') + '</span>' : '';
   const scoreMax = 30;
   const scorePct = Math.min((s.setupScore / scoreMax) * 100, 100);
   const scoreCol = s.isMega ? '#ff32cc' : isLong ? 'var(--green)' : 'var(--red)';
@@ -2007,7 +2050,8 @@ function setupCardHTML(s) {
   return '<div class="su-card ' + cardCls + '" data-coin="' + s.coin + '" onclick="openDetail(this.dataset.coin)">'
     + '<div class="su-top">'
     + '<div><div class="su-coin">' + alphaTag + maTag + s.coin + '<span style="font-size:10px;color:var(--muted);font-weight:normal"> USDT</span></div>'
-    + '<div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono)">Vol: $' + s.vol.toFixed(1) + 'M . FR: ' + (s.fr >= 0 ? '+' : '') + s.fr.toFixed(3) + '%</div></div>'
+    + '<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap">' + tfConfTag + pctTag + '</div>'
+    + '<div style="font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)">Vol: $' + s.vol.toFixed(1) + 'M · FR: ' + (s.fr >= 0 ? '+' : '') + s.fr.toFixed(3) + '%</div></div>'
     + '<div class="su-dir ' + dirCls + '">' + dirTxt + '</div>'
     + '</div>'
     + levels + reasonsHtml
