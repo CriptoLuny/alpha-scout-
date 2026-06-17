@@ -88,9 +88,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .sort-label{font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
 .sort-btn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:var(--text2);white-space:nowrap;transition:all .2s;font-weight:500}
 .sort-btn.active{border-color:var(--accent2);color:var(--accent2);background:rgba(160,32,240,.12)}
-.thresh-wrap{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.thresh-wrap{margin-left:auto;display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:nowrap}
 .thresh-label{font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
-.thresh-input{width:56px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-family:var(--mono);font-size:12px;text-align:center}
+.thresh-input{width:48px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px;text-align:center}
 
 .liq-area{flex-shrink:0}
 .liq-b{margin:6px 14px 0;background:rgba(255,102,0,.08);border:1px solid rgba(255,102,0,.3);border-radius:6px;padding:7px 11px;font-family:var(--mono);font-size:11px;color:var(--orange);display:flex;align-items:center;gap:6px;font-weight:500}
@@ -156,7 +156,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 /* ── DETAIL OVERLAY ── */
 .ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.9);backdrop-filter:blur(8px);display:none;align-items:flex-end}
 .ov.open{display:flex}
-.dp{width:100%;background:var(--bg2);border-radius:18px 18px 0 0;border-top:1px solid var(--border);max-height:93vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.dp{width:100%;background:var(--bg2);border-radius:18px 18px 0 0;border-top:1px solid var(--border);max-height:93vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .dp-hnd{width:34px;height:3px;background:var(--border);border-radius:2px;margin:12px auto 0}
 .dp-top{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .dp-sym{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:1px;color:var(--text)}
@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   html,body{overflow:auto;height:auto}
   body{max-width:1100px;margin:0 auto;min-height:100vh;overflow:visible}
   .list-wrap{overflow-y:visible;max-height:none}
-  .dp{max-height:none;border-radius:12px;margin:20px;width:auto}
+  .dp{max-height:80vh;border-radius:12px;margin:20px;width:auto;overflow-y:auto}
   .ov{align-items:center;justify-content:center}
   .dp-metrics{grid-template-columns:repeat(3,1fr)}
   .tf-grid{grid-template-columns:repeat(4,1fr)}
@@ -488,7 +488,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="sort-btn"        id="sort-oi"    onclick="setSort('oi',this)">OI</div>
     <div class="thresh-wrap">
       <span class="thresh-label">MIN %:</span>
-      <input class="thresh-input" id="minChg" type="number" value="0" min="0" max="50" step="0.5" oninput="renderList()">
+      <input class="thresh-input" id="minChg" type="number" value="0" min="0" max="100" step="0.5" oninput="renderList()">
+      <span class="thresh-label">MAX %:</span>
+      <input class="thresh-input" id="maxChg" type="number" value="0" min="0" max="100" step="0.5" title="0 = без лимит. Пр: 5 = само коини со промена до 5%" oninput="renderList()" style="border-color:rgba(255,100,0,.3)">
       <span class="thresh-label">MIN VOL $M:</span>
       <input class="thresh-input" id="minVol" type="number" value="0" min="0" max="1000" step="1" oninput="renderList()">
     </div>
@@ -1001,7 +1003,8 @@ function calcSqzMomAO(klines,diWin){
     if(so&&fV&&fA&&ADX[i]>20&&dimX&&DIM[i]>DIP[i])bearSignal=true;
     if(adxX&&DIP[i]>20)bullAdxBrk=true;
     if(adxX&&DIM[i]>20)bearAdxBrk=true;
-    // DI+ / DI- crossovers (ta.crossover) — само ако кросот е во последните diWin свеќи
+    // DI крос — свеж само ако е во последните diWin затворени свеки
+    // 4h/1d/1w: diWin=1 (само последната), 1h и помали: diWin=2 (последните 2)
     if(i>=n-diWin){
       if(DIP[i]>DIM[i]&&DIP[i-1]<=DIM[i-1])diCrossUp=true;
       if(DIM[i]>DIP[i]&&DIM[i-1]<=DIP[i-1])diCrossDown=true;
@@ -1027,7 +1030,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
     const klLimit=hiTF?100:70;
     const klFull=await apiFetch(`/klines?symbol=${coin}USDT&interval=${tf}&limit=${klLimit}`);
-    const diWin=(tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 12h/1d/1w: макс 1 свеќа, останати: макс 2
+    const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
     const kl=klFull?(hiTF?klFull:klFull.slice(-20)):null; // legacy пресметки остануваат на стариот број барови
     if(kl&&kl.length>=10){
@@ -1108,6 +1111,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     if(sqz.bearAdxBrk&&!sqz.bearSignal){score++;sigs.push({l:'ADX BRK▼',t:'bear'});}
     if(sqz.diCrossUp)sigs.push({l:'▲DI CROSS',t:'bull'});
     if(sqz.diCrossDown)sigs.push({l:'▼DI CROSS',t:'bear'});
+    // ADI/vDI tags (current state) - only if DI changed significantly vs prev bar
+    // (already handled by diCrossUp/Down freshness check above)
     if(sqz.sqzOn&&!sqz.bullSignal&&!sqz.bearSignal)sigs.push({l:'SQZ ON',t:'neu'});
     if(sqz.corr==='div')sigs.push({l:'MOM/AO DIV',t:'neu'});
   }
@@ -1170,6 +1175,9 @@ function renderList(){
     if(S.filter==='usdt')    data=data.filter(s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'));
   }
   if(minChg>0)data=data.filter(s=>Math.abs(s.priceChg)>=minChg);
+  const maxChgEl=document.getElementById('maxChg');
+  const maxChg=maxChgEl?parseFloat(maxChgEl.value)||0:0;
+  if(maxChg>0)data=data.filter(s=>Math.abs(s.priceChg)<=maxChg);
   if(minVolM>0)data=data.filter(s=>(s.volM||s.volume/1e6)>=minVolM);
   const sortFn={score:(a,b)=>b.score-a.score,chg:(a,b)=>Math.abs(b.priceChg)-Math.abs(a.priceChg),vol:(a,b)=>b.volume-a.volume,fr:(a,b)=>Math.abs(b.fr)-Math.abs(a.fr),oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange)}[S.sort]||((a,b)=>b.score-a.score);
   data=[...data].sort(sortFn);
