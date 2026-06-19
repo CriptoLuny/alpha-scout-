@@ -689,6 +689,10 @@ const SIG_INFO={
   '▼DI CROSS':{title:'DI- крос над DI+ (црвено триаголниче)',desc:'DI- пробива над DI+ — продавачкиот притисок ја презема контролата. Истиот маркер како триаголничето над барот во TradingView. Појак е ако ADX>20.',bear:{cls:'pos-short',txt:'⬇ Bearish DI крос — потврди со ADX и CVD'}},
   'SQZ ON':{title:'Squeeze Активен (компресија)',desc:'Bollinger Bands се внатре во Keltner Channels — волатилноста е компресирана. Очекувај експлозивен потег, насоката уште не е потврдена.',bull:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'},bear:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'}},
   'MOM/AO DIV':{title:'Momentum / AO Дивергенција',desc:'Squeeze Momentum и Awesome Oscillator одат во спротивни насоки (портокалова позадина во TV). Не влегувај против двата.',bull:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'},bear:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'}},
+  'TIGHT SQ':{title:'TIGHT Squeeze (💎 Екстремна компресија)',desc:'SMA 25/50/99 се приближиле на помалку од 0.5% едни од други. Ова е екстремна компресија на Moving Average линиите — по ваква компресија следи експлозивен потег. Колку е потесен squeeze-от, толку е поголем очекуваниот потег.',bull:{cls:'pos-long',txt:'⬆ Подготви се за LONG ако пробие нагоре со волумен'},bear:{cls:'pos-short',txt:'⬇ Подготви се за SHORT ако пробие надолу со волумен'}},
+  'MA SQ BULL':{title:'MA Squeeze — Bullish насока (🚀)',desc:'SMA 25/50/99 конвергираат и SMA25 е над SMA99 — bullish распоред. Цената е компресирана и спремна за потег нагоре. Почекај потврда со CVD или DI+ крос.',bull:{cls:'pos-long',txt:'⬆ MA Squeeze BULL — потврди со CVD + волумен'},bear:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
+  'MA SQ BEAR':{title:'MA Squeeze — Bearish насока (📉)',desc:'SMA 25/50/99 конвергираат и SMA25 е под SMA99 — bearish распоред. Цената е компресирана и спремна за потег надолу. Почекај потврда со CVD или DI- крос.',bear:{cls:'pos-short',txt:'⬇ MA Squeeze BEAR — потврди со CVD + волумен'},bull:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
+  'SQUEEZE':{title:'Squeeze Activation (🔥)',desc:'CVD нагло расте + OI паѓа + цената расте + Funding Rate негативен. Комбинација која сигнализира принудно затворање на шортови (short squeeze). Силен bullish потег е во тек или следи.',bull:{cls:'pos-long',txt:'⬆ SHORT SQUEEZE во тек — прати за continuation'},bear:{cls:'pos-watch',txt:'>> Reversal можен по squeeze'}},
   'default':{title:'Сигнал',desc:'Детектирана аномалија во пазарните индикатори.',bull:{cls:'pos-long',txt:'⬆ МОЖНА ПОЗИЦИЈА: LONG'},bear:{cls:'pos-short',txt:'⬇ МОЖНА ПОЗИЦИЈА: SHORT'}}
 };
 
@@ -732,6 +736,8 @@ document.addEventListener('click',function(e){
 
 // -- CONFIG -------------------------------------------------
 const FAPI='https://fapi.binance.com/fapi/v1';
+const TV_CHART='uKSgXcs7';
+const TV_TF={'1m':'1','5m':'5','15m':'15','1h':'60','3h':'180','4h':'240','12h':'720','1d':'D','1w':'W'};
 const FDAPI='https://fapi.binance.com/futures/data';
 const SAPI='https://api.binance.com/api/v3';
 const BAPI='https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list';
@@ -1197,9 +1203,9 @@ function rowHTML(s){
   if(s.isAlpha)tags.push(`<span class="ctag ct-alpha">🅐</span>`);
   const catTag=getCatTag(s.coin);if(catTag)tags.push(catTag);
   if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);
-  if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35)">🔥SQUEEZE</span>`);
-  if(s.maSqueeze&&s.maSqueezeWidth<0.5)tags.push(`<span class="ctag ct-megasq">💎TIGHT SQ</span>`);
-  else if(s.maSqueeze)tags.push(`<span class="ctag ct-masq">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}
+  if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35);cursor:pointer" onclick="showSigTip(event,'SQUEEZE','bull')">🔥SQUEEZE</span>`);
+  if(s.maSqueeze&&s.maSqueezeWidth<0.5)tags.push(`<span class="ctag ct-megasq" onclick="showSigTip(event,'TIGHT SQ',s.maSqueezeDir||'bull')">💎TIGHT SQ</span>`);
+  else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';tags.push(`<span class="ctag ct-masq" onclick="showSigTip(event,'${maSqLbl}','${s.maSqueezeDir||'bull'}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}}
   else if(s.dir==='bull')tags.push(`<span class="ctag ct-bull">▲ BULL</span>`);
   else if(s.dir==='bear')tags.push(`<span class="ctag ct-bear">▼ BEAR</span>`);
   else tags.push(`<span class="ctag ct-neu">>> NEU</span>`);
@@ -1226,7 +1232,7 @@ function rowHTML(s){
       <div class="crow-tags">${tags.join('')}</div>
     </div></div>
     <div class="crow-right">
-      <div class="crow-price">$${fmt(s.price)}</div>
+      <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end"><div class="crow-price">$${fmt(s.price)}</div><span onclick="event.stopPropagation();openTV('${s.coin}','${s.tf}')" style="font-size:9px;padding:2px 5px;border-radius:3px;background:rgba(41,98,255,.12);color:#2962ff;border:1px solid rgba(41,98,255,.25);cursor:pointer;font-family:var(--mono)" title="TradingView">TV</span></div>
       <div class="crow-chg ${pc?'up':'dn'}">${pc?'+':''}${s.priceChg.toFixed(2)}%</div>
       <div class="crow-vol">${fmtM(s.volume)}</div>
       <div class="sdots">${dots}<span class="crow-arr">›</span></div>
@@ -1273,7 +1279,8 @@ function populateDetail(s){
   document.getElementById('dpP').textContent='$'+fmt(s.price);
   const dc=document.getElementById('dpC');dc.textContent=(pc?'+':'')+s.priceChg.toFixed(2)+'%';dc.className='dp-c '+(pc?'up':'dn');
   document.getElementById('dpLinks').innerHTML=`
-    <a class="ext-link binance" onclick="openBinance('${coin}','${s.tf}')">📊 Binance ${s.tf}</a>
+    <a class="ext-link" style="border-color:rgba(41,98,255,.3);color:#2962ff;cursor:pointer" onclick="openTV('${coin}','${s.tf}')">📐 TradingView</a>
+    <a class="ext-link binance" onclick="openBinance('${coin}','${s.tf}')">📊 Binance</a>
     <a class="ext-link cg-chart" href="https://legend.coinglass.com/chart/${coin}USDT" target="_blank" rel="noopener">📈 CoinGlass</a>
     <a class="ext-link cg-tv" href="https://coinglass.com/tv/binance_${coin}USDT" target="_blank" rel="noopener">📺 CG TV</a>`;
   const bb=document.getElementById('dpBB');
@@ -1323,7 +1330,7 @@ async function loadAllTFCards(coin,coinData){
 
 function renderTFCard(tf,r,coin){
   const card=document.getElementById(`tfc-${tf}`);if(!card)return;
-  const lnk=`<span class="tf-bnlink">↗</span>`;
+  const lnk=`<span class="tf-bnlink" style="cursor:pointer" onclick="event.stopPropagation();openTV('${coin}','${tf}')" title="TradingView">TV↗</span>`;
   if(!r){card.className='tf-card tf-none';card.onclick=()=>openBinance(coin,tf);card.innerHTML=`<div class="tf-card-header"><span class="tf-label">${tf}${lnk}</span><span class="tf-dir-badge tdb-none">—</span></div><div style="font-family:var(--mono);font-size:10px;color:var(--text2)">Нема сигнал</div>`;return;}
   const dc=r.liqHunt?'tf-liq':r.dir==='bull'?'tf-bull':r.dir==='bear'?'tf-bear':'tf-neutral';
   const lb=r.liqHunt?(r.liqType==='bull'?'⚡SHORT':'⚡LONG DMP'):'';
@@ -1655,7 +1662,7 @@ async function fetchAndShowDetail(coin){
   if(!Object.keys(_tMap).length){const[t,f]=await Promise.all([apiFetch('/ticker/24hr'),apiFetch('/premiumIndex')]);if(t)t.forEach(x=>{if(x.symbol.endsWith('USDT'))_tMap[x.symbol.replace('USDT','')]=x;});if(f)f.forEach(x=>{if(x.symbol.endsWith('USDT'))_fMap[x.symbol.replace('USDT','')]=parseFloat(x.lastFundingRate||0)*100;});}
   const ticker=_tMap[coin];if(!ticker){document.getElementById('dpP').textContent='Не постои на Futures';return;}
   const fav=isFav(coin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');
-  document.getElementById('dpLinks').innerHTML=`<a class="ext-link binance" onclick="openBinance('${coin}','1h')">📊 Binance 1h</a><a class="ext-link cg-chart" href="https://legend.coinglass.com/chart/${coin}USDT" target="_blank" rel="noopener">📈 CoinGlass</a><a class="ext-link cg-tv" href="https://coinglass.com/tv/binance_${coin}USDT" target="_blank" rel="noopener">📺 CG TV</a>`;
+  document.getElementById('dpLinks').innerHTML=`<a class="ext-link" style="border-color:rgba(41,98,255,.3);color:#2962ff;cursor:pointer" onclick="openTV('${coin}','1h')">📐 TradingView</a><a class="ext-link binance" onclick="openBinance('${coin}','1h')">📊 Binance</a><a class="ext-link cg-chart" href="https://legend.coinglass.com/chart/${coin}USDT" target="_blank" rel="noopener">📈 CoinGlass</a><a class="ext-link cg-tv" href="https://coinglass.com/tv/binance_${coin}USDT" target="_blank" rel="noopener">📺 CG TV</a>`;
   const results=await Promise.all(TFS_FULL.map(tf=>analyzeOneTF(coin,ticker,_fMap[coin]||0,tf)));
   const best=results.filter(Boolean).sort((a,b)=>b.score-a.score)[0];
   if(best){populateDetail({...best,isAlpha:isAlpha(coin),isFav:isFav(coin)});loadMoneyFlow(coin,best.tf);}
@@ -2082,6 +2089,14 @@ function setupCardHTML(s) {
     + '</div>';
 }
 
+
+
+// -- TRADINGVIEW DEEP LINK --
+function openTV(coin, tf) {
+  const interval = TV_TF[tf] || '60';
+  const url = 'https://www.tradingview.com/chart/' + TV_CHART + '/?symbol=BINANCE:' + coin + 'USDT.P&interval=' + interval;
+  window.open(url, '_blank', 'noopener');
+}
 
 // -- COIN DETAIL OVERLAY --
 const _detailCache = {};
