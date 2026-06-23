@@ -1150,8 +1150,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
 // -- RENDER LIST -------------------------------------------
 function renderList(){
   document.getElementById('liqArea').innerHTML=
-    S.signals.filter(s=>s.squeezeActivation).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted)">${s.tf} . ${s.ts}</span></div>`)
-    .concat(S.signals.filter(s=>s.liqHunt&&!s.squeezeActivation).slice(0,1).map(s=>`<div class="liq-b">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted)">${s.tf} . ${s.ts}</span></div>`))
+    S.signals.filter(s=>s.squeezeActivation).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc;cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`)
+    .concat(S.signals.filter(s=>s.liqHunt&&!s.squeezeActivation).slice(0,1).map(s=>`<div class="liq-b" style="cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
     .join('');
   document.getElementById('sBull').textContent=S.signals.filter(s=>s.dir==='bull').length;
   document.getElementById('sBear').textContent=S.signals.filter(s=>s.dir==='bear').length;
@@ -2103,6 +2103,66 @@ function openTV(coin, tf) {
   const interval = TV_TF[tf] || '60';
   const url = 'https://www.tradingview.com/chart/' + TV_CHART + '/?symbol=BINANCE:' + coin + 'USDT.P&interval=' + interval;
   window.open(url, '_blank', 'noopener');
+}
+
+
+// -- SQUEEZE/LIQ BANNER EXPLAIN --
+function showSqueezeExplain(e, coin, tf, price) {
+  e.stopPropagation();
+  // Remove existing explain popup
+  const old = document.getElementById('_sqzExplain');
+  if (old) { old.remove(); if (old.dataset.coin === coin) return; }
+
+  const isSqueeze = S.signals.find(function(s){ return s.coin===coin&&s.squeezeActivation; });
+  const sig = S.signals.find(function(s){ return s.coin===coin; });
+  const isLiqBull = sig && sig.liqType === 'bull';
+
+  const pop = document.createElement('div');
+  pop.id = '_sqzExplain';
+  pop.dataset.coin = coin;
+  pop.style.cssText = 'position:fixed;z-index:400;background:#0d0d1c;border:1px solid rgba(255,0,200,.4);border-radius:12px;padding:14px 16px;max-width:300px;box-shadow:0 4px 24px rgba(255,0,200,.15);left:50%;transform:translateX(-50%);top:80px';
+
+  const title = isSqueeze ? '🔥 SQUEEZE ACTIVATION' : (isLiqBull ? '⚡ SHORT SQUEEZE' : '⚡ LONG DUMP');
+  const color = isSqueeze ? '#ff00cc' : (isLiqBull ? 'var(--orange)' : 'var(--red)');
+
+  let desc, rec;
+  if (isSqueeze) {
+    desc = 'CVD нагло расте + OI паѓа + цена расте + Funding Rate е негативен. Комбинација koja укажува на принудно затворање на шортови. Пазарот е под притисок нагоре.';
+    rec = '⬆ Следи за continuation LONG · Потврди со CVD · Постави SL под последниот swing low';
+    var recCol = 'rgba(0,255,136,.12)';
+  } else if (isLiqBull) {
+    desc = 'Цената скочи нагоре но CVD паѓа — шортовите се принудно затвораат. По squeeze-от често следи reversal надолу.';
+    rec = '⬇ По squeeze-от очекувај reversal SHORT · Почекај rejection · SL над spike high';
+    var recCol = 'rgba(255,34,68,.12)';
+  } else {
+    desc = 'Цената паѓа но CVD расте — лонговите се принудно затвораат. По dump-от честопати следи bounce нагоре.';
+    rec = '⬆ По dump-от очекувај bounce LONG · Почекај стабилизација · SL под spike low';
+    var recCol = 'rgba(0,255,136,.12)';
+  }
+
+  pop.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    + '<div style="font-family:var(--mono);font-size:13px;font-weight:bold;color:' + color + '">' + title + '</div>'
+    + '<span onclick="document.getElementById(\'_sqzExplain\').remove()" style="color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px">✕</span>'
+    + '</div>'
+    + '<div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px">' + coin + 'USDT · ' + tf + ' · $' + price + '</div>'
+    + '<div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px">' + desc + '</div>'
+    + '<div style="background:' + recCol + ';border-radius:7px;padding:8px 10px;font-size:11px;color:var(--text);line-height:1.5">' + rec + '</div>'
+    + '<div style="display:flex;gap:6px;margin-top:10px">'
+    + '<button data-c="' + coin + '" onclick="const x=this.dataset.c;document.getElementById(\'_sqzExplain\').remove();openDetail(x)" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:6px;font-family:var(--mono);font-size:10px;cursor:pointer">📊 Детали</button>'
+    + '<button data-c="' + coin + '" data-t="' + tf + '" onclick="const x=this.dataset.c,t=this.dataset.t;document.getElementById(\'_sqzExplain\').remove();openTV(x,t)" style="flex:1;background:rgba(41,98,255,.1);border:1px solid rgba(41,98,255,.3);color:#2962ff;border-radius:6px;padding:6px;font-family:var(--mono);font-size:10px;cursor:pointer">📐 TradingView</button>'
+    + '</div>';
+
+  document.body.appendChild(pop);
+  // Auto-close after 12 sec
+  setTimeout(function(){ const el=document.getElementById('_sqzExplain'); if(el&&el.dataset.coin===coin)el.remove(); }, 12000);
+  // Close on outside click
+  setTimeout(function(){
+    document.addEventListener('click', function h(ev){
+      const el=document.getElementById('_sqzExplain');
+      if(el&&!el.contains(ev.target)){el.remove();}
+      document.removeEventListener('click',h);
+    });
+  }, 100);
 }
 
 // -- COIN DETAIL OVERLAY --
