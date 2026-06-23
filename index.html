@@ -2057,7 +2057,14 @@ function setupCardHTML(s) {
   const cardCls = s.isMega ? 'mega' : isLong ? 'long' : 'short';
   const dirCls = s.isMega ? 'mega' : isLong ? 'long' : 'short';
   const dirTxt = s.isMega ? '🎯 MEGA ' + (isLong ? 'LONG' : 'SHORT') : isLong ? '▲ LONG' : '▼ SHORT';
-  const maTag = s.maSq1h && s.maSq4h ? '<span class="ctag ct-megasq">💎TIGHT SQ</span> ' : s.maSq1h ? '<span class="ctag ct-masq">💎1h SQ</span> ' : s.maSq4h ? '<span class="ctag ct-masq">💎4h SQ</span> ' : '';
+  const maSqDir = s.finalDir === 'bull' ? 'bull' : 'bear';
+  const maTag = s.maSq1h && s.maSq4h
+    ? '<span class="ctag ct-megasq" onclick="event.stopPropagation();showSigTip(event,\'TIGHT SQ\',\'' + maSqDir + '\')">💎 TIGHT SQ</span> '
+    : s.maSq1h
+      ? '<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,\'MA SQ BULL\',\'' + maSqDir + '\')">💎1h SQ</span> '
+      : s.maSq4h
+        ? '<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,\'MA SQ BULL\',\'' + maSqDir + '\')">💎4h SQ</span> '
+        : '';
   const alphaTag = s.coin && isAlpha(s.coin) ? '<span class="ctag ct-alpha">🅐</span> ' : '';
   const tfConfCol = s.finalDir === 'bull' ? 'var(--green)' : 'var(--red)';
   const tfConfTag = s.tfConf ? '<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-family:var(--mono);font-weight:bold;background:rgba(128,128,128,.1);color:' + tfConfCol + '">' + s.tfConf + '</span> ' : '';
