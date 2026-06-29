@@ -428,6 +428,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <span class="search-x" id="srchX" onclick="clrSrch()">✕</span>
   </div>
   <div class="dot" id="dot"></div>
+  <button class="hm-btn" onclick="toggleHelp()" style="margin-right:4px;border-color:rgba(255,208,0,.3);color:var(--yellow)">❓</button>
   <button class="hm-btn" id="suTabBtn" onclick="toggleSetups()" style="margin-right:4px">📊 СЕТАПИ</button><button class="hm-btn" id="hmTabBtn" onclick="toggleHeatmap()">⚡ HEATMAP</button>
 </div>
 
@@ -752,7 +753,7 @@ const BN_TF={'1m':'1m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d
 
 const S={
   scanning:false,timer:null,abort:false,
-  signals:[],filter:'all',sort:'score',tf:'1m',srch:'',
+  signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
   _partial:{},detailCoin:null,chartTF:null
@@ -890,7 +891,7 @@ async function doScan(){
   const tfsToScan=S.tf==='all'?TFS_ALL:[S.tf];
   let coins=[];
   if(S.srch){const c=S.srch.toUpperCase().replace('USDT','').trim();if(_tMap[c])coins=[c];else{errShow(`⚠️ ${c}USDT не постои`);stopScan();return;}}
-  else if(S.filter==='fav'){coins=[...S.favorites].filter(c=>_tMap[c]);if(!coins.length){errShow('⚠️ Нема favorites');stopScan();return;}}
+  else if(S.filters.has('fav')&&S.filters.size===1){coins=[...S.favorites].filter(c=>_tMap[c]);if(!coins.length){errShow('⚠️ Нема favorites');stopScan();return;}}
   else{coins=[...[...S.favorites].filter(c=>_tMap[c]),...Object.keys(_tMap).filter(c=>!S.favorites.has(c))];}
 
   S._partial={};let done=0;
@@ -1167,24 +1168,30 @@ function renderList(){
   let data=S.signals;
   if(S.srch)data=data.filter(s=>s.coin.includes(S.srch));
   else{
-    if(S.filter==='fav')     data=data.filter(s=>s.isFav);
-    if(S.filter==='alpha')   data=data.filter(s=>s.isAlpha);
-    if(S.filter==='liq')     data=data.filter(s=>s.liqHunt);
-    if(S.filter==='spike')   data=data.filter(s=>s.sigs?.some(sg=>sg.t==='spike'));
-    if(S.filter==='dump')    data=data.filter(s=>s.sigs?.some(sg=>sg.t==='dump'));
-    if(S.filter==='fr')      data=data.filter(s=>s.sigs?.some(sg=>sg.t==='fr'));
-    if(S.filter==='oisurge') data=data.filter(s=>s.sigs?.some(sg=>sg.t==='oisurge'));
-    if(S.filter==='cvd')     data=data.filter(s=>s.sigs?.some(sg=>sg.l==='CVD DIV'));
-    if(S.filter==='strong')  data=data.filter(s=>s.score>=7);
-    if(S.filter==='ls')      data=data.filter(s=>s.lsExtreme);
-    if(S.filter==='squeeze') data=data.filter(s=>s.squeezeActivation);
-    if(S.filter==='tightsq')  data=data.filter(s=>s.maSqueeze&&s.maSqueezeWidth<0.5);
-    if(S.filter==='sqz')     data=data.filter(s=>s.sqzFired||s.sqz?.sqzOn);
-    if(S.filter==='diup')    data=data.filter(s=>s.sqz?.diCrossUp);
-    if(S.filter==='didn')    data=data.filter(s=>s.sqz?.diCrossDown);
-    if(S.filter==='inflow')  data=data.filter(s=>s.netInflow);
-    if(S.filter==='outflow') data=data.filter(s=>s.netOutflow);
-    if(S.filter==='usdt')    data=data.filter(s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'));
+    // Multi-filter: AND logic — coin must match ALL active filters
+    const fmap={
+      fav:    s=>s.isFav,
+      alpha:  s=>s.isAlpha,
+      liq:    s=>s.liqHunt,
+      spike:  s=>s.sigs?.some(sg=>sg.t==='spike'),
+      dump:   s=>s.sigs?.some(sg=>sg.t==='dump'),
+      fr:     s=>s.sigs?.some(sg=>sg.t==='fr'),
+      oisurge:s=>s.sigs?.some(sg=>sg.t==='oisurge'),
+      cvd:    s=>s.sigs?.some(sg=>sg.l==='CVD DIV'),
+      strong: s=>s.score>=7,
+      ls:     s=>s.lsExtreme,
+      squeeze:s=>s.squeezeActivation,
+      tightsq:s=>s.maSqueeze&&s.maSqueezeWidth<0.5,
+      sqz:    s=>s.sqzFired||s.sqz?.sqzOn,
+      diup:   s=>s.sqz?.diCrossUp,
+      didn:   s=>s.sqz?.diCrossDown,
+      inflow: s=>s.netInflow,
+      outflow:s=>s.netOutflow,
+      usdt:   s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'),
+    };
+    if(S.filters.size>0){
+      data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
+    }
   }
   if(minChg>0)data=data.filter(s=>Math.abs(s.priceChg)>=minChg);
   const maxChgEl=document.getElementById('maxChg');
@@ -1193,7 +1200,7 @@ function renderList(){
   if(minVolM>0)data=data.filter(s=>(s.volM||s.volume/1e6)>=minVolM);
   const sortFn={score:(a,b)=>b.score-a.score,chg:(a,b)=>Math.abs(b.priceChg)-Math.abs(a.priceChg),vol:(a,b)=>b.volume-a.volume,fr:(a,b)=>Math.abs(b.fr)-Math.abs(a.fr),oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange)}[S.sort]||((a,b)=>b.score-a.score);
   data=[...data].sort(sortFn);
-  if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+'USDT не пронајден':S.filter==='fav'?'Нема favorites':'Нема сигнали за овој филтер'}</div>`;return;}
+  if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+'USDT не пронајден':S.filters.has('fav')?'Нема favorites':'Нема сигнали за избраните филтри'}</div>`;return;}
   document.getElementById('list').innerHTML=data.map(rowHTML).join('');
 }
 
@@ -1677,7 +1684,16 @@ function toggleFav(coin){S.favorites.has(coin)?S.favorites.delete(coin):S.favori
 function toggleFavFromDetail(){if(!S.detailCoin)return;toggleFav(S.detailCoin);const fav=isFav(S.detailCoin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');toast(fav?`⭐ ${S.detailCoin} додаден`:`${S.detailCoin} отстранет`);}
 function openBinance(coin,tf){const url=`https://www.binance.com/en/futures/${coin}USDT?type=isolated&interval=${BN_TF[tf]||tf}`;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();document.body.removeChild(a);}
 function setTF(tf,el){S.tf=tf;document.querySelectorAll('.tf').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(S.scanning){stopScan();setTimeout(startScan,400);}}
-function setFil(f,el){S.filter=f;document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderList();}
+function setFil(f,el){
+  if(f==='all'){S.filters.clear();document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}
+  else{
+    document.querySelector('.ftab.active[onclick*=\'all\']')?.classList.remove('active');
+    if(S.filters.has(f)){S.filters.delete(f);el.classList.remove('active');}
+    else{S.filters.add(f);el.classList.add('active');}
+    if(S.filters.size===0){document.querySelector('.ftab[onclick*=\'all\']')?.classList.add('active');}
+  }
+  renderList();
+}
 function setSort(s,el){S.sort=s;document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderList();}
 function clearAll(){S.signals=[];document.getElementById('liqArea').innerHTML='';document.getElementById('list').innerHTML='<div class="empty">📡<br>Притисни СКЕНИРАЈ</div>';['sBull','sBear','sLiq','sAlpha','sFav','sTot'].forEach(id=>document.getElementById(id).textContent='0');}
 function setDot(s){const d=document.getElementById('dot');d.className='dot'+(s==='live'?' live':s==='scan'?' scan':'');}
@@ -2167,6 +2183,43 @@ function showSqueezeExplain(e, coin, tf, price) {
       document.removeEventListener('click',h);
     });
   }, 100);
+}
+
+
+// -- HELP OVERLAY --
+function toggleHelp(){
+  const ov=document.getElementById('helpOv');
+  const isOpen=ov.style.display!=='none';
+  if(isOpen){ov.style.display='none';return;}
+  // Build content
+  const indicators=[
+    {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 конвергираат — spread < 0.5%',when:'Пред голем потег. Колку потесно, толку поголем очекуван move.',action:'Чекај пробив со волумен. Не влегувај без потврда.'},
+    {tag:'🚀/📉 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5% — потесна компресија',when:'Цената се компресира, спремна за потег.',action:'Bullish (🚀) = SMA25 > SMA99. Bearish (📉) = SMA25 < SMA99.'},
+    {tag:'🔥 SQUEEZE',col:'#ff00cc',what:'CVD spike + OI паѓа + цена расте + FR негативен',when:'Шортовите се принудно затвораат — short squeeze во тек.',action:'Следи за continuation LONG. SL под последниот swing low.'},
+    {tag:'⚡ LIQ HUNT',col:'var(--orange)',what:'Цената и CVD одат во спротивни насоки',when:'SHORT SQ: цена↑ + CVD↓. LONG DMP: цена↓ + CVD↑.',action:'По squeeze честопати следи reversal. Провери на 15m.'},
+    {tag:'▲DI / ▼DI',col:'var(--green)',what:'DI+ го поминува DI- (или обратно) — свеж крос',when:'Свеж на последната затворена свеќа (4h/1d/1w=1 свеќа, 1h и помали=2 свеќи).',action:'▲DI = bullish моментум почнува. ▼DI = bearish моментум почнува.'},
+    {tag:'🎯 SQZMOM',col:'#00c896',what:'Squeeze Momentum + AO + ADX confluence',when:'Squeeze ON + Val расте + AO расте + ADX > 20.',action:'Green dot = bullish. Red dot = bearish. Почекај потврда.'},
+    {tag:'📊 CVD DIV',col:'var(--accent)',what:'Цена и CVD одат во различни насоки',when:'Цена расте но CVD паѓа = дистрибуција. Цена паѓа но CVD расте = акумулација.',action:'Силен reversal сигнал. Комбинирај со OI.'},
+    {tag:'🚀 SPIKE+VOL',col:'var(--green)',what:'Голем % пораст + натпросечен волумен',when:'Силен bullish моментум — можен breakout или pump.',action:'Потврди со CVD. Ако CVD паѓа = можна манипулација.'},
+    {tag:'💥 DUMP+VOL',col:'var(--red)',what:'Голем % пад + натпросечен волумен',when:'Силен bearish моментум — можен breakdown.',action:'Потврди со CVD. Можен bounce ако е oversold.'},
+    {tag:'💰 FR EXT',col:'#c060ff',what:'Funding Rate екстремно позитивен (>0.05%) или негативен (<-0.05%)',when:'FR > 0.05% = лонговите преплатени → bearish. FR < -0.05% = шортовите преплатени → bullish.',action:'Екстремен FR + обратна цена = можен reversal.'},
+    {tag:'📈 OI SURGE',col:'var(--accent)',what:'Нагол пораст на Open Interest',when:'OI расте + цена расте = bullish. OI расте + цена паѓа = bearish.',action:'OI пад по движење = позициите се затвораат.'},
+    {tag:'⚡ SCORE 7+',col:'var(--yellow)',what:'Вкупен score >= 7/9 поени',when:'Множество сигнали се совпаѓаат — јак confluence.',action:'Највисок приоритет за анализа.'},
+  ];
+  
+  let html='<div style="display:flex;flex-direction:column;gap:10px">';
+  indicators.forEach(function(ind){
+    html+='<div style="background:var(--card);border-radius:10px;padding:12px 14px;border-left:3px solid '+ind.col+'">'
+      +'<div style="font-family:var(--mono);font-size:13px;font-weight:bold;color:'+ind.col+';margin-bottom:6px">'+ind.tag+'</div>'
+      +'<div style="display:grid;grid-template-columns:90px 1fr;gap:4px 10px;font-size:11px">'
+      +'<span style="color:var(--muted)">Што е:</span><span style="color:var(--text2)">'+ind.what+'</span>'
+      +'<span style="color:var(--muted)">Кога:</span><span style="color:var(--text2)">'+ind.when+'</span>'
+      +'<span style="color:var(--muted)">Акција:</span><span style="color:var(--text)">'+ind.action+'</span>'
+      +'</div></div>';
+  });
+  html+='</div>';
+  document.getElementById('helpContent').innerHTML=html;
+  ov.style.display='block';
 }
 
 // -- COIN DETAIL OVERLAY --
@@ -2690,6 +2743,18 @@ window.addEventListener('resize',()=>{if(HM.loaded&&document.getElementById('hmV
       <button onclick="closeCoinDetail()" style="background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 12px;font-family:var(--mono);font-size:12px;cursor:pointer">X ZATVOРИ</button>
     </div>
     <div id="ciBody" style="font-size:12px;color:var(--text2);line-height:1.7"></div>
+  </div>
+</div>
+
+<!-- HELP OVERLAY -->
+<div id="helpOv" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.92);backdrop-filter:blur(8px);overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="max-width:700px;margin:20px auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:var(--mono);font-size:16px;font-weight:bold;color:var(--accent)">❓ ВОДИЧ — ИНДИКАТОРИ</div>
+      <button onclick="toggleHelp()" style="background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 14px;font-family:var(--mono);font-size:12px;cursor:pointer">✕ ЗАТВОРИ</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Кликни на индикатор во скенерот за детален tooltip. Ова е брз преглед.</div>
+    <div id="helpContent"></div>
   </div>
 </div>
 </body>
