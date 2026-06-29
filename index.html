@@ -1036,7 +1036,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
 
   try{
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
-    const klLimit=hiTF?100:70;
+    const klLimit=hiTF?150:(tf==='15m'?150:70); // 15m needs 150 for SMA100
     const klFull=await apiFetch(`/klines?symbol=${coin}USDT&interval=${tf}&limit=${klLimit}`);
     const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
@@ -1049,11 +1049,11 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       const v1=kl.slice(-5).reduce((s,k)=>s+parseFloat(k[7]),0),v2=kl.slice(-10,-5).reduce((s,k)=>s+parseFloat(k[7]),0);
       oiChange=v2>0?((v1-v2)/v2)*100:0;
       tfPriceChg=parseFloat(kl[0][4])>0?((parseFloat(kl[kl.length-1][4])-parseFloat(kl[0][4]))/parseFloat(kl[0][4]))*100:0;
-      // -- MA SQUEEZE: SMA25/50/99 convergence --
-      closes=kl.map(k=>parseFloat(k[4]));
-      if(closes.length>=20){
+      // -- MA SQUEEZE: SMA25/50/99 convergence (matching FSMA: 25/50/90) --
+      closes=klFull?klFull.map(k=>parseFloat(k[4])):kl.map(k=>parseFloat(k[4]));
+      if(closes.length>=55){
         const sma=function(arr,n){const s=arr.slice(-n);return s.reduce((a,b)=>a+b,0)/s.length;};
-        const s25=sma(closes,Math.min(25,closes.length));
+        const s25=sma(closes,25);
         const s50=sma(closes,Math.min(50,closes.length));
         const s99=sma(closes,Math.min(99,closes.length));
         const last=closes[closes.length-1];
