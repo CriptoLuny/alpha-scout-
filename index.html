@@ -79,6 +79,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-usdt.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
 .ftab.f-sqz.active{background:rgba(0,200,150,.1);border-color:#00c896;color:#00c896}
 .ftab.f-tightsq.active{background:rgba(255,50,200,.1);border-color:#ff32cc;color:#ff32cc}
+.ftab.f-jmaup.active{background:rgba(0,255,136,.08);border-color:var(--green);color:var(--green)}
+.ftab.f-jmadn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
+.ftab.f-fibo.active{background:rgba(255,208,0,.08);border-color:var(--yellow);color:var(--yellow)}
+.ftab.f-poc.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
+.ftab.f-conf.active{background:rgba(255,208,0,.12);border-color:var(--yellow);color:var(--yellow);font-weight:800}
+.ct-conf-bull{background:linear-gradient(135deg,rgba(0,255,136,.2),rgba(0,229,255,.15));color:#00ffaa;border:1px solid rgba(0,255,136,.4);font-weight:bold;animation:confPulse 2s infinite}
+.ct-conf-bear{background:linear-gradient(135deg,rgba(255,34,68,.2),rgba(160,32,240,.15));color:#ff6688;border:1px solid rgba(255,34,68,.4);font-weight:bold;animation:confPulse 2s infinite}
+@keyframes confPulse{0%,100%{box-shadow:0 0 4px rgba(255,208,0,.3)}50%{box-shadow:0 0 10px rgba(255,208,0,.6)}}
 .ftab.f-diup.active{background:rgba(0,255,136,.08);border-color:var(--green);color:var(--green)}
 .ftab.f-didn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ct-sqz{background:rgba(0,200,150,.12);color:#00c896;border:1px solid rgba(0,200,150,.35)}
@@ -469,6 +477,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-liq"       onclick="setFil('liq',this)">⚡ LIQ HUNT</div>
     <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
     <div class="ftab f-tightsq"   onclick="setFil('tightsq',this)">💎 TIGHT SQ</div>
+    <div class="ftab f-jmaup"       onclick="setFil('jmaup',this)">📈 JMA↑</div>
+    <div class="ftab f-jmadn"       onclick="setFil('jmadn',this)">📉 JMA↓</div>
+    <div class="ftab f-fibo"        onclick="setFil('fibo',this)">🎯 FIBO</div>
+    <div class="ftab f-poc"         onclick="setFil('poc',this)">📊 POC</div>
+    <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
     <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
     <div class="ftab f-diup"      onclick="setFil('diup',this)">▲DI</div>
     <div class="ftab f-didn"      onclick="setFil('didn',this)">▼DI</div>
@@ -693,6 +706,11 @@ const SIG_INFO={
   '▼DI CROSS':{title:'DI- крос над DI+ (црвено триаголниче)',desc:'DI- пробива над DI+ — продавачкиот притисок ја презема контролата. Истиот маркер како триаголничето над барот во TradingView. Појак е ако ADX>20.',bear:{cls:'pos-short',txt:'⬇ Bearish DI крос — потврди со ADX и CVD'}},
   'SQZ ON':{title:'Squeeze Активен (компресија)',desc:'Bollinger Bands се внатре во Keltner Channels — волатилноста е компресирана. Очекувај експлозивен потег, насоката уште не е потврдена.',bull:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'},bear:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'}},
   'MOM/AO DIV':{title:'Momentum / AO Дивергенција',desc:'Squeeze Momentum и Awesome Oscillator одат во спротивни насоки (портокалова позадина во TV). Не влегувај против двата.',bull:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'},bear:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'}},
+  'CONFLUENCE':{title:'⚡ CONFLUENCE — Совпаѓање на повеќе индикатори',desc:'Минимум 4 од 10 индикатори (MA Squeeze, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI, FR) гласаат во иста насока. Ова е најсилниот сигнал во скенерот — статистички поверојатно за успешна трговина.',bull:{cls:'pos-long',txt:'⬆ CONFLUENCE LONG — минимум 4 индикатори се совпаѓаат LONG'},bear:{cls:'pos-short',txt:'⬇ CONFLUENCE SHORT — минимум 4 индикатори се совпаѓаат SHORT'}},
+  'FIBO':{title:'Fibonacci Ниво (🎯)',desc:'Цената е во близина (±1.5%) на клучно Fibonacci ниво (38.2%, 50%, 61.8%, 78.6%) пресметано од swing high/low на последните 50 свеќи. Fibonacci нивоата се природни зони на поддршка и отпор.',bull:{cls:'pos-long',txt:'⬆ FIBO SUPPORT — цената bounces од Fib ниво'},bear:{cls:'pos-short',txt:'⬇ FIBO RESIST — цената тестира Fib отпор'}},
+  'POC':{title:'Point of Control (📊)',desc:'POC е ценовното ниво каде е тргуван НАЈВИСОК волумен во последните 50 свеќи. Цената е во близина (±2%) на POC. POC е магнет — цената честопати се враќа кон него.',bull:{cls:'pos-long',txt:'⬆ Цената е НАД POC — POC е поддршка'},bear:{cls:'pos-short',txt:'⬇ Цената е ПОД POC — POC е отпор'}},
+  'JMA X UP':{title:'JMA x DWMA — Bullish крос (📈)',desc:'JMA (Jurik MA, length=8) го поминал DWMA (Double WMA, length=10) одоздола нагоре. Ова е свеж bullish крос — моментумот се свртил нагоре.',bull:{cls:'pos-long',txt:'⬆ LONG — JMA crosses above DWMA'},bear:{cls:'pos-watch',txt:'>> Прати — очекувај continuation'}},
+  'JMA X DN':{title:'JMA x DWMA — Bearish крос (📉)',desc:'JMA (Jurik MA, length=8) го поминал DWMA (Double WMA, length=10) одозгора надолу. Ова е свеж bearish крос — моментумот се свртил надолу.',bear:{cls:'pos-short',txt:'⬇ SHORT — JMA crosses below DWMA'},bull:{cls:'pos-watch',txt:'>> Прати — очекувај continuation'}},
   'TIGHT SQ':{title:'TIGHT Squeeze (💎 Екстремна компресија)',desc:'SMA 25/50/99 се приближиле на помалку од 0.5% едни од други. Ова е екстремна компресија на Moving Average линиите — по ваква компресија следи експлозивен потег. Колку е потесен squeeze-от, толку е поголем очекуваниот потег.',bull:{cls:'pos-long',txt:'⬆ Подготви се за LONG ако пробие нагоре со волумен'},bear:{cls:'pos-short',txt:'⬇ Подготви се за SHORT ако пробие надолу со волумен'}},
   'MA SQ BULL':{title:'MA Squeeze — Bullish насока (🚀)',desc:'SMA 25/50/99 конвергираат и SMA25 е над SMA99 — bullish распоред. Цената е компресирана и спремна за потег нагоре. Почекај потврда со CVD или DI+ крос.',bull:{cls:'pos-long',txt:'⬆ MA Squeeze BULL — потврди со CVD + волумен'},bear:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
   'MA SQ BEAR':{title:'MA Squeeze — Bearish насока (📉)',desc:'SMA 25/50/99 конвергираат и SMA25 е под SMA99 — bearish распоред. Цената е компресирана и спремна за потег надолу. Почекај потврда со CVD или DI- крос.',bear:{cls:'pos-short',txt:'⬇ MA Squeeze BEAR — потврди со CVD + волумен'},bull:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
@@ -905,7 +923,7 @@ async function doScan(){
       const res=await Promise.all(chunk.map(c=>analyzeOneTF(c,_tMap[c],_fMap[c]||0,tf)));
       res.forEach((r,idx)=>{
         if(!r)return;const c=chunk[idx];
-        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,tfData:{},bestTF:tf};
+        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,jmaDwmaCrossUp:false,jmaDwmaCrossDown:false,jmaAbove:false,confScore:0,confDir:'none',confLabel:null,tfData:{},bestTF:tf};
         S._partial[c].tfData[tf]=r;
         if(r.score>(S._partial[c].tfData[S._partial[c].bestTF]?.score||0))S._partial[c].bestTF=tf;
         S._partial[c].score=Math.max(S._partial[c].score,r.score);
@@ -915,6 +933,10 @@ async function doScan(){
         if(r.netOutflow)S._partial[c].netOutflow=true;
         if(r.isUsdtProtocol)S._partial[c].isUsdtProtocol=true;
         if(r.squeezeActivation)S._partial[c].squeezeActivation=true;
+        if(r.jmaDwma?.crossUp)S._partial[c].jmaDwmaCrossUp=true;
+        if((r.confScore||0)>(S._partial[c].confScore||0)){S._partial[c].confScore=r.confScore;S._partial[c].confDir=r.confDir;S._partial[c].confLabel=r.confLabel;}
+        if(r.jmaDwma?.crossDown)S._partial[c].jmaDwmaCrossDown=true;
+        if(r.jmaDwma?.jmaAbove)S._partial[c].jmaAbove=true;
         if(r.sqzFired)S._partial[c].sqzFiredAny=true;
         if(r.maSqueeze){S._partial[c].maSqueeze=true;S._partial[c].maSqueezeDir=r.maSqueezeDir;S._partial[c].maSqueezeWidth=r.maSqueezeWidth;}
       });
@@ -929,7 +951,7 @@ async function doScan(){
 function buildSignals(partial){
   return Object.values(partial).filter(x=>x.score>0).map(x=>{
     const best=x.tfData[x.bestTF]||Object.values(x.tfData)[0];
-    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth};
+    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel};
   }).sort((a,b)=>{
     if(b.isFav!==a.isFav)return(b.isFav?1:0)-(a.isFav?1:0);
     return b.score-a.score;
@@ -939,6 +961,150 @@ function buildSignals(partial){
 // -- ANALYZE -----------------------------------------------
 // ── SQZMOM_LB_AO (Pine Script port) ───────────────────────
 // Squeeze Momentum + Awesome Oscillator + ADX/DI — иста логика како TradingView скриптата
+
+// -- JMA (Jurik Moving Average) + DWMA (Double WMA) --
+function calcJMAseries(closes, length, phase, power, seriesLen) {
+  const phaseRatio = phase < -100 ? 0.5 : phase > 100 ? 2.5 : phase/100 + 1.5;
+  const beta = 0.45*(length-1)/(0.45*(length-1)+2);
+  const alpha = Math.pow(beta, power);
+  let jma=closes[0], e0=closes[0], e1=0, e2=0;
+  const result=[];
+  for(let i=1;i<closes.length;i++){
+    const prev=jma;
+    e0=(1-alpha)*closes[i]+alpha*e0;
+    e1=(closes[i]-e0)*(1-beta)+beta*e1;
+    e2=(e0+phaseRatio*e1-prev)*Math.pow(1-alpha,2)+Math.pow(alpha,2)*e2;
+    jma=e2+prev;
+    if(i>=closes.length-seriesLen)result.push(jma);
+  }
+  return result;
+}
+
+function calcWMA(arr, n) {
+  const s=arr.slice(-n); let w=0,t=0;
+  s.forEach((v,i)=>{const wi=i+1;w+=wi;t+=v*wi;});
+  return w>0?t/w:0;
+}
+
+function calcDWMAseries(closes, length, seriesLen) {
+  const result=[];
+  const start=closes.length-seriesLen;
+  for(let i=start;i<closes.length;i++){
+    // WMA of closes up to i
+    const wma1vals=[];
+    for(let j=length-1;j<=i;j++) wma1vals.push(calcWMA(closes.slice(0,j+1),length));
+    if(wma1vals.length>=length) result.push(calcWMA(wma1vals,length));
+    else result.push(null);
+  }
+  return result;
+}
+
+function detectJMADWMACross(closes, jmaLen, jmaPhase, jmaPower, dwmaLen, diWin) {
+  // Need enough candles: warmup + diWin+1
+  if(!closes||closes.length<Math.max(jmaLen,dwmaLen)*3+diWin+2) return {crossUp:false,crossDown:false,jmaAbove:false};
+  const seriesLen=diWin+2; // +2 for prev candle + open candle
+  const jmaSeries=calcJMAseries(closes,jmaLen,jmaPhase,jmaPower,seriesLen);
+  const dwmaSeries=calcDWMAseries(closes,dwmaLen,seriesLen);
+  if(jmaSeries.length<2||dwmaSeries.length<2) return {crossUp:false,crossDown:false,jmaAbove:false};
+
+  let crossUp=false, crossDown=false;
+  const n=closes.length;
+  // Check only last diWin CLOSED candles (exclude last = open candle)
+  const checkFrom=jmaSeries.length-1-diWin; // exclude last (open)
+  for(let i=Math.max(1,checkFrom);i<jmaSeries.length-1;i++){
+    const jCur=jmaSeries[i], jPrev=jmaSeries[i-1];
+    const dCur=dwmaSeries[i], dPrev=dwmaSeries[i-1];
+    if(jCur==null||dCur==null||jPrev==null||dPrev==null) continue;
+    if(jCur>dCur&&jPrev<=dPrev) crossUp=true;
+    if(jCur<dCur&&jPrev>=dPrev) crossDown=true;
+  }
+  // Current state (last closed candle = index len-2, open = len-1)
+  const lastIdx=jmaSeries.length-2;
+  const jmaAbove=lastIdx>=0&&dwmaSeries[lastIdx]!=null?jmaSeries[lastIdx]>dwmaSeries[lastIdx]:false;
+  return {crossUp, crossDown, jmaAbove};
+}
+
+
+// -- FIBONACCI LEVELS --
+function calcFibo(klines, lookback) {
+  const n = Math.min(lookback || 150, klines.length - 1); // use max 150 candles for true swing
+  const slice = klines.slice(-n - 1, -1); // closed candles only
+  if (slice.length < 10) return null;
+  const highs = slice.map(k => parseFloat(k[2]));
+  const lows  = slice.map(k => parseFloat(k[3]));
+  const price = parseFloat(klines[klines.length - 2][4]); // last closed
+  const swingHigh = Math.max(...highs);
+  const swingLow  = Math.min(...lows);
+  const range = swingHigh - swingLow;
+  if (range === 0 || price <= 0) return null;
+
+  // Fib levels from low to high
+  const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+  const levels = ratios.map(r => ({ r, price: swingLow + range * r }));
+
+  // Find nearest key Fib (38.2, 50, 61.8, 78.6)
+  const keyRatios = [0.382, 0.5, 0.618, 0.786];
+  let nearestKey = null, minDist = Infinity;
+  for (const r of keyRatios) {
+    const lvl = swingLow + range * r;
+    const dist = Math.abs(price - lvl) / price * 100;
+    if (dist < minDist) { minDist = dist; nearestKey = { r, lvl, dist }; }
+  }
+
+  // Is price near a key Fib? (within 1.5%)
+  const nearFib = nearestKey && nearestKey.dist < 1.5;
+  // Is price above or below the level?
+  const fiboSupport = nearFib && price >= nearestKey.lvl; // bouncing from support
+  const fiboResist  = nearFib && price < nearestKey.lvl;  // testing resistance
+
+  return {
+    swingHigh, swingLow, range,
+    levels, nearestKey,
+    nearFib, fiboSupport, fiboResist,
+    fiboLabel: nearestKey ? (nearestKey.r * 100).toFixed(1) + '%' : null
+  };
+}
+
+// -- POC (Point of Control) --
+function calcPOC(klines, lookback) {
+  const n = Math.min(lookback || 150, klines.length - 1);
+  const slice = klines.slice(-n - 1, -1); // closed candles only
+  if (slice.length < 10) return null;
+  const price = parseFloat(klines[klines.length - 2][4]);
+
+  const allH = slice.map(k => parseFloat(k[2]));
+  const allL = slice.map(k => parseFloat(k[3]));
+  const priceMin = Math.min(...allL);
+  const priceMax = Math.max(...allH);
+  const range = priceMax - priceMin;
+  if (range === 0) return null;
+
+  const BUCKETS = 60;
+  const bSize = range / BUCKETS;
+  const hist = new Float64Array(BUCKETS);
+
+  for (const k of slice) {
+    const h = parseFloat(k[2]), lo = parseFloat(k[3]);
+    const vol = parseFloat(k[7]); // USDT volume
+    const candleRange = h - lo;
+    if (candleRange <= 0) { const b = Math.min(Math.floor((h - priceMin) / bSize), BUCKETS - 1); hist[b] += vol; continue; }
+    const bLo = Math.max(0, Math.floor((lo - priceMin) / bSize));
+    const bHi = Math.min(BUCKETS - 1, Math.floor((h - priceMin) / bSize));
+    const cnt = bHi - bLo + 1;
+    for (let b = bLo; b <= bHi; b++) hist[b] += vol / cnt;
+  }
+
+  // Find POC bucket
+  let maxVol = 0, pocB = 0;
+  for (let i = 0; i < BUCKETS; i++) { if (hist[i] > maxVol) { maxVol = hist[i]; pocB = i; } }
+  const poc = priceMin + (pocB + 0.5) * bSize;
+  const distPct = Math.abs(price - poc) / price * 100;
+  const nearPOC = distPct < 2.0;
+  const abovePOC = price > poc;
+
+  return { poc, distPct, nearPOC, abovePOC, priceMin, priceMax };
+}
+
 function calcSqzMomAO(klines,diWin){
   diWin=diWin||2; // колку најнови ЗАТВОРЕНИ свеќи важат за DI крос (2 за ≤4h, 1 за ≥12h)
   klines=klines.slice(0,-1); // отфрли ја живата (незатворена) свеќа — скенер чита само завршени барови, без repaint
@@ -1036,11 +1202,11 @@ function calcSqzMomAO(klines,diWin){
 async function analyzeOneTF(coin,ticker,fr,tf){
   if(!ticker)return null;
   const price=parseFloat(ticker.lastPrice),priceChg=parseFloat(ticker.priceChangePercent),volume=parseFloat(ticker.quoteVolume),high24=parseFloat(ticker.highPrice),low24=parseFloat(ticker.lowPrice);
-  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null;
+  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null;
 
   try{
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
-    const klLimit=hiTF?150:(tf==='15m'?150:70); // 15m needs 150 for SMA100
+    const klLimit=(hiTF||tf==='15m'||tf==='5m')?150:70; // 150 for 5m+ for Fibo/POC/SMA99
     const klFull=await apiFetch(`/klines?symbol=${coin}USDT&interval=${tf}&limit=${klLimit}`);
     const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
@@ -1067,6 +1233,15 @@ async function analyzeOneTF(coin,ticker,fr,tf){
           maSqueeze=true;
           maSqueezeDir=s25>s99?'bull':'bear';
         }
+      }
+      // -- JMA/DWMA crossover detection --
+      if(closes.length>40){
+        jmaDwma=detectJMADWMACross(closes,8,50,2,10,diWin);
+      }
+      // -- FIBO + POC --
+      if(klFull&&klFull.length>=15){
+        fibo=calcFibo(klFull,150);
+        poc=calcPOC(klFull,150);
       }
       for(const k of kl.slice(-3)){
         const hi=parseFloat(k[2]),lo=parseFloat(k[3]),op=parseFloat(k[1]),cl=parseFloat(k[4]);
@@ -1145,17 +1320,74 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   const isUsdtProtocol=(volM>50&&oiChange>10&&cvdDelta>3)||(netInflow&&volM>30&&oiCoins>0);
   if(isUsdtProtocol)sigs.push({l:'USDT FLOW',t:'usdt'});
 
+  // Fibo + POC signals
+  if(fibo?.nearFib){
+    const ft=fibo.fiboSupport?'bull':'bear';
+    sigs.push({l:'FIBO '+fibo.fiboLabel,t:ft});
+    if(fibo.nearestKey?.r===0.618||fibo.nearestKey?.r===0.382)score++;
+  }
+  if(poc?.nearPOC){
+    sigs.push({l:'POC '+(poc.abovePOC?'SUP':'RES'),t:poc.abovePOC?'bull':'bear'});
+    score++;
+  }
+
+  // JMA/DWMA cross signals
+  if(jmaDwma.crossUp){score+=2;sigs.push({l:'JMA X UP',t:'bull'});}
+  if(jmaDwma.crossDown){score+=2;sigs.push({l:'JMA X DN',t:'bear'});}
+  else if(!jmaDwma.crossUp&&!jmaDwma.crossDown&&jmaDwma.jmaAbove)sigs.push({l:'JMA>DWMA',t:'bull'});
+  else if(!jmaDwma.crossUp&&!jmaDwma.crossDown&&!jmaDwma.jmaAbove)sigs.push({l:'JMA<DWMA',t:'bear'});
+
+  // -- CONFLUENCE SCORE --
+  // Each indicator votes LONG(+1), SHORT(-1) or NEUTRAL(0)
+  const cvotes = [];
+  // 1. MA Squeeze direction
+  if(maSqueeze) cvotes.push(maSqueezeDir==='bull'?1:-1);
+  // 2. JMA vs DWMA
+  if(jmaDwma.crossUp||jmaDwma.jmaAbove) cvotes.push(1);
+  else if(jmaDwma.crossDown||!jmaDwma.jmaAbove) cvotes.push(-1);
+  // 3. Fibonacci
+  if(fibo?.nearFib) cvotes.push(fibo.fiboSupport?1:-1);
+  // 4. POC
+  if(poc?.nearPOC) cvotes.push(poc.abovePOC?1:-1);
+  // 5. DI cross
+  if(sqz?.diCrossUp) cvotes.push(1);
+  else if(sqz?.diCrossDown) cvotes.push(-1);
+  // 6. CVD
+  if(Math.abs(cvdDelta)>2) cvotes.push(cvdDelta>0?1:-1);
+  // 7. SQZMOM
+  if(sqz?.bullSignal||sqz?.bullAdxBrk) cvotes.push(1);
+  else if(sqz?.bearSignal||sqz?.bearAdxBrk) cvotes.push(-1);
+  // 8. Liq Hunt
+  if(liqHunt) cvotes.push(liqType==='bull'?1:-1);
+  // 9. OI trend
+  if(Math.abs(oiChange)>5) cvotes.push(oiChange>0?1:-1);
+  // 10. Funding Rate
+  if(Math.abs(fr)>0.04) cvotes.push(fr<0?1:-1); // negative FR = bullish
+
+  const longVotes  = cvotes.filter(v=>v===1).length;
+  const shortVotes = cvotes.filter(v=>v===-1).length;
+  const totalVotes = cvotes.length;
+  const confLong   = longVotes>=4&&longVotes>shortVotes;
+  const confShort  = shortVotes>=4&&shortVotes>longVotes;
+  const confScore  = confLong?longVotes:confShort?shortVotes:0;
+  const confDir    = confLong?'bull':confShort?'bear':'none';
+  const confLabel  = confLong?`CONFL ${longVotes}/${totalVotes} LONG`:confShort?`CONFL ${shortVotes}/${totalVotes} SHORT`:null;
+
+  if(confLong){score+=3;sigs.push({l:confLabel,t:'confluence-bull'});}
+  else if(confShort){score+=3;sigs.push({l:confLabel,t:'confluence-bear'});}
+
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
-  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
 function renderList(){
   document.getElementById('liqArea').innerHTML=
-    S.signals.filter(s=>s.squeezeActivation).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc;cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`)
-    .concat(S.signals.filter(s=>s.liqHunt&&!s.squeezeActivation).slice(0,1).map(s=>`<div class="liq-b" style="cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
+    S.signals.filter(s=>s.confScore>=5).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,208,0,.08);border-color:rgba(255,208,0,.4);color:var(--yellow);cursor:pointer" onclick="openDetail('${s.coin}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.confLabel} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">${s.tf} · ${s.ts}</span></div>`)
+    .concat(S.signals.filter(s=>s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc;cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
+    .concat(S.signals.filter(s=>s.liqHunt&&!s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
     .join('');
   document.getElementById('sBull').textContent=S.signals.filter(s=>s.dir==='bull').length;
   document.getElementById('sBear').textContent=S.signals.filter(s=>s.dir==='bear').length;
@@ -1188,6 +1420,11 @@ function renderList(){
       inflow: s=>s.netInflow,
       outflow:s=>s.netOutflow,
       usdt:   s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'),
+      jmaup:  s=>s.jmaDwmaCrossUp||s.sigs?.some(sg=>sg.l==='JMA>DWMA'),
+      jmadn:  s=>s.jmaDwmaCrossDown||s.sigs?.some(sg=>sg.l==='JMA<DWMA'),
+      fibo:   s=>s.sigs?.some(sg=>sg.l?.startsWith('FIBO')),
+      poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
+      conf:   s=>s.confScore>=4,
     };
     if(S.filters.size>0){
       data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
@@ -1210,11 +1447,29 @@ function rowHTML(s){
   const sc=s.score>=6?'g':s.score>=3?'y':'a';
   const dots=Array.from({length:7},(_,i)=>`<div class="sd ${i<s.score?sc:''}"></div>`).join('');
   const tags=[];
+  // CONFLUENCE tag — always first if present
+  if(s.confLabel){
+    const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
+    tags.push(`<span class="ctag ${ccls}" onclick="event.stopPropagation();showSigTip(event,'CONFLUENCE','${s.confDir}')">⚡${s.confLabel}</span>`);
+  }
   if(s.isFav)tags.push(`<span class="ctag ct-fav">⭐</span>`);
   if(s.isAlpha)tags.push(`<span class="ctag ct-alpha">🅐</span>`);
   const catTag=getCatTag(s.coin);if(catTag)tags.push(catTag);
   if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);
   if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35);cursor:pointer" onclick="showSigTip(event,'SQUEEZE','bull')">🔥SQUEEZE</span>`);
+  if(s.sigs?.some(sg=>sg.l?.startsWith('FIBO'))){
+    const fsig=s.sigs.find(sg=>sg.l?.startsWith('FIBO'));
+    const fc=fsig.t==='bull'?'var(--green)':'var(--red)';
+    tags.push(`<span class="ctag" style="background:rgba(255,208,0,.1);color:var(--yellow);border:1px solid rgba(255,208,0,.3);cursor:pointer" onclick="event.stopPropagation();showSigTip(event,'FIBO','${fsig.t}')">${fsig.l}</span>`);
+  }
+  if(s.sigs?.some(sg=>sg.l?.startsWith('POC'))){
+    const psig=s.sigs.find(sg=>sg.l?.startsWith('POC'));
+    tags.push(`<span class="ctag" style="background:rgba(0,229,255,.1);color:var(--accent);border:1px solid rgba(0,229,255,.25);cursor:pointer" onclick="event.stopPropagation();showSigTip(event,'POC','${psig.t}')">${psig.l}</span>`);
+  }
+  if(s.jmaDwmaCrossUp)tags.push(`<span class="ctag" style="background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.3);cursor:pointer" onclick="event.stopPropagation();showSigTip(event,'JMA X UP','bull')">📈JMA X↑</span>`);
+  else if(s.jmaDwmaCrossDown)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.12);color:var(--red);border:1px solid rgba(255,34,68,.3);cursor:pointer" onclick="event.stopPropagation();showSigTip(event,'JMA X DN','bear')">📉JMA X↓</span>`);
+  else if(s.jmaAbove)tags.push(`<span class="ctag" style="background:rgba(0,255,136,.08);color:var(--green);font-size:9px;padding:2px 4px;border-radius:3px;font-family:var(--mono)">JMA↑</span>`);
+  else tags.push(`<span class="ctag" style="background:rgba(255,34,68,.08);color:var(--red);font-size:9px;padding:2px 4px;border-radius:3px;font-family:var(--mono)">JMA↓</span>`);
   if(s.maSqueeze&&s.maSqueezeWidth<0.5){const _msDir=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-megasq" onclick="event.stopPropagation();showSigTip(event,'TIGHT SQ','${_msDir}')">💎TIGHT SQ</span>`);}
   else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';const _msDir2=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,'${maSqLbl}','${_msDir2}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}}
   else if(s.dir==='bull')tags.push(`<span class="ctag ct-bull">▲ BULL</span>`);
