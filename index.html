@@ -62,7 +62,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .prog-f{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:1px;transition:width .25s}
 
 .filter-panel{border-bottom:1px solid var(--border);flex-shrink:0}
-.filter-row-1{display:flex;gap:5px;padding:7px 14px;overflow-x:auto;scrollbar-width:none}
+.filter-row-1{display:flex;gap:5px;padding:7px 14px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .filter-row-1::-webkit-scrollbar{display:none}
 .ftab{font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;white-space:nowrap;cursor:pointer;background:var(--card);border:1px solid var(--border);color:var(--text2);transition:all .2s}
 .ftab.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
@@ -78,6 +78,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-outflow.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ftab.f-usdt.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
 .ftab.f-sqz.active{background:rgba(0,200,150,.1);border-color:#00c896;color:#00c896}
+.ftab.f-tightsq.active{background:rgba(255,50,200,.1);border-color:#ff32cc;color:#ff32cc}
 .ftab.f-diup.active{background:rgba(0,255,136,.08);border-color:var(--green);color:var(--green)}
 .ftab.f-didn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ct-sqz{background:rgba(0,200,150,.12);color:#00c896;border:1px solid rgba(0,200,150,.35)}
@@ -329,6 +330,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   html,body{overflow:auto;height:auto}
   body{max-width:1100px;margin:0 auto;min-height:100vh;overflow:visible}
   .list-wrap{overflow-y:visible;max-height:none}
+  .filter-row-1{flex-wrap:wrap;overflow-x:visible;padding:8px 16px;gap:5px}
   .dp{max-height:80vh;border-radius:12px;margin:20px;width:auto;overflow-y:auto}
   .ov{align-items:center;justify-content:center}
   .dp-metrics{grid-template-columns:repeat(3,1fr)}
@@ -459,25 +461,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 <div class="err" id="errB"></div>
 
 <div class="filter-panel">
-  <div class="filter-row-1">
-    <div class="ftab active"     onclick="setFil('all',this)">ВСЕ</div>
-    <div class="ftab f-fav"      onclick="setFil('fav',this)">⭐ FAV</div>
-    <div class="ftab f-alpha"    onclick="setFil('alpha',this)">🅐 ALPHA</div>
-    <div class="ftab f-liq"      onclick="setFil('liq',this)">⚡ LIQ HUNT</div>
-    <div class="ftab"            onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
-    <div class="ftab f-sqz"      onclick="setFil('sqz',this)">🎯 SQZMOM</div>
-    <div class="ftab f-diup"     onclick="setFil('diup',this)">▲DI</div>
-    <div class="ftab f-didn"     onclick="setFil('didn',this)">▼DI</div>
-    <div class="ftab f-spike"    onclick="setFil('spike',this)">🚀 SPIKE+VOL</div>
-    <div class="ftab f-dump"     onclick="setFil('dump',this)">💥 DUMP+VOL</div>
-    <div class="ftab f-fr"       onclick="setFil('fr',this)">💰 FR EXT</div>
-    <div class="ftab f-oi"       onclick="setFil('oisurge',this)">📈 OI SURGE</div>
-    <div class="ftab f-cvd"      onclick="setFil('cvd',this)">📊 CVD DIV</div>
-    <div class="ftab f-strong"   onclick="setFil('strong',this)">⚡ SCORE 7+</div>
-    <div class="ftab f-ls"       onclick="setFil('ls',this)">⚖️ L/S EXT</div>
-    <div class="ftab f-inflow"   onclick="setFil('inflow',this)">📥 INFLOW</div>
-    <div class="ftab f-outflow"  onclick="setFil('outflow',this)">📤 OUTFLOW</div>
-    <div class="ftab f-usdt"     onclick="setFil('usdt',this)">💵 USDT0</div>
+  <div class="filter-row-1" id="filterRow1">
+    <div class="ftab active"      onclick="setFil('all',this)">📋 СИТЕ</div>
+    <div class="ftab f-fav"       onclick="setFil('fav',this)">⭐ FAV</div>
+    <div class="ftab f-alpha"     onclick="setFil('alpha',this)">🅐 ALPHA</div>
+    <div class="ftab f-liq"       onclick="setFil('liq',this)">⚡ LIQ HUNT</div>
+    <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
+    <div class="ftab f-tightsq"   onclick="setFil('tightsq',this)">💎 TIGHT SQ</div>
+    <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
+    <div class="ftab f-diup"      onclick="setFil('diup',this)">▲DI</div>
+    <div class="ftab f-didn"      onclick="setFil('didn',this)">▼DI</div>
+    <div class="ftab f-spike"     onclick="setFil('spike',this)">🚀 SPIKE+VOL</div>
+    <div class="ftab f-dump"      onclick="setFil('dump',this)">💥 DUMP+VOL</div>
+    <div class="ftab f-fr"        onclick="setFil('fr',this)">💰 FR EXT</div>
+    <div class="ftab f-oi"        onclick="setFil('oisurge',this)">📈 OI SURGE</div>
+    <div class="ftab f-cvd"       onclick="setFil('cvd',this)">📊 CVD DIV</div>
+    <div class="ftab f-strong"    onclick="setFil('strong',this)">⚡ SCORE 7+</div>
+    <div class="ftab f-ls"        onclick="setFil('ls',this)">⚖️ L/S EXT</div>
+    <div class="ftab f-inflow"    onclick="setFil('inflow',this)">📥 INFLOW</div>
+    <div class="ftab f-outflow"   onclick="setFil('outflow',this)">📤 OUTFLOW</div>
+    <div class="ftab f-usdt"      onclick="setFil('usdt',this)">💵 USDT0</div>
   </div>
   <div class="filter-row-2">
     <span class="sort-label">СОРТИРАЈ:</span>
@@ -1175,6 +1178,7 @@ function renderList(){
     if(S.filter==='strong')  data=data.filter(s=>s.score>=7);
     if(S.filter==='ls')      data=data.filter(s=>s.lsExtreme);
     if(S.filter==='squeeze') data=data.filter(s=>s.squeezeActivation);
+    if(S.filter==='tightsq')  data=data.filter(s=>s.maSqueeze&&s.maSqueezeWidth<0.5);
     if(S.filter==='sqz')     data=data.filter(s=>s.sqzFired||s.sqz?.sqzOn);
     if(S.filter==='diup')    data=data.filter(s=>s.sqz?.diCrossUp);
     if(S.filter==='didn')    data=data.filter(s=>s.sqz?.diCrossDown);
