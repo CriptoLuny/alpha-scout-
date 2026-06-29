@@ -1204,8 +1204,8 @@ function rowHTML(s){
   const catTag=getCatTag(s.coin);if(catTag)tags.push(catTag);
   if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);
   if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35);cursor:pointer" onclick="showSigTip(event,'SQUEEZE','bull')">🔥SQUEEZE</span>`);
-  if(s.maSqueeze&&s.maSqueezeWidth<0.5)tags.push(`<span class="ctag ct-megasq" onclick="showSigTip(event,'TIGHT SQ',s.maSqueezeDir||'bull')">💎TIGHT SQ</span>`);
-  else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';tags.push(`<span class="ctag ct-masq" onclick="showSigTip(event,'${maSqLbl}','${s.maSqueezeDir||'bull'}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}}
+  if(s.maSqueeze&&s.maSqueezeWidth<0.5){const _msDir=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-megasq" onclick="event.stopPropagation();showSigTip(event,'TIGHT SQ','${_msDir}')">💎TIGHT SQ</span>`);}
+  else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';const _msDir2=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,'${maSqLbl}','${_msDir2}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}}
   else if(s.dir==='bull')tags.push(`<span class="ctag ct-bull">▲ BULL</span>`);
   else if(s.dir==='bear')tags.push(`<span class="ctag ct-bear">▼ BEAR</span>`);
   else tags.push(`<span class="ctag ct-neu">>> NEU</span>`);
