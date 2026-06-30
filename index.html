@@ -1081,13 +1081,26 @@ function findRecentSwing(slice, pctThreshold) {
   // This is exactly what TradingView's manual Fib tool reflects -- it doesn't redraw mid-move.
 
   if (pivots.length < 2) return null;
-  // the LAST TWO CONFIRMED pivots define the most recent swing leg
-  const last = pivots[pivots.length - 1];
-  const prev = pivots[pivots.length - 2];
+
+  // Pick the LARGEST confirmed leg (by price range) among ALL consecutive pivot pairs,
+  // not just the chronologically last one. A small post-move wiggle (e.g. a 4%+ bounce
+  // during a pullback) would otherwise "hide" the real, dominant recent move (e.g. a pump)
+  // behind a tiny, insignificant micro-swing that happens to be more recent.
+  let bestRange = -1, swingHigh = null, swingLow = null, isLatestLeg = false;
+  for (let i = 1; i < pivots.length; i++) {
+    const a = pivots[i - 1], b = pivots[i];
+    const hi = a.type === 'high' ? a.price : b.price;
+    const lo = a.type === 'low'  ? a.price : b.price;
+    const range = hi - lo;
+    if (range > bestRange) {
+      bestRange = range; swingHigh = hi; swingLow = lo;
+      isLatestLeg = (i === pivots.length - 1);
+    }
+  }
+  if (swingHigh === null) return null;
+
   return {
-    swingHigh: last.type === 'high' ? last.price : prev.price,
-    swingLow:  last.type === 'low'  ? last.price : prev.price,
-    legUp: last.type === 'high', // true if the latest leg moved up into a high
+    swingHigh, swingLow, isLatestLeg,
     pivotCount: pivots.length
   };
 }
