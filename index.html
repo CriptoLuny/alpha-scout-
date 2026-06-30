@@ -83,6 +83,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-jmadn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ftab.f-fibo.active{background:rgba(255,208,0,.08);border-color:var(--yellow);color:var(--yellow)}
 .ftab.f-poc.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
+.ftab.f-btcfree.active{background:rgba(0,255,136,.1);border-color:var(--green);color:var(--green)}
+.ct-btc-strong{background:rgba(255,102,0,.12);color:var(--orange);border:1px solid rgba(255,102,0,.3)}
+.ct-btc-mod{background:rgba(255,208,0,.08);color:var(--yellow);border:1px solid rgba(255,208,0,.2)}
+.ct-btc-free{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.25)}
 .ftab.f-conf.active{background:rgba(255,208,0,.12);border-color:var(--yellow);color:var(--yellow);font-weight:800}
 .ct-conf-bull{background:linear-gradient(135deg,rgba(0,255,136,.2),rgba(0,229,255,.15));color:#00ffaa;border:1px solid rgba(0,255,136,.4);font-weight:bold;animation:confPulse 2s infinite}
 .ct-conf-bear{background:linear-gradient(135deg,rgba(255,34,68,.2),rgba(160,32,240,.15));color:#ff6688;border:1px solid rgba(255,34,68,.4);font-weight:bold;animation:confPulse 2s infinite}
@@ -482,6 +486,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-fibo"        onclick="setFil('fibo',this)">🎯 FIBO</div>
     <div class="ftab f-poc"         onclick="setFil('poc',this)">📊 POC</div>
     <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
+    <div class="ftab f-btcfree"     onclick="setFil('btcfree',this)">🆓 BTC FREE</div>
     <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
     <div class="ftab f-diup"      onclick="setFil('diup',this)">▲DI</div>
     <div class="ftab f-didn"      onclick="setFil('didn',this)">▼DI</div>
@@ -706,7 +711,9 @@ const SIG_INFO={
   '▼DI CROSS':{title:'DI- крос над DI+ (црвено триаголниче)',desc:'DI- пробива над DI+ — продавачкиот притисок ја презема контролата. Истиот маркер како триаголничето над барот во TradingView. Појак е ако ADX>20.',bear:{cls:'pos-short',txt:'⬇ Bearish DI крос — потврди со ADX и CVD'}},
   'SQZ ON':{title:'Squeeze Активен (компресија)',desc:'Bollinger Bands се внатре во Keltner Channels — волатилноста е компресирана. Очекувај експлозивен потег, насоката уште не е потврдена.',bull:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'},bear:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'}},
   'MOM/AO DIV':{title:'Momentum / AO Дивергенција',desc:'Squeeze Momentum и Awesome Oscillator одат во спротивни насоки (портокалова позадина во TV). Не влегувај против двата.',bull:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'},bear:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'}},
-  'CONFLUENCE':{title:'⚡ CONFLUENCE — Совпаѓање на повеќе индикатори',desc:'Минимум 4 од 10 индикатори (MA Squeeze, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI, FR) гласаат во иста насока. Ова е најсилниот сигнал во скенерот — статистички поверојатно за успешна трговија.',bull:{cls:'pos-long',txt:'⬆ CONFLUENCE LONG — минимум 4 индикатори се совпаѓаат LONG'},bear:{cls:'pos-short',txt:'⬇ CONFLUENCE SHORT — минимум 4 индикатори се совпаѓаат SHORT'}},
+  'BTC FREE':{title:'🆓 BTC Независност',desc:'Корелацијата (Pearson, 1h, последните ~30 свеќи) помеѓу % промените на овој коин и BTC е под 0.4 — коинот се движи НЕЗАВИСНО од BTC. Ова е точно профилот за Alpha трговии: останатите сигнали (CVD, MA Squeeze, итн.) се повеќе „чисти" — не се само BTC шум проследен низ коинот. Кога има јасна доминантна насока меѓу другите индикатори, независноста додава бонус глас во CONFLUENCE во истата насока.',bull:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'},bear:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'}},
+  'BTC LINKED':{title:'🔗 BTC Поврзаност',desc:'Корелацијата (Pearson, 1h) помеѓу % промените на овој коин и BTC е над 0.4 — коинот значително го следи BTC. Ако BTC влезе во силен тренд (горе или долу), овој коин најверојатно ќе биде повлечен заедно, без разлика на сопствените технички сигнали. Внимавај на BTC насоката пред да влезеш во позиција.',bull:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'},bear:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'}},
+  'CONFLUENCE':{title:'⚡ CONFLUENCE — Совпаѓање на повеќе индикатори',desc:'Минимум 4 индикатори (MA Squeeze, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI, FR, + бонус глас за BTC независност) гласаат во иста насока. Ова е најсилниот сигнал во скенерот — статистички поверојатно за успешна трговија.',bull:{cls:'pos-long',txt:'⬆ CONFLUENCE LONG — минимум 4 индикатори се совпаѓаат LONG'},bear:{cls:'pos-short',txt:'⬇ CONFLUENCE SHORT — минимум 4 индикатори се совпаѓаат SHORT'}},
   'FIBO':{title:'Fibonacci Ниво (🎯)',desc:'Цената е во близина (±1.5%) на клучно Fibonacci ниво (38.2%, 50%, 61.8%, 78.6%). Нивото се пресметува од ПОСЛЕДНИОТ значаен swing (pivot high/low), пребаран во последните до 150 свеќи — не апсолутен max/min на целиот прозорец, за да не се фати застарен pik. Fibonacci нивоата се природни зони на поддршка и отпор.',bull:{cls:'pos-long',txt:'⬆ FIBO SUPPORT — цената bounces од Fib ниво'},bear:{cls:'pos-short',txt:'⬇ FIBO RESIST — цената тестира Fib отпор'}},
   'POC':{title:'Point of Control (📊)',desc:'POC е ценовното ниво каде е тргуван НАЈВИСОК волумен во последните 150 свеќи. Цената е во близина (±2%) на POC. POC е магнет — цената честопати се враќа кон него.',bull:{cls:'pos-long',txt:'⬆ Цената е НАД POC — POC е поддршка'},bear:{cls:'pos-short',txt:'⬇ Цената е ПОД POC — POC е отпор'}},
   'JMA X UP':{title:'JMA x DWMA — Bullish крос (📈)',desc:'JMA (Jurik MA, length=8) го поминал DWMA (Double WMA, length=10) одоздола нагоре. Ова е свеж bullish крос — моментумот се свртил нагоре.',bull:{cls:'pos-long',txt:'⬆ LONG — JMA crosses above DWMA'},bear:{cls:'pos-watch',txt:'>> Прати — очекувај continuation'}},
@@ -886,6 +893,7 @@ function stopScan(){
 async function doScan(){
   document.getElementById('prog').style.display='block';
   setP('Вчитувам Alpha листа + тикери...',3);
+  _btcCloses1h=null; // refresh BTC reference each new scan
   const[,tickers,fundings,exchangeInfo]=await Promise.all([fetchAlphaList(),apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),apiFetch('/exchangeInfo')]);
   if(!tickers){errShow('⚠️ Binance API недостапен');stopScan();return;}
 
@@ -923,7 +931,7 @@ async function doScan(){
       const res=await Promise.all(chunk.map(c=>analyzeOneTF(c,_tMap[c],_fMap[c]||0,tf)));
       res.forEach((r,idx)=>{
         if(!r)return;const c=chunk[idx];
-        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,jmaDwmaCrossUp:false,jmaDwmaCrossDown:false,jmaAbove:false,confScore:0,confDir:'none',confLabel:null,confVotes:null,tfData:{},bestTF:tf};
+        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,jmaDwmaCrossUp:false,jmaDwmaCrossDown:false,jmaAbove:false,confScore:0,confDir:'none',confLabel:null,confVotes:null,btcCorr:null,tfData:{},bestTF:tf};
         S._partial[c].tfData[tf]=r;
         if(r.score>(S._partial[c].tfData[S._partial[c].bestTF]?.score||0))S._partial[c].bestTF=tf;
         S._partial[c].score=Math.max(S._partial[c].score,r.score);
@@ -935,6 +943,7 @@ async function doScan(){
         if(r.squeezeActivation)S._partial[c].squeezeActivation=true;
         if(r.jmaDwma?.crossUp)S._partial[c].jmaDwmaCrossUp=true;
         if((r.confScore||0)>(S._partial[c].confScore||0)){S._partial[c].confScore=r.confScore;S._partial[c].confDir=r.confDir;S._partial[c].confLabel=r.confLabel;S._partial[c].confVotes=r.confVotes;}
+        if(r.btcCorr!==null&&r.btcCorr!==undefined)S._partial[c].btcCorr=r.btcCorr;
         if(r.jmaDwma?.crossDown)S._partial[c].jmaDwmaCrossDown=true;
         if(r.jmaDwma?.jmaAbove)S._partial[c].jmaAbove=true;
         if(r.sqzFired)S._partial[c].sqzFiredAny=true;
@@ -951,7 +960,7 @@ async function doScan(){
 function buildSignals(partial){
   return Object.values(partial).filter(x=>x.score>0).map(x=>{
     const best=x.tfData[x.bestTF]||Object.values(x.tfData)[0];
-    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes};
+    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes,btcCorr:x.btcCorr};
   }).sort((a,b)=>{
     if(b.isFav!==a.isFav)return(b.isFav?1:0)-(a.isFav?1:0);
     return b.score-a.score;
@@ -1078,6 +1087,48 @@ function findRecentSwing(slice, pctThreshold) {
     legUp: last.type === 'high', // true if the latest leg moved up into a high
     pivotCount: pivots.length
   };
+}
+
+// -- BTC CORRELATION -- fixed 1h reference, fetched once per scan and reused for all coins
+let _btcCloses1h = null;
+let _btcFetchPromise = null;
+
+async function ensureBtcReference() {
+  if (_btcCloses1h && _btcCloses1h.length >= 20) return;
+  if (_btcFetchPromise) { await _btcFetchPromise; return; }
+  _btcFetchPromise = (async () => {
+    try {
+      const kl = await apiFetch('/klines?symbol=BTCUSDT&interval=1h&limit=50');
+      if (kl && kl.length >= 20) _btcCloses1h = kl.map(k => parseFloat(k[4]));
+    } catch (e) {}
+    _btcFetchPromise = null;
+  })();
+  await _btcFetchPromise;
+}
+
+function calcBtcCorrelation(coinCloses, btcCloses) {
+  // Pearson correlation between % returns of the coin and BTC (same TF, aligned index)
+  const n = Math.min(coinCloses.length, btcCloses.length);
+  if (n < 15) return null;
+  const cc = coinCloses.slice(-n);
+  const bc = btcCloses.slice(-n);
+  const coinRet = [], btcRet = [];
+  for (let i = 1; i < n; i++) {
+    if (cc[i - 1] > 0) coinRet.push((cc[i] - cc[i - 1]) / cc[i - 1]);
+    if (bc[i - 1] > 0) btcRet.push((bc[i] - bc[i - 1]) / bc[i - 1]);
+  }
+  const m = Math.min(coinRet.length, btcRet.length);
+  if (m < 10) return null;
+  const meanC = coinRet.slice(0, m).reduce((a, b) => a + b, 0) / m;
+  const meanB = btcRet.slice(0, m).reduce((a, b) => a + b, 0) / m;
+  let num = 0, denC = 0, denB = 0;
+  for (let i = 0; i < m; i++) {
+    const dc = coinRet[i] - meanC, db = btcRet[i] - meanB;
+    num += dc * db; denC += dc * dc; denB += db * db;
+  }
+  const den = Math.sqrt(denC * denB);
+  if (den === 0) return null;
+  return num / den; // Pearson r, -1..1
 }
 
 function calcFibo(klines, lookback, tf) {
@@ -1268,7 +1319,7 @@ function calcSqzMomAO(klines,diWin){
 async function analyzeOneTF(coin,ticker,fr,tf){
   if(!ticker)return null;
   const price=parseFloat(ticker.lastPrice),priceChg=parseFloat(ticker.priceChangePercent),volume=parseFloat(ticker.quoteVolume),high24=parseFloat(ticker.highPrice),low24=parseFloat(ticker.lowPrice);
-  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null;
+  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null;
 
   try{
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
@@ -1308,6 +1359,13 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       if(klFull&&klFull.length>=15){
         fibo=calcFibo(klFull,150,tf);
         poc=calcPOC(klFull,150);
+      }
+      // -- BTC CORRELATION -- fixed 1h regardless of scan TF (most stable), reuses 1h closes when already on that TF
+      if(tf==='1h'&&coin!=='BTC'&&closes.length>=20){
+        await ensureBtcReference();
+        if(_btcCloses1h&&_btcCloses1h.length>=20){
+          btcCorr=calcBtcCorrelation(closes,_btcCloses1h);
+        }
       }
       for(const k of kl.slice(-3)){
         const hi=parseFloat(k[2]),lo=parseFloat(k[3]),op=parseFloat(k[1]),cl=parseFloat(k[4]);
@@ -1432,6 +1490,18 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // 10. Funding Rate
   if(Math.abs(fr)>0.04) cvotes.push({name:'Funding Rate',detail:(fr>=0?'+':'')+fr.toFixed(3)+'%',vote:fr<0?1:-1}); // negative FR = bullish
 
+  // 11. BTC Independence -- bonus vote that reinforces the preliminary leading direction
+  // when the coin is decoupled from BTC (|corr|<0.4). Independence itself isn't bullish/bearish,
+  // it just means the other indicators above can be trusted more (not BTC noise) -- alpha-play logic.
+  if(btcCorr!==null&&Math.abs(btcCorr)<0.4){
+    const prelimLong=cvotes.filter(v=>v.vote===1).length;
+    const prelimShort=cvotes.filter(v=>v.vote===-1).length;
+    if(prelimLong!==prelimShort){
+      const bonusDir=prelimLong>prelimShort?1:-1;
+      cvotes.push({name:'BTC Независност',detail:'corr '+btcCorr.toFixed(2)+' (decoupled)',vote:bonusDir});
+    }
+  }
+
   const longVotes  = cvotes.filter(v=>v.vote===1).length;
   const shortVotes = cvotes.filter(v=>v.vote===-1).length;
   const totalVotes = cvotes.length;
@@ -1447,7 +1517,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
-  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -1493,6 +1563,7 @@ function renderList(){
       fibo:   s=>s.sigs?.some(sg=>sg.l?.startsWith('FIBO')),
       poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
       conf:   s=>s.confScore>=4,
+      btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
     };
     if(S.filters.size>0){
       data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
@@ -1519,6 +1590,13 @@ function rowHTML(s){
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
     tags.push(`<span class="ctag ${ccls}" data-coin="${s.coin}" onclick="event.stopPropagation();showConfluenceDetail(event,this.dataset.coin)">⚡${s.confLabel}</span>`);
+  }
+  if(s.btcCorr!==null&&s.btcCorr!==undefined){
+    const bab=Math.abs(s.btcCorr);
+    const bcls=bab>=0.7?'ct-btc-strong':bab>=0.4?'ct-btc-mod':'ct-btc-free';
+    const bicon=bab>=0.7?'🔗':bab>=0.4?'〰️':'🆓';
+    const blbl=bab<0.4?'BTC FREE':'BTC LINKED';
+    tags.push(`<span class="ctag ${bcls}" onclick="event.stopPropagation();showSigTip(event,'${blbl}','bull')">${bicon}BTC ${s.btcCorr>=0?'+':''}${s.btcCorr.toFixed(2)}</span>`);
   }
   if(s.isFav)tags.push(`<span class="ctag ct-fav">⭐</span>`);
   if(s.isAlpha)tags.push(`<span class="ctag ct-alpha">🅐</span>`);
