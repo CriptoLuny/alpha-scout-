@@ -1073,12 +1073,14 @@ function findRecentSwing(slice, pctThreshold) {
       }
     }
   }
-  // push the still-running extreme as the latest (unconfirmed) pivot
-  if (dir === 1) pivots.push({ price: extHigh, type: 'high' });
-  else if (dir === -1) pivots.push({ price: extLow, type: 'low' });
+  // -- IMPORTANT: do NOT add the still-running (unconfirmed) extreme as a pivot. --
+  // If we did, the swing range would keep drifting toward the current price while a move
+  // is still in progress (e.g. price actively declining post-high, no bounce confirmed yet),
+  // instead of using the real, stable, CONFIRMED swing (both ends reversed past the threshold).
+  // This is exactly what TradingView's manual Fib tool reflects -- it doesn't redraw mid-move.
 
   if (pivots.length < 2) return null;
-  // the LAST TWO pivots define the most recent swing leg
+  // the LAST TWO CONFIRMED pivots define the most recent swing leg
   const last = pivots[pivots.length - 1];
   const prev = pivots[pivots.length - 2];
   return {
