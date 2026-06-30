@@ -681,6 +681,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <div class="dm"><div class="dm-l">24h High/Low</div><div class="dm-v up" id="mHi">—</div><div class="dm-s" id="mHiS">—</div></div>
       <div class="dm"><div class="dm-l">Liq Hunt</div><div class="dm-v" id="mLiq">—</div><div class="dm-s" id="mLiqS">—</div></div>
       <div class="dm"><div class="dm-l">SQZMOM · ADX</div><div class="dm-v" id="mSqz">—</div><div class="dm-s" id="mSqzS">—</div></div>
+      <div class="dm"><div class="dm-l">FIBO Swing (дебаг)</div><div class="dm-v" id="mFibo" style="font-size:12px">—</div><div class="dm-s" id="mFiboS">—</div></div>
     </div>
     <div class="dp-sigs"><div class="dp-sigs-t">// АКТИВНИ СИГНАЛИ · притисни за опис</div><div class="sigs-wrap" id="dpSigs"></div></div>
     <div class="dp-score">
@@ -1739,6 +1740,13 @@ function populateDetail(s){
   setM('mVol',fmtM(s.volume),'bl','24h USDT промет');
   setM('mHi','$'+fmt(s.high24),'up','Low: $'+fmt(s.low24));
   setM('mLiq',s.liqHunt?'⚡ ДА':'—',s.liqHunt?'or':'neu',s.liqHunt?(s.liqType==='bull'?'Price↑+CVD↓=Short SQ':'Price↓+CVD↑=Long DMP'):'Не детектиран');
+  if(s.fibo){
+    const fk=s.fibo.nearestKey;
+    setM('mFibo','H:$'+fmt(s.fibo.swingHigh)+' L:$'+fmt(s.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
+      fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу');
+  }else{
+    setM('mFibo','—','neu','Нема доволно податоци за swing');
+  }
   if(s.sqz&&!isNaN(s.sqz.adx)){const q=s.sqz;const sv=q.bullSignal?'🎯 BULL':q.bearSignal?'🎯 BEAR':q.bullAdxBrk?'ADX▲':q.bearAdxBrk?'ADX▼':q.sqzOn?'● SQZ ON':'○ off';const sqc=q.bullSignal||q.bullAdxBrk?'up':q.bearSignal||q.bearAdxBrk?'dn':q.sqzOn?'neu':'';setM('mSqz',sv,sqc,`ADX ${q.adx.toFixed(0)} · DI+ ${q.diPlus.toFixed(0)} / DI- ${q.diMinus.toFixed(0)} · MOM/AO ${q.corr==='bull'?'▲▲':q.corr==='bear'?'▼▼':'◆div'}`);}else setM('mSqz','—','','—');
 
   // Signal tags - onclick instead of onmouseenter for mobile
@@ -1835,6 +1843,13 @@ async function switchChartTF(coin,tf,btn){
     setM('mFr',`${r.fr>=0?'+':''}${r.fr.toFixed(4)}%`,frC,r.fr>0.05?'Лонгови плаќаат':r.fr<-0.05?'Шортови плаќаат':'Неутрален');
     setM('mFlow',r.netInflow?'📥 INFLOW':r.netOutflow?'📤 OUTFLOW':'—',flowC,r.netInflow?'Повеќе купувачи':r.netOutflow?'Повеќе продавачи':'Балансирано');
     setM('mLiq',r.liqHunt?'⚡ ДА':'—',r.liqHunt?'or':'neu',r.liqHunt?(r.liqType==='bull'?'Price↑+CVD↓=Short SQ':'Price↓+CVD↑=Long DMP'):'Не детектиран');
+    if(r.fibo){
+      const fk=r.fibo.nearestKey;
+      setM('mFibo','H:$'+fmt(r.fibo.swingHigh)+' L:$'+fmt(r.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
+        fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу');
+    }else{
+      setM('mFibo','—','neu','Нема доволно податоци за swing');
+    }
   if(r.sqz&&!isNaN(r.sqz.adx)){const q=r.sqz;const sv=q.bullSignal?'🎯 BULL':q.bearSignal?'🎯 BEAR':q.bullAdxBrk?'ADX▲':q.bearAdxBrk?'ADX▼':q.sqzOn?'● SQZ ON':'○ off';const sqc=q.bullSignal||q.bullAdxBrk?'up':q.bearSignal||q.bearAdxBrk?'dn':q.sqzOn?'neu':'';setM('mSqz',sv,sqc,`ADX ${q.adx.toFixed(0)} · DI+ ${q.diPlus.toFixed(0)} / DI- ${q.diMinus.toFixed(0)} · MOM/AO ${q.corr==='bull'?'▲▲':q.corr==='bear'?'▼▼':'◆div'}`);}else setM('mSqz','—','','—');
     // Update signal tags
     const tags=r.sigs?.map(sg=>{const tc=sg.t==='bull'?'up':sg.t==='bear'?'dn':sg.t==='liq'?'or':'neu';return`<span class="stag ${tc}" onclick="showSigTip(event,'${sg.l}','${sg.t}')">${sg.l}</span>`;}).join('')||'';
