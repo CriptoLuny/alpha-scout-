@@ -711,8 +711,8 @@ const SIG_INFO={
   '▼DI CROSS':{title:'DI- крос над DI+ (црвено триаголниче)',desc:'DI- пробива над DI+ — продавачкиот притисок ја презема контролата. Истиот маркер како триаголничето над барот во TradingView. Појак е ако ADX>20.',bear:{cls:'pos-short',txt:'⬇ Bearish DI крос — потврди со ADX и CVD'}},
   'SQZ ON':{title:'Squeeze Активен (компресија)',desc:'Bollinger Bands се внатре во Keltner Channels — волатилноста е компресирана. Очекувај експлозивен потег, насоката уште не е потврдена.',bull:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'},bear:{cls:'pos-watch',txt:'>> ЧЕКАЈ breakout — прати Momentum + AO насока'}},
   'MOM/AO DIV':{title:'Momentum / AO Дивергенција',desc:'Squeeze Momentum и Awesome Oscillator одат во спротивни насоки (портокалова позадина во TV). Не влегувај против двата.',bull:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'},bear:{cls:'pos-watch',txt:'>> Прати — чекај усогласување'}},
-  'BTC FREE':{title:'🆓 BTC Независност',desc:'Корелацијата (Pearson, 1h, последните ~30 свеќи) помеѓу % промените на овој коин и BTC е под 0.4 — коинот се движи НЕЗАВИСНО од BTC. Ова е точно профилот за Alpha трговии: останатите сигнали (CVD, MA Squeeze, итн.) се повеќе „чисти" — не се само BTC шум проследен низ коинот. Кога има јасна доминантна насока меѓу другите индикатори, независноста додава бонус глас во CONFLUENCE во истата насока.',bull:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'},bear:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'}},
-  'BTC LINKED':{title:'🔗 BTC Поврзаност',desc:'Корелацијата (Pearson, 1h) помеѓу % промените на овој коин и BTC е над 0.4 — коинот значително го следи BTC. Ако BTC влезе во силен тренд (горе или долу), овој коин најверојатно ќе биде повлечен заедно, без разлика на сопствените технички сигнали. Внимавај на BTC насоката пред да влезеш во позиција.',bull:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'},bear:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'}},
+  'BTC FREE':{title:'🆓 BTC Независност',desc:'Корелацијата (Pearson, фиксно на 1h, последните 150 свеќи) помеѓу % промените на овој коин и BTC е под 0.4 — коинот се движи НЕЗАВИСНО од BTC. Пресметката е иста без разлика на кој TF скенираш (секогаш 1h reference). Ова е точно профилот за Alpha трговии: останатите сигнали (CVD, MA Squeeze, итн.) се повеќе „чисти" — не се само BTC шум проследен низ коинот. Кога има јасна доминантна насока меѓу другите индикатори, независноста додава бонус глас во CONFLUENCE во истата насока.',bull:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'},bear:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'}},
+  'BTC LINKED':{title:'🔗 BTC Поврзаност',desc:'Корелацијата (Pearson, фиксно на 1h, последните 150 свеќи) помеѓу % промените на овој коин и BTC е над 0.4 — коинот значително го следи BTC. Ако BTC влезе во силен тренд (горе или долу), овој коин најверојатно ќе биде повлечен заедно, без разлика на сопствените технички сигнали. Внимавај на BTC насоката пред да влезеш во позиција.',bull:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'},bear:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'}},
   'CONFLUENCE':{title:'⚡ CONFLUENCE — Совпаѓање на повеќе индикатори',desc:'Минимум 4 индикатори (MA Squeeze, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI, FR, + бонус глас за BTC независност) гласаат во иста насока. Ова е најсилниот сигнал во скенерот — статистички поверојатно за успешна трговија.',bull:{cls:'pos-long',txt:'⬆ CONFLUENCE LONG — минимум 4 индикатори се совпаѓаат LONG'},bear:{cls:'pos-short',txt:'⬇ CONFLUENCE SHORT — минимум 4 индикатори се совпаѓаат SHORT'}},
   'FIBO':{title:'Fibonacci Ниво (🎯)',desc:'Цената е во близина (±1.5%) на клучно Fibonacci ниво (38.2%, 50%, 61.8%, 78.6%). Нивото се пресметува од ПОСЛЕДНИОТ значаен swing (pivot high/low), пребаран во последните до 150 свеќи — не апсолутен max/min на целиот прозорец, за да не се фати застарен pik. Fibonacci нивоата се природни зони на поддршка и отпор.',bull:{cls:'pos-long',txt:'⬆ FIBO SUPPORT — цената bounces од Fib ниво'},bear:{cls:'pos-short',txt:'⬇ FIBO RESIST — цената тестира Fib отпор'}},
   'POC':{title:'Point of Control (📊)',desc:'POC е ценовното ниво каде е тргуван НАЈВИСОК волумен во последните 150 свеќи. Цената е во близина (±2%) на POC. POC е магнет — цената честопати се враќа кон него.',bull:{cls:'pos-long',txt:'⬆ Цената е НАД POC — POC е поддршка'},bear:{cls:'pos-short',txt:'⬇ Цената е ПОД POC — POC е отпор'}},
@@ -893,7 +893,7 @@ function stopScan(){
 async function doScan(){
   document.getElementById('prog').style.display='block';
   setP('Вчитувам Alpha листа + тикери...',3);
-  _btcCloses1h=null; // refresh BTC reference each new scan
+  _btcCloses1h=null;_coin1hCache={}; // refresh BTC reference + per-coin 1h cache each new scan
   const[,tickers,fundings,exchangeInfo]=await Promise.all([fetchAlphaList(),apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),apiFetch('/exchangeInfo')]);
   if(!tickers){errShow('⚠️ Binance API недостапен');stopScan();return;}
 
@@ -1089,21 +1089,37 @@ function findRecentSwing(slice, pctThreshold) {
   };
 }
 
-// -- BTC CORRELATION -- fixed 1h reference, fetched once per scan and reused for all coins
+// -- BTC CORRELATION -- fixed 1h reference (150 candles), fetched once per scan and reused for all coins
 let _btcCloses1h = null;
 let _btcFetchPromise = null;
+let _coin1hCache = {}; // coin -> 1h closes array, cached per-scan so СИТЕ (multi-TF) doesn't refetch per TF pass
 
 async function ensureBtcReference() {
   if (_btcCloses1h && _btcCloses1h.length >= 20) return;
   if (_btcFetchPromise) { await _btcFetchPromise; return; }
   _btcFetchPromise = (async () => {
     try {
-      const kl = await apiFetch('/klines?symbol=BTCUSDT&interval=1h&limit=50');
+      const kl = await apiFetch('/klines?symbol=BTCUSDT&interval=1h&limit=150');
       if (kl && kl.length >= 20) _btcCloses1h = kl.map(k => parseFloat(k[4]));
     } catch (e) {}
     _btcFetchPromise = null;
   })();
   await _btcFetchPromise;
+}
+
+async function getCoin1hCloses(coin, tfBeingScanned, closesFromCurrentTf) {
+  // reuse if we're already scanning 1h (closes already has up to 150 1h candles)
+  if (tfBeingScanned === '1h' && closesFromCurrentTf && closesFromCurrentTf.length >= 20) return closesFromCurrentTf;
+  if (_coin1hCache[coin]) return _coin1hCache[coin];
+  try {
+    const kl = await apiFetch(`/klines?symbol=${coin}USDT&interval=1h&limit=150`);
+    if (kl && kl.length >= 20) {
+      const c1h = kl.map(k => parseFloat(k[4]));
+      _coin1hCache[coin] = c1h;
+      return c1h;
+    }
+  } catch (e) {}
+  return null;
 }
 
 function calcBtcCorrelation(coinCloses, btcCloses) {
@@ -1360,13 +1376,6 @@ async function analyzeOneTF(coin,ticker,fr,tf){
         fibo=calcFibo(klFull,150,tf);
         poc=calcPOC(klFull,150);
       }
-      // -- BTC CORRELATION -- fixed 1h regardless of scan TF (most stable), reuses 1h closes when already on that TF
-      if(tf==='1h'&&coin!=='BTC'&&closes.length>=20){
-        await ensureBtcReference();
-        if(_btcCloses1h&&_btcCloses1h.length>=20){
-          btcCorr=calcBtcCorrelation(closes,_btcCloses1h);
-        }
-      }
       for(const k of kl.slice(-3)){
         const hi=parseFloat(k[2]),lo=parseFloat(k[3]),op=parseFloat(k[1]),cl=parseFloat(k[4]);
         const body=Math.abs(cl-op),range=hi-lo;
@@ -1460,6 +1469,18 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(jmaDwma.crossDown){score+=2;sigs.push({l:'JMA X DN',t:'bear'});}
   else if(!jmaDwma.crossUp&&!jmaDwma.crossDown&&jmaDwma.jmaAbove)sigs.push({l:'JMA>DWMA',t:'bull'});
   else if(!jmaDwma.crossUp&&!jmaDwma.crossDown&&!jmaDwma.jmaAbove)sigs.push({l:'JMA<DWMA',t:'bear'});
+
+  // -- BTC CORRELATION -- only fetch for coins that already show a signal (score>0).
+  // Coins with score===0 get filtered out a few lines below anyway, so fetching their 1h
+  // data would be wasted bandwidth. This naturally limits the extra fetch to the "interesting"
+  // subset (~tens, not hundreds, of coins) instead of every single scanned symbol.
+  if(coin!=='BTC'&&score>0){
+    await ensureBtcReference();
+    if(_btcCloses1h&&_btcCloses1h.length>=20){
+      const coinCloses1h=await getCoin1hCloses(coin,tf,closes);
+      if(coinCloses1h)btcCorr=calcBtcCorrelation(coinCloses1h,_btcCloses1h);
+    }
+  }
 
   // -- CONFLUENCE SCORE --
   // Each indicator votes LONG(+1), SHORT(-1) or NEUTRAL(0) -- with name+detail for transparency
