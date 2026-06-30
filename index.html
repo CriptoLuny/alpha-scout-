@@ -1101,7 +1101,8 @@ function findRecentSwing(slice, pctThreshold) {
 
   return {
     swingHigh, swingLow, isLatestLeg,
-    pivotCount: pivots.length
+    pivotCount: pivots.length,
+    rawPivots: pivots.map(p => p.type[0].toUpperCase()+p.price.toFixed(6)) // debug: e.g. "L0.204500"
   };
 }
 
@@ -1173,10 +1174,11 @@ function calcFibo(klines, lookback, tf) {
   const pct = SWING_PCT_TF[tf] || 3;
   const swing = findRecentSwing(slice, pct);
 
-  let swingHigh, swingLow;
+  let swingHigh, swingLow, rawPivots=null;
   if (swing) {
     swingHigh = swing.swingHigh;
     swingLow  = swing.swingLow;
+    rawPivots = swing.rawPivots;
   } else {
     // fallback: no clear reversal found (range too tight) -- use absolute extremes
     const highs = slice.map(k => parseFloat(k[2]));
@@ -1210,7 +1212,8 @@ function calcFibo(klines, lookback, tf) {
     swingHigh, swingLow, range,
     levels, nearestKey,
     nearFib, fiboSupport, fiboResist,
-    fiboLabel: nearestKey ? (nearestKey.r * 100).toFixed(1) + '%' : null
+    fiboLabel: nearestKey ? (nearestKey.r * 100).toFixed(1) + '%' : null,
+    rawPivots
   };
 }
 
@@ -1755,8 +1758,9 @@ function populateDetail(s){
   setM('mLiq',s.liqHunt?'⚡ ДА':'—',s.liqHunt?'or':'neu',s.liqHunt?(s.liqType==='bull'?'Price↑+CVD↓=Short SQ':'Price↓+CVD↑=Long DMP'):'Не детектиран');
   if(s.fibo){
     const fk=s.fibo.nearestKey;
+    const pivStr=s.fibo.rawPivots?s.fibo.rawPivots.join(' → '):'(fallback max/min, нема pivots)';
     setM('mFibo','H:$'+fmt(s.fibo.swingHigh)+' L:$'+fmt(s.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
-      fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу');
+      (fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
   }else{
     setM('mFibo','—','neu','Нема доволно податоци за swing');
   }
@@ -1858,8 +1862,9 @@ async function switchChartTF(coin,tf,btn){
     setM('mLiq',r.liqHunt?'⚡ ДА':'—',r.liqHunt?'or':'neu',r.liqHunt?(r.liqType==='bull'?'Price↑+CVD↓=Short SQ':'Price↓+CVD↑=Long DMP'):'Не детектиран');
     if(r.fibo){
       const fk=r.fibo.nearestKey;
+      const pivStr=r.fibo.rawPivots?r.fibo.rawPivots.join(' → '):'(fallback max/min, нема pivots)';
       setM('mFibo','H:$'+fmt(r.fibo.swingHigh)+' L:$'+fmt(r.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
-        fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу');
+        (fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
     }else{
       setM('mFibo','—','neu','Нема доволно податоци за swing');
     }
