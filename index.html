@@ -1082,25 +1082,21 @@ function findRecentSwing(slice, pctThreshold) {
 
   if (pivots.length < 2) return null;
 
-  // Pick the LARGEST confirmed leg (by price range) among ALL consecutive pivot pairs,
-  // not just the chronologically last one. A small post-move wiggle (e.g. a 4%+ bounce
-  // during a pullback) would otherwise "hide" the real, dominant recent move (e.g. a pump)
-  // behind a tiny, insignificant micro-swing that happens to be more recent.
-  let bestRange = -1, swingHigh = null, swingLow = null, isLatestLeg = false;
-  for (let i = 1; i < pivots.length; i++) {
-    const a = pivots[i - 1], b = pivots[i];
-    const hi = a.type === 'high' ? a.price : b.price;
-    const lo = a.type === 'low'  ? a.price : b.price;
-    const range = hi - lo;
-    if (range > bestRange) {
-      bestRange = range; swingHigh = hi; swingLow = lo;
-      isLatestLeg = (i === pivots.length - 1);
-    }
+  // Use the GLOBAL highest confirmed High pivot and GLOBAL lowest confirmed Low pivot --
+  // not just consecutive pairs. A noisy consolidation/accumulation phase (lots of small
+  // 4%+ wiggles) can put several intermediate pivots BETWEEN the true swing low and the
+  // true swing high, so "largest consecutive pair" can miss the real, dominant move
+  // entirely. The global extreme among confirmed pivots is what actually matches a
+  // human (or TradingView's manual Fib tool) reading of "the recent low" and "the recent high".
+  let swingHigh = -Infinity, swingLow = Infinity;
+  for (const p of pivots) {
+    if (p.type === 'high' && p.price > swingHigh) swingHigh = p.price;
+    if (p.type === 'low'  && p.price < swingLow)  swingLow  = p.price;
   }
-  if (swingHigh === null) return null;
+  if (swingHigh === -Infinity || swingLow === Infinity || swingHigh <= swingLow) return null;
 
   return {
-    swingHigh, swingLow, isLatestLeg,
+    swingHigh, swingLow,
     pivotCount: pivots.length,
     rawPivots: pivots.map(p => p.type[0].toUpperCase()+p.price.toFixed(6)) // debug: e.g. "L0.204500"
   };
