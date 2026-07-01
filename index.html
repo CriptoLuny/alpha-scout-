@@ -715,7 +715,7 @@ const SIG_INFO={
   'BTC FREE':{title:'🆓 BTC Независност',desc:'Корелацијата (Pearson, фиксно на 1h, последните 150 свеќи) помеѓу % промените на овој коин и BTC е под 0.4 — коинот се движи НЕЗАВИСНО од BTC. Пресметката е иста без разлика на кој TF скенираш (секогаш 1h reference). Ова е точно профилот за Alpha трговии: останатите сигнали (CVD, MA Squeeze, итн.) се повеќе „чисти" — не се само BTC шум проследен низ коинот. Кога има јасна доминантна насока меѓу другите индикатори, независноста додава бонус глас во CONFLUENCE во истата насока.',bull:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'},bear:{cls:'pos-long',txt:'✅ Независен од BTC — сигналите на овој коин се поверодостојни'}},
   'BTC LINKED':{title:'🔗 BTC Поврзаност',desc:'Корелацијата (Pearson, фиксно на 1h, последните 150 свеќи) помеѓу % промените на овој коин и BTC е над 0.4 — коинот значително го следи BTC. Ако BTC влезе во силен тренд (горе или долу), овој коин најверојатно ќе биде повлечен заедно, без разлика на сопствените технички сигнали. Внимавај на BTC насоката пред да влезеш во позиција.',bull:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'},bear:{cls:'pos-watch',txt:'>> Провери ја насоката на BTC пред влез — коинот најверојатно ќе ја следи'}},
   'CONFLUENCE':{title:'⚡ CONFLUENCE — Совпаѓање на повеќе индикатори',desc:'Минимум 4 индикатори (MA Squeeze, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI, FR, + бонус глас за BTC независност) гласаат во иста насока. Ова е најсилниот сигнал во скенерот — статистички поверојатно за успешна трговија.',bull:{cls:'pos-long',txt:'⬆ CONFLUENCE LONG — минимум 4 индикатори се совпаѓаат LONG'},bear:{cls:'pos-short',txt:'⬇ CONFLUENCE SHORT — минимум 4 индикатори се совпаѓаат SHORT'}},
-  'FIBO':{title:'Fibonacci Ниво (🎯)',desc:'Цената е во близина (±2%) на клучно Fibonacci ниво (38.2%, 50%, 61.8%, 78.6%). Нивото се пресметува од ПОСЛЕДНИОТ значаен swing (pivot high/low), пребаран во последните до 150 свеќи — не апсолутен max/min на целиот прозорец, за да не се фати застарен pik. Fibonacci нивоата се природни зони на поддршка и отпор.',bull:{cls:'pos-long',txt:'⬆ FIBO SUPPORT — цената bounces од Fib ниво'},bear:{cls:'pos-short',txt:'⬇ FIBO RESIST — цената тестира Fib отпор'}},
+  'FIBO':{title:'Fibonacci Ниво (🎯)',desc:'Цената е во близина (±2%) на клучно Fibonacci ниво (23.6%, 38.2%, 50%, 61.8%) — прикажано во TradingView конвенција (мерено од HIGH надолу). Нивото се пресметува од ПОСЛЕДНИОТ значаен swing (pivot high/low), пребаран во последните до 150 свеќи — не апсолутен max/min на целиот прозорец, за да не се фати застарен pik. Fibonacci нивоата се природни зони на поддршка и отпор.',bull:{cls:'pos-long',txt:'⬆ FIBO SUPPORT — цената bounces од Fib ниво'},bear:{cls:'pos-short',txt:'⬇ FIBO RESIST — цената тестира Fib отпор'}},
   'POC':{title:'Point of Control (📊)',desc:'POC е ценовното ниво каде е тргуван НАЈВИСОК волумен во последните 150 свеќи. Цената е во близина (±2%) на POC. POC е магнет — цената честопати се враќа кон него.',bull:{cls:'pos-long',txt:'⬆ Цената е НАД POC — POC е поддршка'},bear:{cls:'pos-short',txt:'⬇ Цената е ПОД POC — POC е отпор'}},
   'JMA X UP':{title:'JMA x DWMA — Bullish крос (📈)',desc:'JMA (Jurik MA, length=8) го поминал DWMA (Double WMA, length=10) одоздола нагоре. Ова е свеж bullish крос — моментумот се свртил нагоре.',bull:{cls:'pos-long',txt:'⬆ LONG — JMA crosses above DWMA'},bear:{cls:'pos-watch',txt:'>> Прати — очекувај continuation'}},
   'JMA X DN':{title:'JMA x DWMA — Bearish крос (📉)',desc:'JMA (Jurik MA, length=8) го поминал DWMA (Double WMA, length=10) одозгора надолу. Ова е свеж bearish крос — моментумот се свртил надолу.',bear:{cls:'pos-short',txt:'⬇ SHORT — JMA crosses below DWMA'},bull:{cls:'pos-watch',txt:'>> Прати — очекувај continuation'}},
@@ -1208,7 +1208,7 @@ function calcFibo(klines, lookback, tf) {
     swingHigh, swingLow, range,
     levels, nearestKey,
     nearFib, fiboSupport, fiboResist,
-    fiboLabel: nearestKey ? (nearestKey.r * 100).toFixed(1) + '%' : null,
+    fiboLabel: nearestKey ? ((1 - nearestKey.r) * 100).toFixed(1) + '%' : null, // TradingView convention: from HIGH downward
     rawPivots
   };
 }
@@ -1756,7 +1756,7 @@ function populateDetail(s){
     const fk=s.fibo.nearestKey;
     const pivStr=s.fibo.rawPivots?s.fibo.rawPivots.join(' → '):'(fallback max/min, нема pivots)';
     setM('mFibo','H:$'+fmt(s.fibo.swingHigh)+' L:$'+fmt(s.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
-      (fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
+      (fk?`Најблиску: ${((1-fk.r)*100).toFixed(1)}% (TV) = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
   }else{
     setM('mFibo','—','neu','Нема доволно податоци за swing');
   }
@@ -1860,7 +1860,7 @@ async function switchChartTF(coin,tf,btn){
       const fk=r.fibo.nearestKey;
       const pivStr=r.fibo.rawPivots?r.fibo.rawPivots.join(' → '):'(fallback max/min, нема pivots)';
       setM('mFibo','H:$'+fmt(r.fibo.swingHigh)+' L:$'+fmt(r.fibo.swingLow),fk&&fk.dist<2?'up':'neu',
-        (fk?`Најблиску: ${(fk.r*100).toFixed(1)}% = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
+        (fk?`Најблиску: ${((1-fk.r)*100).toFixed(1)}% (TV) = $${fmt(fk.lvl)} (${fk.dist.toFixed(2)}% далеку)`:'Нема key ниво близу')+' | Pivots: '+pivStr);
     }else{
       setM('mFibo','—','neu','Нема доволно податоци за swing');
     }
