@@ -279,6 +279,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .diverg-box{background:var(--card);border:1px solid rgba(192,96,255,.2);border-radius:8px;padding:10px 12px;margin-top:8px}
 .flow-spinner{display:inline-block;width:10px;height:10px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:6px}
 
+/* ── CCIOBV CROSS ── */
+.dp-cciobv{padding:12px 16px;border-bottom:1px solid var(--border)}
+.cci-lb-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cci-lb-wrap{display:flex;gap:4px}
+.cci-lb-btn{font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:var(--text2);font-weight:600;transition:all .2s}
+.cci-lb-btn.active{border-color:var(--accent2);color:var(--accent2);background:rgba(160,32,240,.15)}
+
 .err{margin:5px 14px;background:rgba(255,34,68,.08);border:1px solid rgba(255,34,68,.25);border-radius:6px;padding:8px 11px;font-family:var(--mono);font-size:11px;color:var(--red);display:none}
 
 /* ── HEATMAP VIEW ── */
@@ -500,6 +507,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-inflow"    onclick="setFil('inflow',this)">📥 INFLOW</div>
     <div class="ftab f-outflow"   onclick="setFil('outflow',this)">📤 OUTFLOW</div>
     <div class="ftab f-usdt"      onclick="setFil('usdt',this)">💵 USDT0</div>
+    <div class="ftab" style="border-color:rgba(0,255,136,.3);color:var(--green)" onclick="setFil('cciobv1100',this)">🔺 CCIOBV S1100</div>
+    <div class="ftab" style="border-color:rgba(0,255,136,.3);color:var(--green)" onclick="setFil('cciobv2650',this)">🔺 CCIOBV S2650</div>
+    <div class="cci-lb-wrap" style="margin-left:2px" title="Прозорец за пресек (свеќи)">
+      <div class="cci-lb-btn" data-lb="50" onclick="setCciObvLookback(50)">50</div>
+      <div class="cci-lb-btn active" data-lb="150" onclick="setCciObvLookback(150)">150</div>
+    </div>
   </div>
   <div class="filter-row-2">
     <span class="sort-label">СОРТИРАЈ:</span>
@@ -654,6 +667,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <div class="flow-title">// MONEY FLOW ANALYSIS <span class="flow-badge" id="flowBadge" style="display:none"></span></div>
       <div id="flowContent"><span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Вчитувам...</span></div>
     </div>
+    <!-- CCIOBV CROSS PANEL -->
+    <div class="dp-cciobv" id="dpCciObv" style="display:none">
+      <div class="cci-lb-row">
+        <div class="flow-title" style="margin-bottom:0">// CCIOBV CROSS · 1m</div>
+        <div class="cci-lb-wrap">
+          <div class="cci-lb-btn" id="cciLb50" data-lb="50" onclick="setCciObvLookback(50)">50</div>
+          <div class="cci-lb-btn active" id="cciLb150" data-lb="150" onclick="setCciObvLookback(150)">150</div>
+        </div>
+      </div>
+      <div id="cciObvContent"><span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Вчитувам 1m историја...</span></div>
+    </div>
     <div class="dp-charts" id="dpCharts" style="display:none">
       <div class="chart-header">
         <div class="chart-title-lbl" id="chartTitle">// OI + CVD</div>
@@ -777,12 +801,20 @@ const TFS_ALL=['15m','1h','4h'];
 const TFS_FULL=['1m','5m','15m','1h','4h','12h','1d','1w'];
 const BN_TF={'1m':'1m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d':'1D','1w':'1W'};
 
+// -- CCIOBV CROSS CONFIG (SMA1100/SMA2650 на CCI(20) на OBV, 1m бара) --
+const CCIOBV_LEN=20;   // CCI период применет врз OBV серијата
+const CCIOBV_SMA1=1100;
+const CCIOBV_SMA2=2650;
+const CCIOBV_CACHE_TTL=10*60*1000;   // 10 мин — колку долго важи веќе преземена 1m серија по коин
+const CCIOBV_MAX_SCAN_COINS=150;     // капа за целосен скен (favorites+alpha секогаш влегуваат)
+
 const S={
   scanning:false,timer:null,abort:false,
   signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
-  _partial:{},detailCoin:null,chartTF:null
+  _partial:{},detailCoin:null,chartTF:null,
+  cciObvLookback:150,_cciObvCache:{}
 };
 let _tMap={},_fMap={},_catMap={},_oiChart=null,_cvdChart=null;
 
@@ -863,6 +895,180 @@ async function fetchNetFlow(coin,tf){
   return{netFlow,inflow,outflow,netPct,isInflow:netFlow>0};
 }
 
+// ══════════════════════════════════════════════════════════════
+// -- CCIOBV CROSS (SMA1100 / SMA2650 на CCI(20) applied to OBV, 1m бара) --
+// Binance нема нативни свеќи под 1m, па целата серија се гради директно
+// од вистински 1m klines (пагинирано, бидејќи треба ~2700+ бара за SMA2650).
+// ══════════════════════════════════════════════════════════════
+
+// Пагинирано преземање на 1m klines наназад во времето до totalNeeded бара
+async function fetchKlinesPaged(coin,interval,totalNeeded){
+  let all=[],endTime=null,guard=0;
+  while(all.length<totalNeeded&&guard<6){
+    guard++;
+    let ep=`/klines?symbol=${coin}USDT&interval=${interval}&limit=1500`;
+    if(endTime)ep+=`&endTime=${endTime}`;
+    const batch=await apiFetch(ep);
+    if(!batch||!batch.length)break;
+    all=batch.concat(all);
+    endTime=batch[0][0]-1;
+    if(batch.length<1500)break; // нема повеќе историја
+  }
+  return all;
+}
+
+// On-Balance Volume серија врз затворачки цени (k[4]) и волумен (k[5])
+function calcOBVSeries(kl){
+  const obv=[0];
+  for(let i=1;i<kl.length;i++){
+    const c=parseFloat(kl[i][4]),pc=parseFloat(kl[i-1][4]),v=parseFloat(kl[i][5]);
+    obv.push(obv[i-1]+(c>pc?v:c<pc?-v:0));
+  }
+  return obv;
+}
+
+// Стандарден CCI применет врз произволна сингл-value серија (тука: OBV)
+function calcCCISeriesOn(seriesArr,period){
+  const n=seriesArr.length;
+  const out=new Array(n).fill(null);
+  let winSum=0;
+  for(let i=0;i<n;i++){
+    winSum+=seriesArr[i];
+    if(i>=period)winSum-=seriesArr[i-period];
+    if(i>=period-1){
+      const sma=winSum/period;
+      let dev=0;
+      for(let j=i-period+1;j<=i;j++)dev+=Math.abs(seriesArr[j]-sma);
+      const meanDev=dev/period;
+      out[i]=meanDev===0?0:(seriesArr[i]-sma)/(0.015*meanDev);
+    }
+  }
+  return out;
+}
+
+// SMA која прескокнува leading null-ови (од CCI warmup периодот)
+function smaSeriesSkipNull(arr,period){
+  const n=arr.length,out=new Array(n).fill(null),window=[];
+  let sum=0,cnt=0;
+  for(let i=0;i<n;i++){
+    const v=arr[i];
+    window.push(v);
+    if(v!==null){sum+=v;cnt++;}
+    if(window.length>period){const rem=window.shift();if(rem!==null){sum-=rem;cnt--;}}
+    if(window.length===period&&cnt===period)out[i]=sum/period;
+  }
+  return out;
+}
+
+// Детекција на crossunder/crossover помеѓу 2 серии во последните `lookback` затворени бара
+function detectCross(a,b,lookback,dir){
+  const n=a.length;
+  for(let i=n-1;i>=Math.max(1,n-lookback);i--){
+    if(a[i]==null||b[i]==null||a[i-1]==null||b[i-1]==null)continue;
+    if(dir==='down'&&a[i-1]>=b[i-1]&&a[i]<b[i])return{found:true,barsAgo:n-1-i};
+    if(dir==='up'&&a[i-1]<=b[i-1]&&a[i]>b[i])return{found:true,barsAgo:n-1-i};
+  }
+  return{found:false,barsAgo:null};
+}
+
+// Вчитува 1m историја за коин и ја пресметува целата CCIOBV/SMA1100/SMA2650 серија
+async function loadCciObvCross(coin){
+  const panel=document.getElementById('dpCciObv');
+  const el=document.getElementById('cciObvContent');
+  if(panel)panel.style.display='block';
+  if(el)el.innerHTML='<span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Вчитувам ~'+(CCIOBV_SMA2+CCIOBV_LEN)+' 1m бара...</span>';
+  const need=CCIOBV_SMA2+CCIOBV_LEN+60;
+  try{
+    const kl=await fetchKlinesPaged(coin,'1m',need);
+    if(!kl||kl.length<CCIOBV_SMA2+CCIOBV_LEN+5){
+      S._cciObvCache[coin]=null;
+      if(el)el.innerHTML=`<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">Недоволно 1m историја (${kl?kl.length:0}/${need} бара) за SMA${CCIOBV_SMA2}</span>`;
+      return;
+    }
+    const obv=calcOBVSeries(kl);
+    const cciObv=calcCCISeriesOn(obv,CCIOBV_LEN);
+    const sma1100=smaSeriesSkipNull(cciObv,CCIOBV_SMA1);
+    const sma2650=smaSeriesSkipNull(cciObv,CCIOBV_SMA2);
+    S._cciObvCache[coin]={kl,obv,cciObv,sma1100,sma2650,ts:Date.now()};
+    renderCciObvPanel(coin);
+  }catch(e){
+    S._cciObvCache[coin]=null;
+    if(el)el.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--red)">Грешка при вчитување</span>';
+  }
+}
+
+function renderCciObvPanel(coin){
+  const cache=S._cciObvCache[coin];
+  const el=document.getElementById('cciObvContent');
+  if(!el)return;
+  if(!cache){el.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">—</span>';return;}
+  const lb=S.cciObvLookback||150;
+  const{cciObv,sma1100,sma2650}=cache;
+  const n=cciObv.length;
+  const cross1=detectCross(sma1100,cciObv,lb,'down');   // SMA1100 паѓа под CCIOBV (raw)
+  const cross2=detectCross(sma2650,sma1100,lb,'down');  // SMA2650 паѓа под SMA1100
+  const lC=cciObv[n-1],l1=sma1100[n-1],l2=sma2650[n-1];
+  const row=(label,res,extra)=>{
+    const st=res.found?`<span style="color:var(--green)">🔺 ДА · пред ${res.barsAgo} свеќи (~${res.barsAgo}m)</span>`:`<span style="color:var(--muted)">— нема во последните ${lb}</span>`;
+    return`<div class="flow-card" style="margin-bottom:7px"><div class="fc-label">${label}</div><div class="fc-val" style="font-size:13px">${st}</div><div class="fc-sub">${extra}</div></div>`;
+  };
+  let html=`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px">CCIOBV(20): ${lC!=null?lC.toFixed(0):'—'} · SMA${CCIOBV_SMA1}: ${l1!=null?l1.toFixed(0):'—'} · SMA${CCIOBV_SMA2}: ${l2!=null?l2.toFixed(0):'—'} · ${n} 1m бара</div>`;
+  html+=row(`CCIOBV &gt; SMA${CCIOBV_SMA1} (bullish крос)`,cross1,'Краткорочен momentum зајакнува над OBV просекот');
+  html+=row(`SMA${CCIOBV_SMA1} &gt; SMA${CCIOBV_SMA2} (bullish крос)`,cross2,'Долгорочен momentum зајакнува');
+  el.innerHTML=html;
+}
+
+function setCciObvLookback(n){
+  S.cciObvLookback=n;
+  document.querySelectorAll('.cci-lb-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.lb)===n));
+  if(S.detailCoin)renderCciObvPanel(S.detailCoin);
+}
+
+// Избира кои коини влегуваат во тешкиот CCIOBV скен (favorites+alpha секогаш, останатото по волумен до капата)
+function pickCciObvUniverse(coins){
+  const favAlpha=coins.filter(c=>S.favorites.has(c)||isAlpha(c));
+  const favAlphaSet=new Set(favAlpha);
+  const rest=coins.filter(c=>!favAlphaSet.has(c))
+    .sort((a,b)=>(parseFloat(_tMap[b]?.quoteVolume||0))-(parseFloat(_tMap[a]?.quoteVolume||0)));
+  const capRemaining=Math.max(0,CCIOBV_MAX_SCAN_COINS-favAlpha.length);
+  return[...favAlpha,...rest.slice(0,capRemaining)];
+}
+
+// Полни/освежува S._cciObvCache за листа коини (само оние што недостасуваат или истечени > TTL)
+async function ensureCciObvForCoins(coinList,onProgress){
+  const now=Date.now();
+  const need=coinList.filter(c=>{const c1=S._cciObvCache[c];return!c1||(now-c1.ts)>CCIOBV_CACHE_TTL;});
+  if(!need.length)return;
+  const bs=5,sl=200;
+  for(let i=0;i<need.length;i+=bs){
+    if(S.abort)break;
+    const chunk=need.slice(i,i+bs);
+    await Promise.all(chunk.map(async c=>{
+      try{
+        const kl=await fetchKlinesPaged(c,'1m',CCIOBV_SMA2+CCIOBV_LEN+60);
+        if(kl&&kl.length>=CCIOBV_SMA2+CCIOBV_LEN+5){
+          const obv=calcOBVSeries(kl);
+          const cciObv=calcCCISeriesOn(obv,CCIOBV_LEN);
+          const sma1100=smaSeriesSkipNull(cciObv,CCIOBV_SMA1);
+          const sma2650=smaSeriesSkipNull(cciObv,CCIOBV_SMA2);
+          S._cciObvCache[c]={kl,obv,cciObv,sma1100,sma2650,ts:Date.now()};
+        }else{
+          S._cciObvCache[c]={invalid:true,ts:Date.now()};
+        }
+      }catch(e){S._cciObvCache[c]={invalid:true,ts:Date.now()};}
+    }));
+    if(onProgress)onProgress(Math.min(i+bs,need.length),need.length);
+    await sleep(sl);
+  }
+}
+
+// Ги враќа cross-флаговите за коин, читајќи од веќе-пресметан кеш (не фечира)
+function getCciObvFlags(coin,lookback){
+  const c=S._cciObvCache[coin];
+  if(!c||c.invalid)return{cross1100:{found:false,barsAgo:null},cross2650:{found:false,barsAgo:null}};
+  return{cross1100:detectCross(c.sma1100,c.cciObv,lookback,'down'),cross2650:detectCross(c.sma2650,c.sma1100,lookback,'down')};
+}
+
 async function fetchAlphaList(){
   const FB=['ACT','AIXBT','ALT','ANIME','ARB','ATOM','AVAX','BACK','BABY','BANK','BB','BLUR','BOME','BONK','CATI','COOKIE','CYBER','DOGE','DOGS','DYM','EIGEN','FARTCOIN','FLOKI','GOAT','HAEDAL','HMSTR','INJ','INIT','IO','IP','JTO','KAIA','LAYER','LISTA','MAGIC','MAJOR','MANTA','ME','MELANIA','MEME','MOODENG','MOVE','NEAR','NEIRO','NIL','NOT','OP','ORDI','PARTI','PENGU','PEPE','PIXEL','PNUT','POPCAT','PORTAL','PYTH','REZ','SAGA','SATS','SCR','SEI','SHELL','SIGN','SOL','STRK','TIA','TON','TRUMP','TURBO','VIRTUAL','WAL','WIF','WLD','ZEREBRO','ZK','ZRO','ZETA','ORDER','BARD','GWEI','BOB','PTB','ATH','BEAT','SIREN'];
   try{const r=await fetch(BAPI,{signal:AbortSignal.timeout(8000)});if(r.ok){const j=await r.json();if(j.data?.length>0){S.alphaSet=new Set(j.data.map(t=>(t.symbol||t.cexCoinName||'').toUpperCase()));document.getElementById('alphaCount').textContent=`🅐 ${S.alphaSet.size}`;return;}}}catch(e){}
@@ -923,6 +1129,14 @@ async function doScan(){
 
   S._partial={};let done=0;
   const bs=S.tf==='all'?5:10,sl=S.tf==='all'?300:150;
+
+  // -- CCIOBV S1100/S2650 филтри активни: прво полни го 1m кешот (тешко, ограничено на CCIOBV_MAX_SCAN_COINS) --
+  const cciObvActive=S.filters.has('cciobv1100')||S.filters.has('cciobv2650');
+  if(cciObvActive){
+    const cciUniverse=pickCciObvUniverse(coins);
+    setP(`CCIOBV 1m анализа (${cciUniverse.length} коини, може да потрае)...`,4);
+    await ensureCciObvForCoins(cciUniverse,(d,t)=>setP(`CCIOBV 1m . ${d}/${t}`,Math.round(4+(d/Math.max(t,1))*10)));
+  }
 
   for(let ti=0;ti<tfsToScan.length;ti++){
     const tf=tfsToScan[ti];
@@ -1430,6 +1644,15 @@ async function analyzeOneTF(coin,ticker,fr,tf){
 
   let score=0;const sigs=[];
   const volM=volume/1e6;
+  let cciObvCross1100=null,cciObvCross2650=null;
+
+  // -- CCIOBV cross (само ако филтерот е активен — чита од веќе-полн S._cciObvCache, не фечира тука) --
+  if(S.filters.has('cciobv1100')||S.filters.has('cciobv2650')){
+    const flags=getCciObvFlags(coin,S.cciObvLookback||150);
+    cciObvCross1100=flags.cross1100;cciObvCross2650=flags.cross2650;
+    if(S.filters.has('cciobv1100')&&cciObvCross1100.found){score+=2;sigs.push({l:'CCIOBV S1100',t:'bull'});}
+    if(S.filters.has('cciobv2650')&&cciObvCross2650.found){score+=2;sigs.push({l:'CCIOBV S2650',t:'bull'});}
+  }
 
   if(Math.abs(priceChg)>2){score++;sigs.push({l:`${priceChg>0?'+':''}${priceChg.toFixed(1)}%`,t:priceChg>0?'bull':'bear'});}
   if(Math.abs(cvdDelta)>3){const cb=cvdDelta>0,pb=priceChg>0;if(cb!==pb){score+=2;sigs.push({l:'CVD DIV',t:cb?'bull':'bear'});}else{score++;sigs.push({l:'CVD CONF',t:cb?'bull':'bear'});}}
@@ -1526,6 +1749,10 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // 10. Funding Rate
   if(Math.abs(fr)>0.04) cvotes.push({name:'Funding Rate',detail:(fr>=0?'+':'')+fr.toFixed(3)+'%',vote:fr<0?1:-1}); // negative FR = bullish
 
+  // 11b. CCIOBV Cross (само кога филтерот е активен)
+  if(cciObvCross1100?.found) cvotes.push({name:'CCIOBV S1100',detail:'CCIOBV пробива над SMA'+CCIOBV_SMA1+' пред '+cciObvCross1100.barsAgo+' 1m бара',vote:1});
+  if(cciObvCross2650?.found) cvotes.push({name:'CCIOBV S2650',detail:'SMA'+CCIOBV_SMA1+' пробива над SMA'+CCIOBV_SMA2+' пред '+cciObvCross2650.barsAgo+' 1m бара',vote:1});
+
   // 11. BTC Independence -- bonus vote that reinforces the preliminary leading direction
   // when the coin is decoupled from BTC (|corr|<0.4). Independence itself isn't bullish/bearish,
   // it just means the other indicators above can be trusted more (not BTC noise) -- alpha-play logic.
@@ -1553,7 +1780,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
-  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -1600,6 +1827,8 @@ function renderList(){
       poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
       conf:   s=>s.confScore>=4,
       btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
+      cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
+      cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
     };
     if(S.filters.size>0){
       data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
@@ -1665,6 +1894,8 @@ function rowHTML(s){
   if(s.sqz?.diCrossDown)tags.push(`<span class="ctag ct-bear" onclick="showSigTip(event,'▼DI CROSS','bear')">▼DI</span>`);
   if(s.sqz?.sqzOn&&!s.sqzFired)tags.push(`<span class="ctag ct-sqzon" onclick="showSigTip(event,'SQZ ON','${s.dir}')">SQZ●ON</span>`);
   if(s.sigs?.some(sg=>sg.l==='CVD DIV'))tags.push(`<span class="ctag ct-cvd" onclick="showSigTip(event,'CVD DIV','${s.dir}')">CVD DIV</span>`);
+  if(s.sigs?.some(sg=>sg.l==='CCIOBV S1100'))tags.push(`<span class="ctag" style="background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.3);cursor:pointer" onclick="showSigTip(event,'CCIOBV S1100','bull')">🔺S1100</span>`);
+  if(s.sigs?.some(sg=>sg.l==='CCIOBV S2650'))tags.push(`<span class="ctag" style="background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.3);cursor:pointer" onclick="showSigTip(event,'CCIOBV S2650','bull')">🔺S2650</span>`);
   if(s.sigs?.some(sg=>sg.t==='spike'))tags.push(`<span class="ctag ct-spike" onclick="showSigTip(event,'SPIKE+VOL','bull')">🚀+VOL</span>`);
   if(s.sigs?.some(sg=>sg.t==='dump'))tags.push(`<span class="ctag ct-dump" onclick="showSigTip(event,'DUMP+VOL','bear')">💥+VOL</span>`);
   if(s.sigs?.some(sg=>sg.t==='fr'))tags.push(`<span class="ctag ct-fr" onclick="showSigTip(event,'FR EXTREME','${s.fr>0?'bear':'bull'}')">FR⚠️</span>`);
@@ -1699,6 +1930,7 @@ function openDetail(coin){
   const s=S.signals.find(x=>x.coin===coin);
   if(s){populateDetail(s);loadAllTFCards(coin,s);loadMoneyFlow(coin,s.tf);}
   else fetchAndShowDetail(coin);
+  loadCciObvCross(coin);
 }
 
 async function refreshDetail(){
@@ -1714,6 +1946,7 @@ async function refreshDetail(){
   const best=results.filter(Boolean).sort((a,b)=>b.score-a.score)[0];
   if(best){populateDetail({...best,isAlpha:isAlpha(coin),isFav:isFav(coin)});loadMoneyFlow(coin,best.tf);}
   TFS_FULL.forEach((tf,i)=>renderTFCard(tf,results[i],coin));
+  loadCciObvCross(coin);
   btn.classList.remove('spin');toast(`↻ ${coin} освежен`);
 }
 
@@ -2131,8 +2364,8 @@ async function fetchAndShowDetail(coin){
   const best=results.filter(Boolean).sort((a,b)=>b.score-a.score)[0];
   if(best){populateDetail({...best,isAlpha:isAlpha(coin),isFav:isFav(coin)});loadMoneyFlow(coin,best.tf);}
   TFS_FULL.forEach((tf,i)=>renderTFCard(tf,results[i],coin));
+  loadCciObvCross(coin);
 }
-
 function toggleFav(coin){S.favorites.has(coin)?S.favorites.delete(coin):S.favorites.add(coin);localStorage.setItem('favs',JSON.stringify([...S.favorites]));S.signals.forEach(s=>{if(s.coin===coin)s.isFav=S.favorites.has(coin);});renderList();}
 function toggleFavFromDetail(){if(!S.detailCoin)return;toggleFav(S.detailCoin);const fav=isFav(S.detailCoin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');toast(fav?`⭐ ${S.detailCoin} додаден`:`${S.detailCoin} отстранет`);}
 function openBinance(coin,tf){const url=`https://www.binance.com/en/futures/${coin}USDT?type=isolated&interval=${BN_TF[tf]||tf}`;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();document.body.removeChild(a);}
@@ -2146,6 +2379,12 @@ function setFil(f,el){
     if(S.filters.size===0){document.querySelector('.ftab[onclick*=\'all\']')?.classList.add('active');}
   }
   renderList();
+  // CCIOBV филтрите бараат посебна 1m pre-fetch фаза во doScan — рестартирај го скенот
+  // за веднаш да се примени (инаку останува на стари, некомплетни резултати до следен циклус).
+  if((f==='cciobv1100'||f==='cciobv2650')&&S.scanning){
+    toast('↻ Рестартирам скен за CCIOBV...');
+    stopScan();setTimeout(startScan,400);
+  }
 }
 function setSort(s,el){S.sort=s;document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderList();}
 function clearAll(){S.signals=[];document.getElementById('liqArea').innerHTML='';document.getElementById('list').innerHTML='<div class="empty">📡<br>Притисни СКЕНИРАЈ</div>';['sBull','sBear','sLiq','sAlpha','sFav','sTot'].forEach(id=>document.getElementById(id).textContent='0');}
