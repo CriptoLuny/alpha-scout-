@@ -84,6 +84,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-fibo.active{background:rgba(255,208,0,.08);border-color:var(--yellow);color:var(--yellow)}
 .ftab.f-poc.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
 .ftab.f-btcfree.active{background:rgba(0,255,136,.1);border-color:var(--green);color:var(--green)}
+.ftab.f-cciobv.active{background:rgba(0,255,136,.22);border-color:var(--green);color:var(--green);box-shadow:0 0 0 1px var(--green) inset;font-weight:800}
 .ct-btc-strong{background:rgba(255,102,0,.12);color:var(--orange);border:1px solid rgba(255,102,0,.3)}
 .ct-btc-mod{background:rgba(255,208,0,.08);color:var(--yellow);border:1px solid rgba(255,208,0,.2)}
 .ct-btc-free{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.25)}
@@ -507,8 +508,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-inflow"    onclick="setFil('inflow',this)">📥 INFLOW</div>
     <div class="ftab f-outflow"   onclick="setFil('outflow',this)">📤 OUTFLOW</div>
     <div class="ftab f-usdt"      onclick="setFil('usdt',this)">💵 USDT0</div>
-    <div class="ftab" style="border-color:rgba(0,255,136,.3);color:var(--green)" onclick="setFil('cciobv1100',this)">🔺 CCIOBV S1100</div>
-    <div class="ftab" style="border-color:rgba(0,255,136,.3);color:var(--green)" onclick="setFil('cciobv2650',this)">🔺 CCIOBV S2650</div>
+    <div class="ftab f-cciobv" onclick="setFil('cciobv1100',this)">🔺 CCIOBV S1100</div>
+    <div class="ftab f-cciobv" onclick="setFil('cciobv2650',this)">🔺 CCIOBV S2650</div>
     <div class="cci-lb-wrap" style="margin-left:2px" title="Прозорец за пресек (свеќи)">
       <div class="cci-lb-btn" data-lb="50" onclick="setCciObvLookback(50)">50</div>
       <div class="cci-lb-btn active" data-lb="150" onclick="setCciObvLookback(150)">150</div>
