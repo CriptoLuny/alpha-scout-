@@ -79,6 +79,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-usdt.active{background:rgba(0,229,255,.08);border-color:var(--accent);color:var(--accent)}
 .ftab.f-sqz.active{background:rgba(0,200,150,.1);border-color:#00c896;color:#00c896}
 .ftab.f-tightsq.active{background:rgba(255,50,200,.1);border-color:#ff32cc;color:#ff32cc}
+.ftab.f-masq.active{background:rgba(255,149,0,.12);border-color:#ff9500;color:#ff9500}
 .ftab.f-jmaup.active{background:rgba(0,255,136,.08);border-color:var(--green);color:var(--green)}
 .ftab.f-jmadn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ftab.f-fibo.active{background:rgba(255,208,0,.08);border-color:var(--yellow);color:var(--yellow)}
@@ -489,6 +490,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-liq"       onclick="setFil('liq',this)">⚡ LIQ HUNT</div>
     <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
     <div class="ftab f-tightsq"   onclick="setFil('tightsq',this)">💎 TIGHT SQ</div>
+    <div class="ftab f-masq"      onclick="setFil('masq',this)">🚀 MA SQ</div>
     <div class="ftab f-jmaup"       onclick="setFil('jmaup',this)">📈 JMA↑</div>
     <div class="ftab f-jmadn"       onclick="setFil('jmadn',this)">📉 JMA↓</div>
     <div class="ftab f-fibo"        onclick="setFil('fibo',this)">🎯 FIBO</div>
@@ -1816,6 +1818,7 @@ function renderList(){
       ls:     s=>s.lsExtreme,
       squeeze:s=>s.squeezeActivation,
       tightsq:s=>s.maSqueeze&&s.maSqueezeWidth<0.5,
+      masq:s=>!!s.maSqueeze,
       sqz:    s=>s.sqzFired||s.sqz?.sqzOn,
       diup:   s=>s.sqz?.diCrossUp,
       didn:   s=>s.sqz?.diCrossDown,
