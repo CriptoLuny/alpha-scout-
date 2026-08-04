@@ -80,6 +80,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .ftab.f-sqz.active{background:rgba(0,200,150,.1);border-color:#00c896;color:#00c896}
 .ftab.f-tightsq.active{background:rgba(255,50,200,.1);border-color:#ff32cc;color:#ff32cc}
 .ftab.f-masq.active{background:rgba(255,149,0,.12);border-color:#ff9500;color:#ff9500}
+.ftab.f-coil.active{background:rgba(0,200,255,.14);border-color:#00c8ff;color:#00c8ff}
 .ftab.f-jmaup.active{background:rgba(0,255,136,.08);border-color:var(--green);color:var(--green)}
 .ftab.f-jmadn.active{background:rgba(255,34,68,.08);border-color:var(--red);color:var(--red)}
 .ftab.f-fibo.active{background:rgba(255,208,0,.08);border-color:var(--yellow);color:var(--yellow)}
@@ -491,6 +492,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
     <div class="ftab f-tightsq"   onclick="setFil('tightsq',this)">💎 TIGHT SQ</div>
     <div class="ftab f-masq"      onclick="setFil('masq',this)">🚀 MA SQ</div>
+    <div class="ftab f-coil"      onclick="setFil('coil',this)">🌀 COIL</div>
     <div class="ftab f-jmaup"       onclick="setFil('jmaup',this)">📈 JMA↑</div>
     <div class="ftab f-jmadn"       onclick="setFil('jmadn',this)">📉 JMA↓</div>
     <div class="ftab f-fibo"        onclick="setFil('fibo',this)">🎯 FIBO</div>
@@ -531,6 +533,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <input class="thresh-input" id="maxChg" type="number" value="0" min="0" max="100" step="0.5" title="0 = без лимит. Пр: 5 = само коини со промена до 5%" oninput="renderList()" style="border-color:rgba(255,100,0,.3)">
       <span class="thresh-label">MIN VOL $M:</span>
       <input class="thresh-input" id="minVol" type="number" value="0" min="0" max="1000" step="1" oninput="renderList()">
+      <span class="thresh-label" style="color:#00c8ff">COIL N:</span>
+      <input class="thresh-input" id="coilN" type="number" value="50" min="20" max="150" step="10" title="Број свеќи за 'тесен range' и 'опаѓачки волумен' проверка (важи од следен скен)" style="border-color:rgba(0,200,255,.3)" oninput="S.coilN=parseInt(this.value)||50">
     </div>
   </div>
 </div>
@@ -749,6 +753,7 @@ const SIG_INFO={
   'TIGHT SQ':{title:'TIGHT Squeeze (💎 Екстремна компресија)',desc:'SMA 25/50/99 се приближиле на помалку од 0.5% едни од други. Ова е екстремна компресија на Moving Average линиите — по ваква компресија следи експлозивен потег. Колку е потесен squeeze-от, толку е поголем очекуваниот потег.',bull:{cls:'pos-long',txt:'⬆ Подготви се за LONG ако пробие нагоре со волумен'},bear:{cls:'pos-short',txt:'⬇ Подготви се за SHORT ако пробие надолу со волумен'}},
   'MA SQ BULL':{title:'MA Squeeze — Bullish насока (🚀)',desc:'SMA 25/50/99 конвергираат и SMA25 е над SMA99 — bullish распоред. Цената е компресирана и спремна за потег нагоре. Почекај потврда со CVD или DI+ крос.',bull:{cls:'pos-long',txt:'⬆ MA Squeeze BULL — потврди со CVD + волумен'},bear:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
   'MA SQ BEAR':{title:'MA Squeeze — Bearish насока (📉)',desc:'SMA 25/50/99 конвергираат и SMA25 е под SMA99 — bearish распоред. Цената е компресирана и спремна за потег надолу. Почекај потврда со CVD или DI- крос.',bear:{cls:'pos-short',txt:'⬇ MA Squeeze BEAR — потврди со CVD + волумен'},bull:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
+  'COIL':{title:'COIL — Пред-пробивна компресија (🌀)',desc:'Цената се движи во тесен range (под 8%) со опаѓачки волумен (понова половина < 70% од постарата) во последните N свеќи (конфигурабилно, полето COIL N до MIN VOL$M), плус JMA е над DWMA. Класична volatility-contraction поставка пред потег.',bull:{cls:'pos-long',txt:'⬆ COIL — следи пробив со волумен, SL под последниот swing low'},bear:{cls:'pos-watch',txt:'>> Прати — компресијата може да пукне и надолу ако JMA свртат'}},
   'SQUEEZE':{title:'Squeeze Activation (🔥)',desc:'CVD нагло расте + OI паѓа + цената расте + Funding Rate негативен. Комбинација која сигнализира принудно затворање на шортови (short squeeze). Силен bullish потег е во тек или следи.',bull:{cls:'pos-long',txt:'⬆ SHORT SQUEEZE во тек — прати за continuation'},bear:{cls:'pos-watch',txt:'>> Reversal можен по squeeze'}},
   'default':{title:'Сигнал',desc:'Детектирана аномалија во пазарните индикатори.',bull:{cls:'pos-long',txt:'⬆ МОЖНА ПОЗИЦИЈА: LONG'},bear:{cls:'pos-short',txt:'⬇ МОЖНА ПОЗИЦИЈА: SHORT'}}
 };
@@ -811,13 +816,17 @@ const CCIOBV_SMA2=2650;
 const CCIOBV_CACHE_TTL=10*60*1000;   // 10 мин — колку долго важи веќе преземена 1m серија по коин
 const CCIOBV_MAX_SCAN_COINS=150;     // капа за целосен скен (favorites+alpha секогаш влегуваат)
 
+// -- COIL CONFIG (тесен range + опаѓачки волумен + JMA>DWMA -- пред-пробивна компресија) --
+const COIL_RANGE_MAX=8;      // % — (max High - min Low)/last Close во прозорецот N мора да е под ова
+const COIL_VOL_RATIO_MAX=0.7;// понова половина волумен / постара половина волумен во прозорецот N мора да е под ова
+
 const S={
   scanning:false,timer:null,abort:false,
   signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
   _partial:{},detailCoin:null,chartTF:null,
-  cciObvLookback:150,_cciObvCache:{}
+  cciObvLookback:150,_cciObvCache:{},coilN:50
 };
 let _tMap={},_fMap={},_catMap={},_oiChart=null,_cvdChart=null;
 
@@ -1149,7 +1158,7 @@ async function doScan(){
       const res=await Promise.all(chunk.map(c=>analyzeOneTF(c,_tMap[c],_fMap[c]||0,tf)));
       res.forEach((r,idx)=>{
         if(!r)return;const c=chunk[idx];
-        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,jmaDwmaCrossUp:false,jmaDwmaCrossDown:false,jmaAbove:false,confScore:0,confDir:'none',confLabel:null,confVotes:null,btcCorr:null,tfData:{},bestTF:tf};
+        if(!S._partial[c])S._partial[c]={coin:c,price:r.price,priceChg:r.priceChg,volume:r.volume,high24:r.high24,low24:r.low24,isAlpha:isAlpha(c),isFav:isFav(c),score:0,liqHunt:false,lsExtreme:false,netInflow:false,netOutflow:false,isUsdtProtocol:false,squeezeActivation:false,maSqueeze:false,maSqueezeDir:'',maSqueezeWidth:0,coil:false,coilRangePct:null,coilVolRatio:null,jmaDwmaCrossUp:false,jmaDwmaCrossDown:false,jmaAbove:false,confScore:0,confDir:'none',confLabel:null,confVotes:null,btcCorr:null,tfData:{},bestTF:tf};
         S._partial[c].tfData[tf]=r;
         if(r.score>(S._partial[c].tfData[S._partial[c].bestTF]?.score||0))S._partial[c].bestTF=tf;
         S._partial[c].score=Math.max(S._partial[c].score,r.score);
@@ -1166,6 +1175,7 @@ async function doScan(){
         if(r.jmaDwma?.jmaAbove)S._partial[c].jmaAbove=true;
         if(r.sqzFired)S._partial[c].sqzFiredAny=true;
         if(r.maSqueeze){S._partial[c].maSqueeze=true;S._partial[c].maSqueezeDir=r.maSqueezeDir;S._partial[c].maSqueezeWidth=r.maSqueezeWidth;}
+        if(r.coil){S._partial[c].coil=true;S._partial[c].coilRangePct=r.coilRangePct;S._partial[c].coilVolRatio=r.coilVolRatio;}
       });
       done=Math.min(i+bs,coins.length);
       setP(`${tf} . ${done}/${coins.length}`,Math.round(5+((ti/tfsToScan.length)+(done/coins.length/tfsToScan.length))*92));
@@ -1178,7 +1188,7 @@ async function doScan(){
 function buildSignals(partial){
   return Object.values(partial).filter(x=>x.score>0).map(x=>{
     const best=x.tfData[x.bestTF]||Object.values(x.tfData)[0];
-    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes,btcCorr:x.btcCorr};
+    return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,coil:(x.coil||best.coil||false),coilRangePct:(x.coilRangePct??best.coilRangePct??null),coilVolRatio:(x.coilVolRatio??best.coilVolRatio??null),jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes,btcCorr:x.btcCorr};
   }).sort((a,b)=>{
     if(b.isFav!==a.isFav)return(b.isFav?1:0)-(a.isFav?1:0);
     return b.score-a.score;
@@ -1567,7 +1577,7 @@ function calcSqzMomAO(klines,diWin){
 async function analyzeOneTF(coin,ticker,fr,tf){
   if(!ticker)return null;
   const price=parseFloat(ticker.lastPrice),priceChg=parseFloat(ticker.priceChangePercent),volume=parseFloat(ticker.quoteVolume),high24=parseFloat(ticker.highPrice),low24=parseFloat(ticker.lowPrice);
-  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null;
+  let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null,coil=false,coilRangePct=null,coilVolRatio=null;
 
   try{
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
@@ -1602,6 +1612,24 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       // -- JMA/DWMA crossover detection --
       if(closes.length>40){
         jmaDwma=detectJMADWMACross(closes,8,50,2,10,diWin);
+      }
+      // -- COIL: тесен range + опаѓачки волумен + JMA>DWMA (пред-пробивна компресија) --
+      const coilN=Math.min(S.coilN||50,klFull?klFull.length:0);
+      if(klFull&&coilN>=20&&closes.length){
+        const win=klFull.slice(-coilN);
+        const highs=win.map(k=>parseFloat(k[2])),lows=win.map(k=>parseFloat(k[3]));
+        const hiW=Math.max(...highs),loW=Math.min(...lows);
+        const lastC=closes[closes.length-1];
+        coilRangePct=lastC>0?((hiW-loW)/lastC)*100:null;
+        const half=Math.floor(win.length/2);
+        const volsOld=win.slice(0,half).map(k=>parseFloat(k[5]));
+        const volsNew=win.slice(half).map(k=>parseFloat(k[5]));
+        const avgOld=volsOld.reduce((a,b)=>a+b,0)/Math.max(volsOld.length,1);
+        const avgNew=volsNew.reduce((a,b)=>a+b,0)/Math.max(volsNew.length,1);
+        coilVolRatio=avgOld>0?avgNew/avgOld:null;
+        if(coilRangePct!=null&&coilRangePct<COIL_RANGE_MAX&&coilVolRatio!=null&&coilVolRatio<COIL_VOL_RATIO_MAX&&jmaDwma.jmaAbove){
+          coil=true;
+        }
       }
       // -- FIBO + POC --
       if(klFull&&klFull.length>=15){
@@ -1728,6 +1756,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   const cvotes = [];
   // 1. MA Squeeze direction
   if(maSqueeze) cvotes.push({name:'MA Squeeze',detail:maSqueezeDir==='bull'?'bullish распоред':'bearish распоред',vote:maSqueezeDir==='bull'?1:-1});
+  if(coil){score+=2;sigs.push({l:'COIL',t:'bull'});cvotes.push({name:'COIL',detail:`Тесен range (${coilRangePct?.toFixed(1)}%) + низок волумен + JMA>DWMA`,vote:1});}
   // 2. JMA vs DWMA
   if(jmaDwma.crossUp) cvotes.push({name:'JMA/DWMA',detail:'свеж крос нагоре',vote:1});
   else if(jmaDwma.crossDown) cvotes.push({name:'JMA/DWMA',detail:'свеж крос надолу',vote:-1});
@@ -1783,7 +1812,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
-  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -1819,6 +1848,7 @@ function renderList(){
       squeeze:s=>s.squeezeActivation,
       tightsq:s=>s.maSqueeze&&s.maSqueezeWidth<0.5,
       masq:s=>!!s.maSqueeze,
+      coil:s=>!!s.coil,
       sqz:    s=>s.sqzFired||s.sqz?.sqzOn,
       diup:   s=>s.sqz?.diCrossUp,
       didn:   s=>s.sqz?.diCrossDown,
@@ -1870,7 +1900,7 @@ function rowHTML(s){
   if(s.isFav)tags.push(`<span class="ctag ct-fav">⭐</span>`);
   if(s.isAlpha)tags.push(`<span class="ctag ct-alpha">🅐</span>`);
   const catTag=getCatTag(s.coin);if(catTag)tags.push(catTag);
-  if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);
+  if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);}
   if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35);cursor:pointer" onclick="showSigTip(event,'SQUEEZE','bull')">🔥SQUEEZE</span>`);
   if(s.sigs?.some(sg=>sg.l?.startsWith('FIBO'))){
     const fsig=s.sigs.find(sg=>sg.l?.startsWith('FIBO'));
@@ -1886,7 +1916,8 @@ function rowHTML(s){
   else if(s.jmaAbove)tags.push(`<span class="ctag" style="background:rgba(0,255,136,.08);color:var(--green);font-size:9px;padding:2px 4px;border-radius:3px;font-family:var(--mono)">JMA↑</span>`);
   else tags.push(`<span class="ctag" style="background:rgba(255,34,68,.08);color:var(--red);font-size:9px;padding:2px 4px;border-radius:3px;font-family:var(--mono)">JMA↓</span>`);
   if(s.maSqueeze&&s.maSqueezeWidth<0.5){const _msDir=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-megasq" onclick="event.stopPropagation();showSigTip(event,'TIGHT SQ','${_msDir}')">💎TIGHT SQ</span>`);}
-  else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';const _msDir2=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,'${maSqLbl}','${_msDir2}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}}
+  else if(s.coil)tags.push(`<span class="ctag" style="background:rgba(0,200,255,.12);color:#00c8ff;border:1px solid rgba(0,200,255,.3);cursor:pointer" onclick="event.stopPropagation();showSigTip(event,'COIL','bull')">🌀COIL</span>`);
+  else if(s.maSqueeze){const maSqLbl=s.maSqueezeDir==='bull'?'MA SQ BULL':'MA SQ BEAR';const _msDir2=s.maSqueezeDir||'bull';tags.push(`<span class="ctag ct-masq" onclick="event.stopPropagation();showSigTip(event,'${maSqLbl}','${_msDir2}')">${s.maSqueezeDir==='bull'?'🚀':'📉'}MA SQ</span>`);}
   else if(s.dir==='bull')tags.push(`<span class="ctag ct-bull">▲ BULL</span>`);
   else if(s.dir==='bear')tags.push(`<span class="ctag ct-bear">▼ BEAR</span>`);
   else tags.push(`<span class="ctag ct-neu">>> NEU</span>`);
@@ -2949,6 +2980,7 @@ function toggleHelp(){
   const indicators=[
     {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 конвергираат — spread < 0.5%',when:'Пред голем потег. Колку потесно, толку поголем очекуван move.',action:'Чекај пробив со волумен. Не влегувај без потврда.'},
     {tag:'🚀/📉 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5% — потесна компресија',when:'Цената се компресира, спремна за потег.',action:'Bullish (🚀) = SMA25 > SMA99. Bearish (📉) = SMA25 < SMA99.'},
+    {tag:'🌀 COIL',col:'#00c8ff',what:`Range < ${COIL_RANGE_MAX}% + волумен опаѓа + JMA>DWMA (N свеќи, конфигурабилно)`,when:'Цената "коилира" тесно со исушен волумен над JMA — класична пред-пробивна компресија.',action:'Следи пробив со волумен нагоре. SL под последниот swing low од COIL зоната.'},
     {tag:'🔥 SQUEEZE',col:'#ff00cc',what:'CVD spike + OI паѓа + цена расте + FR негативен',when:'Шортовите се принудно затвораат — short squeeze во тек.',action:'Следи за continuation LONG. SL под последниот swing low.'},
     {tag:'⚡ LIQ HUNT',col:'var(--orange)',what:'Цената и CVD одат во спротивни насоки',when:'SHORT SQ: цена↑ + CVD↓. LONG DMP: цена↓ + CVD↑.',action:'По squeeze честопати следи reversal. Провери на 15m.'},
     {tag:'▲DI / ▼DI',col:'var(--green)',what:'DI+ го поминува DI- (или обратно) — свеж крос',when:'Свеж на последната затворена свеќа (4h/1d/1w=1 свеќа, 1h и помали=2 свеќи).',action:'▲DI = bullish моментум почнува. ▼DI = bearish моментум почнува.'},
