@@ -780,6 +780,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.2 DECOMP
+//   - FIX: digest ignored the active filters. Header printed
+//     them, rows did not honour them. renderList and
+//     buildDigest now share one applyFilters() so a copied
+//     digest always matches what is on screen.
+//   - Digest VIEW line reports filters, thresholds, sort, and
+//     how many signals survived vs the unfiltered total.
+//   - BTC correlation added as a digest column + BTC FREE /
+//     BTC LINKED in the tag list. It drives the alpha thesis
+//     and was rendered on screen but never exported.
+//   - Favorites still bypass the top-12 cut, but only if they
+//     pass the active filters.
+//
 //  v2.1 DECOMP
 //   - Asset class rebuilt on Binance's own contractType
 //     "TRADIFI_PERPETUAL" (their typo, extra I), verified
@@ -813,7 +826,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.1';
+const APP_VER='2.2';
 const APP_CODENAME='DECOMP';
 
 // -- SIGNAL INFO -------------------------------------------
@@ -2089,6 +2102,60 @@ async function analyzeOneTF(coin,ticker,fr,tf){
 }
 
 // -- RENDER LIST -------------------------------------------
+// -- SHARED FILTER + SORT ----------------------------------
+// Single source of truth for what "the current view" is. renderList and buildDigest
+// both call this, so a copied digest always matches what is on screen. Before this
+// the digest header printed the active filters but the rows ignored them.
+const FILTER_MAP={
+  fav:    s=>s.isFav,
+  alpha:  s=>s.isAlpha,
+  liq:    s=>s.liqHunt,
+  spike:  s=>s.sigs?.some(sg=>sg.t==='spike'),
+  dump:   s=>s.sigs?.some(sg=>sg.t==='dump'),
+  fr:     s=>s.sigs?.some(sg=>sg.t==='fr'),
+  oisurge:s=>s.sigs?.some(sg=>sg.t==='oisurge'),
+  cvd:    s=>s.sigs?.some(sg=>sg.l==='CVD DIV'),
+  strong: s=>s.score>=7,
+  ls:     s=>s.lsExtreme,
+  squeeze:s=>s.squeezeActivation,
+  tightsq:s=>s.maSqueeze&&s.maSqueezeWidth<0.5,
+  masq:   s=>!!s.maSqueeze,
+  coil:   s=>!!s.coil,
+  sqz:    s=>s.sqzFired||s.sqz?.sqzOn,
+  diup:   s=>s.sqz?.diCrossUp,
+  didn:   s=>s.sqz?.diCrossDown,
+  inflow: s=>s.netInflow,
+  outflow:s=>s.netOutflow,
+  usdt:   s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'),
+  jmaup:  s=>s.jmaDwmaCrossUp||s.sigs?.some(sg=>sg.l==='JMA>DWMA'),
+  jmadn:  s=>s.jmaDwmaCrossDown||s.sigs?.some(sg=>sg.l==='JMA<DWMA'),
+  fibo:   s=>s.sigs?.some(sg=>sg.l?.startsWith('FIBO')),
+  poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
+  conf:   s=>s.confScore>=4,
+  btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
+  cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
+  cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
+  tradfi: s=>isTradFi(s.coin),
+  oiflow: s=>s.oiReal&&s.oiDom==='FLOW'&&Math.abs(s.oiCoinsChg)>3,
+};
+function numInput(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
+function applyFilters(){
+  let data=S.signals;
+  if(S.srch)data=data.filter(s=>s.coin.includes(S.srch));
+  else if(S.filters.size>0){
+    // AND logic - a coin must match every active filter
+    data=data.filter(s=>[...S.filters].every(f=>FILTER_MAP[f]?FILTER_MAP[f](s):true));
+  }
+  const minChg=numInput('minChg'),maxChg=numInput('maxChg'),minVolM=numInput('minVol');
+  if(minChg>0) data=data.filter(s=>Math.abs(s.priceChg)>=minChg);
+  if(maxChg>0) data=data.filter(s=>Math.abs(s.priceChg)<=maxChg);
+  if(minVolM>0)data=data.filter(s=>(s.volM||s.volume/1e6)>=minVolM);
+  const sortFn={score:(a,b)=>b.score-a.score,chg:(a,b)=>Math.abs(b.priceChg)-Math.abs(a.priceChg),
+    vol:(a,b)=>b.volume-a.volume,fr:(a,b)=>Math.abs(b.fr)-Math.abs(a.fr),
+    oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange)}[S.sort]||((a,b)=>b.score-a.score);
+  return [...data].sort(sortFn);
+}
+
 function renderList(){
   document.getElementById('liqArea').innerHTML=
     S.signals.filter(s=>s.confScore>=5).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,208,0,.08);border-color:rgba(255,208,0,.4);color:var(--yellow);cursor:pointer" onclick="openDetail('${s.coin}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.confLabel} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">${s.tf} · ${s.ts}</span></div>`)
@@ -2101,55 +2168,7 @@ function renderList(){
   document.getElementById('sAlpha').textContent=S.signals.filter(s=>s.isAlpha).length;
   document.getElementById('sFav').textContent=S.signals.filter(s=>s.isFav).length;
   document.getElementById('sTot').textContent=S.signals.length;
-  const minChg=parseFloat(document.getElementById('minChg').value)||0;
-  const minVolM=parseFloat(document.getElementById('minVol').value)||0;
-  let data=S.signals;
-  if(S.srch)data=data.filter(s=>s.coin.includes(S.srch));
-  else{
-    // Multi-filter: AND logic — coin must match ALL active filters
-    const fmap={
-      fav:    s=>s.isFav,
-      alpha:  s=>s.isAlpha,
-      liq:    s=>s.liqHunt,
-      spike:  s=>s.sigs?.some(sg=>sg.t==='spike'),
-      dump:   s=>s.sigs?.some(sg=>sg.t==='dump'),
-      fr:     s=>s.sigs?.some(sg=>sg.t==='fr'),
-      oisurge:s=>s.sigs?.some(sg=>sg.t==='oisurge'),
-      cvd:    s=>s.sigs?.some(sg=>sg.l==='CVD DIV'),
-      strong: s=>s.score>=7,
-      ls:     s=>s.lsExtreme,
-      squeeze:s=>s.squeezeActivation,
-      tightsq:s=>s.maSqueeze&&s.maSqueezeWidth<0.5,
-      masq:s=>!!s.maSqueeze,
-      coil:s=>!!s.coil,
-      sqz:    s=>s.sqzFired||s.sqz?.sqzOn,
-      diup:   s=>s.sqz?.diCrossUp,
-      didn:   s=>s.sqz?.diCrossDown,
-      inflow: s=>s.netInflow,
-      outflow:s=>s.netOutflow,
-      usdt:   s=>s.isUsdtProtocol||s.sigs?.some(sg=>sg.t==='usdt'),
-      jmaup:  s=>s.jmaDwmaCrossUp||s.sigs?.some(sg=>sg.l==='JMA>DWMA'),
-      jmadn:  s=>s.jmaDwmaCrossDown||s.sigs?.some(sg=>sg.l==='JMA<DWMA'),
-      fibo:   s=>s.sigs?.some(sg=>sg.l?.startsWith('FIBO')),
-      poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
-      conf:   s=>s.confScore>=4,
-      btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
-      cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
-      cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
-      tradfi: s=>isTradFi(s.coin),
-      oiflow: s=>s.oiReal&&s.oiDom==='FLOW'&&Math.abs(s.oiCoinsChg)>3,
-    };
-    if(S.filters.size>0){
-      data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
-    }
-  }
-  if(minChg>0)data=data.filter(s=>Math.abs(s.priceChg)>=minChg);
-  const maxChgEl=document.getElementById('maxChg');
-  const maxChg=maxChgEl?parseFloat(maxChgEl.value)||0:0;
-  if(maxChg>0)data=data.filter(s=>Math.abs(s.priceChg)<=maxChg);
-  if(minVolM>0)data=data.filter(s=>(s.volM||s.volume/1e6)>=minVolM);
-  const sortFn={score:(a,b)=>b.score-a.score,chg:(a,b)=>Math.abs(b.priceChg)-Math.abs(a.priceChg),vol:(a,b)=>b.volume-a.volume,fr:(a,b)=>Math.abs(b.fr)-Math.abs(a.fr),oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange)}[S.sort]||((a,b)=>b.score-a.score);
-  data=[...data].sort(sortFn);
+  const data=applyFilters();
   if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+'USDT не пронајден':S.filters.has('fav')?'Нема favorites':'Нема сигнали за избраните филтри'}</div>`;return;}
   document.getElementById('list').innerHTML=data.map(rowHTML).join('');
 }
@@ -2743,27 +2762,41 @@ function buildDigest(){
   const stamp=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')
     +' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   const uni=Object.keys(_tMap).length;
-  const top=[...S.signals].sort((a,b)=>b.score-a.score).slice(0,12);
-  const favs=S.signals.filter(s=>s.isFav&&!top.includes(s));
+  // Same filtered+sorted set the list is showing, so a copied digest never
+  // disagrees with what is on screen.
+  const view=applyFilters();
+  const top=view.slice(0,12);
+  // Favorites bypass the top-12 cut, but only if they survived the active filters.
+  const favs=view.filter(s=>s.isFav&&!top.includes(s));
   const rows=[...top,...favs];
   const CL={CRYPTO:'CRY',STOCK:'ACC',COMMODITY:'COM',PREIPO:'IPO',CINDEX:'IDX',RWA:'RWA'};
   const n=x=>(x===null||x===undefined||isNaN(x))?'—':((x>=0?'+':'')+x.toFixed(1));
 
+  const thr=[];
+  if(numInput('minChg'))thr.push('min%='+numInput('minChg'));
+  if(numInput('maxChg'))thr.push('max%='+numInput('maxChg'));
+  if(numInput('minVol'))thr.push('minVol$M='+numInput('minVol'));
+
   let o='aSCOUT v'+APP_VER+' '+APP_CODENAME+' | DIGEST | '+stamp+' | TF='+S.tf+' | universe='+uni
-       +(S.excludeTradFi?' (TradFi excluded)':' (TradFi included)')
-       +(S.filters.size?' | filters='+[...S.filters].join(','):'')+'\n';
+       +(S.excludeTradFi?' (TradFi excluded)':' (TradFi included)')+'\n';
+  o+='VIEW: '+(S.srch?'search='+S.srch:(S.filters.size?'filters='+[...S.filters].join(','):'no filters'))
+    +(thr.length?' | '+thr.join(' '):'')+' | sort='+S.sort
+    +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
   o+='BULL '+S.signals.filter(s=>s.dir==='bull').length
     +' | BEAR '+S.signals.filter(s=>s.dir==='bear').length
     +' | LIQ '+S.signals.filter(s=>s.liqHunt).length
     +' | ALPHA '+S.signals.filter(s=>s.isAlpha).length
-    +' | TOTAL '+S.signals.length+'\n';
+    +' | TOTAL '+S.signals.length+'   (unfiltered totals)\n';
   o+='CVD% = taker buy-share shift, NOT cumulative CVD. OI◆ = real coin flow. '
-    +'DOM = FLOW (real positions) vs REVAL (price revaluation).\n';
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|OI$|dOI$%|dOI◆%|DOM|CVD%|TAKER%B|FR%|L/S|VOL24|SCORE|DIR|TAGS\n\n';
+    +'DOM = FLOW (real positions) vs REVAL (price revaluation). '
+    +'BTC = Pearson corr vs BTC on 1h/150 bars; |corr|<0.4 = decoupled.\n';
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|OI$|dOI$%|dOI◆%|DOM|CVD%|TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
     const af=(s.isAlpha?'A':'-')+(s.isFav?'F':'-');
-    const tags=(s.sigs||[]).map(x=>x.l).join(';');
+    const tl=(s.sigs||[]).map(x=>x.l);
+    if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
+    const tags=tl.join(';');
     o+=[
       s.coin,
       (CL[assetClass(s.coin)]||'?')+(assetRegion(s.coin)?'-'+assetRegion(s.coin):''),
@@ -2779,6 +2812,7 @@ function buildDigest(){
       s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
       (s.fr>=0?'+':'')+(s.fr||0).toFixed(4),
       s.lsRatio?s.lsRatio.toFixed(2):'—',
+      (s.btcCorr===null||s.btcCorr===undefined)?'—':((s.btcCorr>=0?'+':'')+s.btcCorr.toFixed(2)),
       fmtM(s.volume),
       s.score,
       s.dir,
