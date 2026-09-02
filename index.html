@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Alpha Scout">
 <meta name="theme-color" content="#07070f">
-<title>ALPHA SCOUT</title>
+<title>ALPHA SCOUT v2.0 DECOMP</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -28,6 +28,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 
 .hdr{background:rgba(7,7,15,.98);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .logo{font-family:var(--mono);font-size:14px;color:var(--accent);letter-spacing:2px;white-space:nowrap;font-weight:700}
+.ver-badge{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;color:var(--accent2);
+  background:rgba(160,32,240,.12);border:1px solid rgba(160,32,240,.3);border-radius:3px;padding:1px 4px;
+  margin-left:4px;vertical-align:top;white-space:nowrap;cursor:pointer}
 .logo b{color:var(--accent2)}
 .alpha-count{font-family:var(--mono);font-size:10px;color:var(--alpha);background:rgba(240,192,0,.1);border:1px solid rgba(240,192,0,.25);padding:3px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0}
 .search-wrap{flex:1;position:relative}
@@ -385,6 +388,36 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .cat-gaming{background:rgba(255,102,0,.1);color:var(--orange);border:1px solid rgba(255,102,0,.25)}
 .cat-infra{background:rgba(100,180,255,.1);color:#64b4ff;border:1px solid rgba(100,180,255,.2)}
 .cat-other{background:rgba(80,80,104,.1);color:var(--muted);border:1px solid rgba(80,80,104,.2)}
+
+/* ASSET CLASS TAGS (TradFi vs Crypto) */
+.ct-cls{font-size:9px;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:bold;white-space:nowrap;border:1px solid}
+.cls-stock{background:rgba(255,102,0,.12);color:var(--orange);border-color:rgba(255,102,0,.3)}
+.cls-index{background:rgba(255,102,0,.08);color:#ff9944;border-color:rgba(255,102,0,.22)}
+.cls-comm{background:rgba(240,192,0,.1);color:var(--alpha);border-color:rgba(240,192,0,.28)}
+.cls-rwa{background:rgba(0,229,255,.08);color:var(--accent);border-color:rgba(0,229,255,.22)}
+
+/* OI DECOMPOSITION TAGS */
+.ct-oiflow{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.28)}
+.ct-oiflow-dn{background:rgba(255,34,68,.1);color:var(--red);border:1px solid rgba(255,34,68,.28)}
+.ct-oireval{background:rgba(80,80,104,.14);color:var(--text2);border:1px solid rgba(80,80,104,.3)}
+
+/* TRADFI TOGGLE */
+.tfi-tgl{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;
+  background:rgba(255,102,0,.1);border:1px solid rgba(255,102,0,.3);color:var(--orange);flex-shrink:0}
+.tfi-tgl.off{background:var(--card);border-color:var(--border);color:var(--muted)}
+
+/* DIGEST OVERLAY */
+.dg-ov{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.94);display:none;flex-direction:column}
+.dg-ov.open{display:flex}
+.dg-hd{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.dg-ttl{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:1px;flex:1}
+.dg-btn{font-family:var(--mono);font-size:11px;font-weight:bold;padding:7px 12px;border-radius:6px;cursor:pointer;
+  background:var(--card);border:1px solid var(--border);color:var(--text2);white-space:nowrap}
+.dg-btn.prim{border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,.08)}
+.dg-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 12px}
+.dg-body pre{font-family:var(--mono);font-size:10px;line-height:1.55;color:var(--text);white-space:pre;margin:0}
+.dg-ta{width:100%;height:100%;min-height:60vh;background:var(--card);border:1px solid var(--border);color:var(--text);
+  font-family:var(--mono);font-size:10px;line-height:1.5;padding:10px;border-radius:8px;resize:none}
 /* MA SQUEEZE + SETUPS TAB */
 .ct-masq{background:rgba(255,100,0,.14);color:#ff9500;border:1px solid rgba(255,100,0,.35);font-size:9px;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:bold;white-space:nowrap}
 .ct-megasq{background:rgba(255,50,200,.18);color:#ff32cc;border:1px solid rgba(255,50,200,.4);font-size:9px;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:bold;white-space:nowrap;animation:glowPulse 1.5s infinite}
@@ -443,7 +476,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 </div>
 
 <div class="hdr">
-  <div class="logo">α<b>SCOUT</b></div>
+  <div class="logo">α<b>SCOUT</b><span class="ver-badge" id="verBadge" onclick="openDigest()">—</span></div>
   <div class="alpha-count" id="alphaCount">🅐 —</div>
   <div class="search-wrap">
     <input class="search" id="srch" placeholder="Пребарај коин..." oninput="onSrch(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
@@ -458,6 +491,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-start" id="btnS" onclick="startScan()">⚡ СКЕНИРАЈ</button>
   <button class="btn btn-stop"  id="btnX" onclick="stopScan()" style="display:none">⏹ СТОП</button>
   <button class="btn btn-clear" onclick="clearAll()">🗑</button>
+  <button class="btn btn-clear" onclick="openDigest()" title="Извештај за анализа">📋</button>
+  <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
     <div class="tf active" id="tf-1m"  onclick="setTF('1m',this)">1m</div>
     <div class="tf"        id="tf-5m"  onclick="setTF('5m',this)">5m</div>
@@ -506,6 +541,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-dump"      onclick="setFil('dump',this)">💥 DUMP+VOL</div>
     <div class="ftab f-fr"        onclick="setFil('fr',this)">💰 FR EXT</div>
     <div class="ftab f-oi"        onclick="setFil('oisurge',this)">📈 OI SURGE</div>
+    <div class="ftab"             onclick="setFil('oiflow',this)" style="border-color:rgba(0,255,136,.25);color:var(--green)">◆ OI FLOW</div>
+    <div class="ftab"             onclick="setFil('tradfi',this)" style="border-color:rgba(255,102,0,.3);color:var(--orange)">🏛 TRADFI</div>
     <div class="ftab f-cvd"       onclick="setFil('cvd',this)">📊 CVD DIV</div>
     <div class="ftab f-strong"    onclick="setFil('strong',this)">⚡ SCORE 7+</div>
     <div class="ftab f-ls"        onclick="setFil('ls',this)">⚖️ L/S EXT</div>
@@ -537,6 +574,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <input class="thresh-input" id="coilN" type="number" value="50" min="20" max="150" step="10" title="Број свеќи за 'тесен range' и 'опаѓачки волумен' проверка (важи од следен скен)" style="border-color:rgba(0,200,255,.3)" oninput="S.coilN=parseInt(this.value)||50">
     </div>
   </div>
+</div>
+
+<!-- DIGEST / PROBE OVERLAY -->
+<div class="dg-ov" id="dgOv">
+  <div class="dg-hd">
+    <div class="dg-ttl" id="dgTtl">// ИЗВЕШТАЈ</div>
+    <div class="dg-btn prim" onclick="copyDigest()">📋 КОПИРАЈ</div>
+    <div class="dg-btn" onclick="showProbe()">🔬 КЛАСИ</div>
+    <div class="dg-btn" onclick="showDigest()">📊 DIGEST</div>
+    <div class="dg-btn" onclick="closeDigest()">✕</div>
+  </div>
+  <div class="dg-body"><textarea class="dg-ta" id="dgTa" readonly spellcheck="false"></textarea></div>
 </div>
 
 <div class="scanner-view" id="scannerView">
@@ -723,6 +772,35 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 </div>
 
 <script>
+// ==========================================================
+//  aSCOUT v2.0 "DECOMP"
+// ----------------------------------------------------------
+//  Named after the change that defines it: Open Interest is
+//  now decomposed into price revaluation vs real position
+//  flow, instead of being faked from quote volume.
+//
+//  v2.0 DECOMP
+//   - REAL OI via /futures/data/openInterestHist (coins + USDT
+//     in one call). v1.x read k[7] = quote volume and labelled
+//     it "OI" - the primary metric was synthetic.
+//   - OI decomposition: reval vs flow vs cross, with DOM flag.
+//   - OI SURGE now fires on coin-count expansion, not volume.
+//   - Squeeze detector uses real OI coin decline.
+//   - Confluence OI vote uses real flow, not USDT revaluation.
+//   - Asset class split: TradFi perps (stock/index/commodity)
+//     separated from crypto; RWA-narrative crypto tokens stay.
+//   - TradFi excluded from scan by default (their off-hours
+//     candles are index-smoothed dojis = fake liq hunts).
+//   - _catMap is finally populated; getCatTag() used to always
+//     return empty.
+//   - Digest export + exchangeInfo class probe.
+//
+//  Digests are version-stamped on purpose: a v1.x digest has
+//  fake OI numbers and must not be read the same way.
+// ==========================================================
+const APP_VER='2.0';
+const APP_CODENAME='DECOMP';
+
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
   'CVD DIV':{title:'CVD Дивергенција',desc:'Цената и buying pressure одат во СПРОТИВНИ насоки. Движењето нема volume поддршка — можен reversal.',bull:{cls:'pos-short',txt:'⬇ МОЖНА ПОЗИЦИЈА: SHORT — цената расте без buyers'},bear:{cls:'pos-long',txt:'⬆ МОЖНА ПОЗИЦИЈА: LONG — цената паѓа со зголемен buying'}},
@@ -809,6 +887,27 @@ const TFS_ALL=['15m','1h','4h'];
 const TFS_FULL=['1m','5m','15m','1h','4h','12h','1d','1w'];
 const BN_TF={'1m':'1m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d':'1D','1w':'1W'};
 
+// -- REAL OI CONFIG --
+// /futures/data/openInterestHist supports 5m,15m,30m,1h,2h,4h,6h,12h,1d only.
+// No 1m and no 1w -> mapped to the nearest supported period. History is 30 days.
+const OI_TF={'1m':'5m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d':'1d','1w':'1d'};
+const OI_LOOKBACK=6;   // colku periodi nazad se sporeduva (6 x period)
+
+// -- ASSET CLASS CONFIG (TradFi perps vs crypto) --
+// Binance TradFi Perpetual Contracts = stock / index / commodity perps (AAPL, QQQ, XAU...).
+// These are NOT crypto: off-hours candles are smoothed by the index price, so the
+// liq-hunt detector (body/range<0.38) fires garbage on them every weekend.
+// Detection is metadata-first (exchangeInfo), ticker list only as fallback.
+const TRADFI_SUB_HINTS=['STOCK','EQUITY','TRADFI','TRAD-FI','COMMODIT','METAL','INDEX','ETF','FOREX','FX'];
+const TRADFI_FB={
+  STOCK:['AAPL','MSFT','AMZN','NVDA','TSLA','META','GOOGL','GOOG','TSM','NFLX','AMD','AVGO','ORCL',
+         'COIN','MSTR','HOOD','PLTR','MRVL','FLNC','BE','CRCL','SMCI','INTC','MU','ARM','UBER','BABA'],
+  INDEX:['QQQ','SPY','DIA','IWM','ARKK','VOO','GLDX'],
+  COMMODITY:['XAU','XAG','XPT','XPD','WTI','BRENT','NGAS']
+};
+let _clsMap={};   // coin -> 'CRYPTO' | 'STOCK' | 'INDEX' | 'COMMODITY' | 'RWA'
+let _rawMeta={};  // coin -> {ct, ut, sub}  (raw exchangeInfo fields, for the probe)
+
 // -- CCIOBV CROSS CONFIG (SMA1100/SMA2650 на CCI(20) на OBV, 1m бара) --
 const CCIOBV_LEN=20;   // CCI период применет врз OBV серијата
 const CCIOBV_SMA1=1100;
@@ -826,7 +925,8 @@ const S={
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
   _partial:{},detailCoin:null,chartTF:null,
-  cciObvLookback:150,_cciObvCache:{},coilN:50
+  cciObvLookback:150,_cciObvCache:{},coilN:50,
+  excludeTradFi:localStorage.getItem('exclTradFi')!=='0'
 };
 let _tMap={},_fMap={},_catMap={},_oiChart=null,_cvdChart=null;
 
@@ -1081,6 +1181,96 @@ function getCciObvFlags(coin,lookback){
   return{cross1100:detectCross(c.sma1100,c.cciObv,lookback,'down'),cross2650:detectCross(c.sma2650,c.sma1100,lookback,'down')};
 }
 
+// -- ASSET CLASS ------------------------------------------
+// Populated once per scan from /fapi/v1/exchangeInfo (already fetched in doScan).
+// Also fills _catMap, which getCatTag() reads but nothing was ever writing to.
+function buildClassMaps(exchangeInfo){
+  _clsMap={};_rawMeta={};_catMap={};
+  if(!exchangeInfo?.symbols)return;
+  exchangeInfo.symbols.forEach(s=>{
+    if(!s.symbol.endsWith('USDT')||s.symbol.includes('_'))return;
+    const coin=s.symbol.replace('USDT','');
+    const ct=(s.contractType||'').toUpperCase();
+    const ut=(s.underlyingType||'').toUpperCase();
+    const subArr=Array.isArray(s.underlyingSubType)?s.underlyingSubType:(s.underlyingSubType?[s.underlyingSubType]:[]);
+    const sub=subArr.map(x=>String(x).toUpperCase());
+    _rawMeta[coin]={ct,ut,sub:subArr};
+    _catMap[coin]=subArr[0]||'';
+    _clsMap[coin]=classify(coin,ct,ut,sub);
+  });
+}
+
+// Binance is inconsistent with casing ("Defi" vs "DeFi" alternate on the same symbol),
+// so every comparison here is uppercased before matching.
+function classify(coin,ct,ut,sub){
+  const subHit=h=>sub.some(x=>x.includes(h));
+  if(sub.some(x=>x==='RWA'))return 'RWA';            // crypto token with RWA narrative - STAYS in scan
+  // 1) explicit metadata on the symbol itself wins
+  if(TRADFI_SUB_HINTS.some(h=>subHit(h))){
+    if(subHit('COMMODIT')||subHit('METAL'))return 'COMMODITY';
+    if(subHit('INDEX')||subHit('ETF'))return 'INDEX';
+    return 'STOCK';
+  }
+  // 2) curated ticker list beats underlyingType-only inference
+  //    (NVDA can carry underlyingType INDEX and still be a single stock)
+  for(const k in TRADFI_FB)if(TRADFI_FB[k].includes(coin))return k;
+  // 3) anything Binance does not back with a COIN underlying is TradFi of some kind
+  if(ut&&ut!=='COIN'&&ut!=='PREMARKET'){
+    if(ut.includes('COMMODIT')||ut.includes('METAL'))return 'COMMODITY';
+    if(ut.includes('INDEX')||ut.includes('ETF'))return 'INDEX';
+    return 'STOCK';
+  }
+  if(ct&&TRADFI_SUB_HINTS.some(h=>ct.includes(h)))return 'STOCK';
+  return 'CRYPTO';
+}
+const assetClass=c=>_clsMap[c.toUpperCase()]||(function(){for(const k in TRADFI_FB)if(TRADFI_FB[k].includes(c.toUpperCase()))return k;return 'CRYPTO';})();
+const isTradFi=c=>{const k=assetClass(c);return k==='STOCK'||k==='INDEX'||k==='COMMODITY';};
+const CLS_TAG={STOCK:['cls-stock','ACC'],INDEX:['cls-index','IDX'],COMMODITY:['cls-comm','COM'],RWA:['cls-rwa','RWA']};
+function getClsTag(coin){
+  const k=assetClass(coin);const t=CLS_TAG[k];
+  if(!t)return '';
+  return `<span class="ct-cls ${t[0]}">${k==='CRYPTO'?'':'🏛 '}${t[1]}</span>`;
+}
+
+// -- REAL OI (openInterestHist) ---------------------------
+// Returns BOTH sumOpenInterest (coins) and sumOpenInterestValue (USDT) in one call,
+// which is what makes the revaluation-vs-real-flow decomposition possible client side.
+// Replaces the old oiChange, which was actually reading k[7] = quote volume, not OI.
+const _oiCache={};
+const OI_CACHE_TTL=90*1000;
+async function fetchOiHist(coin,tf){
+  const p=OI_TF[tf]||'15m';
+  // /futures/data/* shares a tighter IP budget with the L/S ratio calls this scanner
+  // already makes per coin, so repeat cycles reuse a short-lived snapshot.
+  const ck=coin+'|'+p, hit=_oiCache[ck];
+  if(hit&&Date.now()-hit.t<OI_CACHE_TTL)return hit.v;
+  const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${p}&limit=30`,FDAPI);
+  if(!d||d.length<2){_oiCache[ck]={t:Date.now(),v:null};return null;}
+  const n=d[d.length-1];
+  const o=d[Math.max(0,d.length-1-OI_LOOKBACK)];
+  const C1=parseFloat(n.sumOpenInterest),V1=parseFloat(n.sumOpenInterestValue);
+  const C0=parseFloat(o.sumOpenInterest),V0=parseFloat(o.sumOpenInterestValue);
+  if(!(C1>0&&C0>0&&V1>0&&V0>0))return null;
+  const P1=V1/C1,P0=V0/C0;
+  const dV=V1-V0;
+  const reval=C0*(P1-P0);        // same positions, new price
+  const flow =(C1-C0)*P0;        // real positions opened/closed
+  const cross=dV-reval-flow;
+  const mag=Math.abs(reval)+Math.abs(flow)+Math.abs(cross);
+  const res={
+    oiCoins:C1,oiUsdt:V1,
+    oiUsdtChg:(dV/V0)*100,
+    oiCoinsChg:((C1-C0)/C0)*100,
+    reval,flow,cross,
+    dominates:Math.abs(flow)>=Math.abs(reval)?'FLOW':'REVAL',
+    revalPct:mag>0?Math.abs(reval)/mag*100:0,
+    flowPct:mag>0?Math.abs(flow)/mag*100:0,
+    period:p
+  };
+  _oiCache[ck]={t:Date.now(),v:res};
+  return res;
+}
+
 async function fetchAlphaList(){
   const FB=['ACT','AIXBT','ALT','ANIME','ARB','ATOM','AVAX','BACK','BABY','BANK','BB','BLUR','BOME','BONK','CATI','COOKIE','CYBER','DOGE','DOGS','DYM','EIGEN','FARTCOIN','FLOKI','GOAT','HAEDAL','HMSTR','INJ','INIT','IO','IP','JTO','KAIA','LAYER','LISTA','MAGIC','MAJOR','MANTA','ME','MELANIA','MEME','MOODENG','MOVE','NEAR','NEIRO','NIL','NOT','OP','ORDI','PARTI','PENGU','PEPE','PIXEL','PNUT','POPCAT','PORTAL','PYTH','REZ','SAGA','SATS','SCR','SEI','SHELL','SIGN','SOL','STRK','TIA','TON','TRUMP','TURBO','VIRTUAL','WAL','WIF','WLD','ZEREBRO','ZK','ZRO','ZETA','ORDER','BARD','GWEI','BOB','PTB','ATH','BEAT','SIREN'];
   try{const r=await fetch(BAPI,{signal:AbortSignal.timeout(8000)});if(r.ok){const j=await r.json();if(j.data?.length>0){S.alphaSet=new Set(j.data.map(t=>(t.symbol||t.cexCoinName||'').toUpperCase()));document.getElementById('alphaCount').textContent=`🅐 ${S.alphaSet.size}`;return;}}}catch(e){}
@@ -1123,6 +1313,7 @@ async function doScan(){
         tradingSymbols.add(s.symbol.replace('USDT',''));
     });
   }
+  buildClassMaps(exchangeInfo);
 
   _tMap={};_fMap={};
   tickers.forEach(t=>{
@@ -1138,6 +1329,15 @@ async function doScan(){
   if(S.srch){const c=S.srch.toUpperCase().replace('USDT','').trim();if(_tMap[c])coins=[c];else{errShow(`⚠️ ${c}USDT не постои`);stopScan();return;}}
   else if(S.filters.has('fav')&&S.filters.size===1){coins=[...S.favorites].filter(c=>_tMap[c]);if(!coins.length){errShow('⚠️ Нема favorites');stopScan();return;}}
   else{coins=[...[...S.favorites].filter(c=>_tMap[c]),...Object.keys(_tMap).filter(c=>!S.favorites.has(c))];}
+
+  // -- TradFi perps out of the scan universe (saves API calls AND stops the weekend
+  //    false-positive liq hunts, since their off-hours candles are index-smoothed dojis) --
+  if(S.excludeTradFi&&!S.srch&&!S.filters.has('tradfi')){
+    const before=coins.length;
+    coins=coins.filter(c=>!isTradFi(c));
+    const cut=before-coins.length;
+    if(cut>0)setP(`TradFi исклучени: ${cut} · скенирам ${coins.length}`,4);
+  }
 
   S._partial={};let done=0;
   const bs=S.tf==='all'?5:10,sl=S.tf==='all'?300:150;
@@ -1578,6 +1778,23 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(!ticker)return null;
   const price=parseFloat(ticker.lastPrice),priceChg=parseFloat(ticker.priceChangePercent),volume=parseFloat(ticker.quoteVolume),high24=parseFloat(ticker.highPrice),low24=parseFloat(ticker.lowPrice);
   let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null,coil=false,coilRangePct=null,coilVolRatio=null;
+  // OI decomposition (real, from openInterestHist) + the old volume proxy kept separately
+  let oiCoinsChg=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
+
+  // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
+  try{
+    const oh=await fetchOiHist(coin,tf);
+    if(oh){
+      oiReal=true;
+      oiCoins=oh.oiCoins;oiUsdt=oh.oiUsdt;
+      oiChange=oh.oiUsdtChg;      // hierarchy: OI USDT is the primary number
+      oiCoinsChg=oh.oiCoinsChg;   // real position flow
+      oiDom=oh.dominates;oiRevalPct=oh.revalPct;oiFlowPct=oh.flowPct;
+    }else{
+      const oi=await apiFetch(`/openInterest?symbol=${coin}USDT`);
+      if(oi?.openInterest){oiCoins=parseFloat(oi.openInterest);oiUsdt=oiCoins*price;}
+    }
+  }catch(e){}
 
   try{
     const hiTF=(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w');
@@ -1591,8 +1808,11 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       for(let i=0;i<h;i++){eB+=parseFloat(kl[i][9]);eT+=parseFloat(kl[i][5]);}
       for(let i=h;i<kl.length;i++){lB+=parseFloat(kl[i][9]);lT+=parseFloat(kl[i][5]);}
       cvdDelta=((lT>0?lB/lT:.5)-(eT>0?eB/eT:.5))*100;
+      // NOTE: this is QUOTE VOLUME change (k[7]), not OI. It used to be assigned to
+      // oiChange and labelled "OI" in the UI. Real OI now comes from fetchOiHist above.
       const v1=kl.slice(-5).reduce((s,k)=>s+parseFloat(k[7]),0),v2=kl.slice(-10,-5).reduce((s,k)=>s+parseFloat(k[7]),0);
-      oiChange=v2>0?((v1-v2)/v2)*100:0;
+      volChange=v2>0?((v1-v2)/v2)*100:0;
+      if(!oiReal)oiChange=volChange; // fallback only when openInterestHist has no data
       tfPriceChg=parseFloat(kl[0][4])>0?((parseFloat(kl[kl.length-1][4])-parseFloat(kl[0][4]))/parseFloat(kl[0][4]))*100:0;
       // -- MA SQUEEZE: SMA25/50/99 convergence (matching FSMA: 25/50/90) --
       closes=klFull?klFull.map(k=>parseFloat(k[4])):kl.map(k=>parseFloat(k[4]));
@@ -1647,7 +1867,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
         for(let i=kl.length-3;i<kl.length;i++){const b=parseFloat(kl[i][9]),t=parseFloat(kl[i][5]);cvdR+=(t>0?(b/t-.5)*t:0);}
         const spike=cvdR/3>cvdE/(kl.length-3)*3&&cvdR>0;
         const pRise=parseFloat(kl[kl.length-1][4])>parseFloat(kl[kl.length-3][4]);
-        const oiFall=parseFloat(kl[kl.length-1][5])<parseFloat(kl[kl.length-3][5])*0.97;
+        // real OI in coins falling = positions closing (short covering fuel), not just lower volume
+        const oiFall=oiReal?(oiCoinsChg<-3):(parseFloat(kl[kl.length-1][5])<parseFloat(kl[kl.length-3][5])*0.97);
         if(spike&&oiFall&&pRise&&fr<-0.05)squeezeActivation=true;
         else if(pRise&&((spike&&oiFall)||(spike&&fr<-0.03)||(oiFall&&fr<-0.03))&&Math.abs(fr)>0.03)squeezeActivation=true;
       }
@@ -1665,8 +1886,6 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       else if(td.buyPct<42){netOutflow=true;}
     }
   }catch(e){}
-
-  try{const oi=await apiFetch(`/openInterest?symbol=${coin}USDT`);if(oi?.openInterest){oiCoins=parseFloat(oi.openInterest);oiUsdt=oiCoins*price;}}catch(e){}
 
   try{
     const ls=await fetchLSRatio(coin,tf);
@@ -1689,7 +1908,13 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(Math.abs(cvdDelta)>3){const cb=cvdDelta>0,pb=priceChg>0;if(cb!==pb){score+=2;sigs.push({l:'CVD DIV',t:cb?'bull':'bear'});}else{score++;sigs.push({l:'CVD CONF',t:cb?'bull':'bear'});}}
   if(takerBuyPct>62){score++;sigs.push({l:`TAKER ${takerBuyPct.toFixed(0)}%B`,t:'bull'});}
   else if(takerBuyPct<38){score++;sigs.push({l:`TAKER ${(100-takerBuyPct).toFixed(0)}%S`,t:'bear'});}
-  if(Math.abs(oiChange)>2){score++;sigs.push({l:`OI ${oiChange>0?'+':''}${oiChange.toFixed(1)}%`,t:oiChange>0?'bull':'bear'});}
+  // -- OI: USDT move is the headline, coin move is the real flow, DOM says which drove it --
+  if(Math.abs(oiChange)>2){score++;sigs.push({l:`OI$ ${oiChange>0?'+':''}${oiChange.toFixed(1)}%`,t:oiChange>0?'bull':'bear'});}
+  if(oiReal&&Math.abs(oiCoinsChg)>3){
+    score++;
+    sigs.push({l:`OI◆ ${oiCoinsChg>0?'+':''}${oiCoinsChg.toFixed(1)}%`,t:oiCoinsChg>0?'bull':'bear'});
+  }
+  if(oiReal&&Math.abs(oiChange)>2&&oiDom==='REVAL')sigs.push({l:`OI REVAL ${oiRevalPct.toFixed(0)}%`,t:'neu'});
   if(Math.abs(fr)>0.03){score++;sigs.push({l:`FR ${fr>0?'+':''}${fr.toFixed(4)}%`,t:fr>0.05?'bear':'bull'});}
   if(liqHunt){score+=2;sigs.push({l:liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP',t:'liq'});}
   // ── SQZMOM_LB_AO сигнали (дефолт во секој скен) ──
@@ -1716,7 +1941,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(priceChg>3&&volM>20)sigs.push({l:'SPIKE+VOL',t:'spike'});
   if(priceChg<-3&&volM>20)sigs.push({l:'DUMP+VOL',t:'dump'});
   if(Math.abs(fr)>0.08)sigs.push({l:'FR EXTREME',t:'fr'});
-  if(oiChange>20)sigs.push({l:'OI SURGE',t:'oisurge'});
+  // real leverage expansion = new coins of OI, not a bigger USDT number from price alone
+  if(oiReal?(oiCoinsChg>15):(oiChange>20))sigs.push({l:'OI SURGE',t:'oisurge'});
 
   // USDT Protocol detection: high volume + OI surge + CVD positive = USDT flowing in
   const isUsdtProtocol=(volM>50&&oiChange>10&&cvdDelta>3)||(netInflow&&volM>30&&oiCoins>0);
@@ -1776,8 +2002,11 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   else if(sqz?.bearSignal||sqz?.bearAdxBrk) cvotes.push({name:'SQZMOM',detail:'bearish сигнал',vote:-1});
   // 8. Liq Hunt
   if(liqHunt) cvotes.push({name:'Liq Hunt',detail:liqType==='bull'?'short squeeze':'long dump',vote:liqType==='bull'?1:-1});
-  // 9. OI trend
-  if(Math.abs(oiChange)>5) cvotes.push({name:'OI Тренд',detail:(oiChange>=0?'+':'')+oiChange.toFixed(1)+'%',vote:oiChange>0?1:-1});
+  // 9. OI trend -- real position flow (coins) when available; USDT move alone can be pure
+  //    revaluation, which is mechanical and should not cast a directional vote.
+  if(oiReal){
+    if(Math.abs(oiCoinsChg)>5) cvotes.push({name:'OI Тренд',detail:'коини '+(oiCoinsChg>=0?'+':'')+oiCoinsChg.toFixed(1)+'% · USDT '+(oiChange>=0?'+':'')+oiChange.toFixed(1)+'% ('+oiDom+')',vote:oiCoinsChg>0?1:-1});
+  }else if(Math.abs(oiChange)>5) cvotes.push({name:'OI Тренд (proxy)',detail:(oiChange>=0?'+':'')+oiChange.toFixed(1)+'%',vote:oiChange>0?1:-1});
   // 10. Funding Rate
   if(Math.abs(fr)>0.04) cvotes.push({name:'Funding Rate',detail:(fr>=0?'+':'')+fr.toFixed(3)+'%',vote:fr<0?1:-1}); // negative FR = bullish
 
@@ -1812,7 +2041,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
-  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+  return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
+    oiCoinsChg,oiDom,oiRevalPct,oiFlowPct,oiReal,volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -1863,6 +2093,8 @@ function renderList(){
       btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
       cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
       cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
+      tradfi: s=>isTradFi(s.coin),
+      oiflow: s=>s.oiReal&&s.oiDom==='FLOW'&&Math.abs(s.oiCoinsChg)>3,
     };
     if(S.filters.size>0){
       data=data.filter(s=>[...S.filters].every(f=>fmap[f]?fmap[f](s):true));
@@ -1899,7 +2131,13 @@ function rowHTML(s){
   }
   if(s.isFav)tags.push(`<span class="ctag ct-fav">⭐</span>`);
   if(s.isAlpha)tags.push(`<span class="ctag ct-alpha">🅐</span>`);
+  const clsTag=getClsTag(s.coin);if(clsTag)tags.push(clsTag);
   const catTag=getCatTag(s.coin);if(catTag)tags.push(catTag);
+  if(s.oiReal&&Math.abs(s.oiCoinsChg)>3){
+    const up=s.oiCoinsChg>0;
+    tags.push(`<span class="ctag ${up?'ct-oiflow':'ct-oiflow-dn'}">OI◆${up?'+':''}${s.oiCoinsChg.toFixed(1)}%</span>`);
+  }
+  if(s.oiReal&&s.oiDom==='REVAL'&&Math.abs(s.oiChange)>2)tags.push(`<span class="ctag ct-oireval">REVAL ${s.oiRevalPct.toFixed(0)}%</span>`);
   if(s.liqHunt){const lbl=s.liqType==='bull'?'⚡SHORT SQ':'⚡LONG DMP';tags.push(`<span class="ctag ct-liq" onclick="showSigTip(event,'${lbl}','liq')">${lbl}</span>`);}
   if(s.squeezeActivation)tags.push(`<span class="ctag" style="background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35);cursor:pointer" onclick="showSigTip(event,'SQUEEZE','bull')">🔥SQUEEZE</span>`);
   if(s.sigs?.some(sg=>sg.l?.startsWith('FIBO'))){
@@ -2438,6 +2676,118 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function toast(m){let t=document.getElementById('_t');if(!t){t=document.createElement('div');t.id='_t';t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#121220;border:1px solid #1e1e35;border-radius:10px;padding:10px 18px;font-family:var(--ui);font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,.5)';document.body.appendChild(t);}t.textContent=m;t.style.opacity='1';setTimeout(()=>t.style.opacity='0',3500);}
 
 // -- CATEGORY TAG --
+// -- TRADFI TOGGLE ----------------------------------------
+function toggleTradFi(){
+  S.excludeTradFi=!S.excludeTradFi;
+  localStorage.setItem('exclTradFi',S.excludeTradFi?'1':'0');
+  syncTradFiBtn();
+  toast(S.excludeTradFi?'🏛 TradFi исклучени од скен':'🏛 TradFi вклучени во скен');
+  if(S.scanning){stopScan();setTimeout(startScan,400);}
+}
+function syncTradFiBtn(){
+  const b=document.getElementById('tfiTgl');if(!b)return;
+  b.textContent=S.excludeTradFi?'🏛 TradFi OFF':'🏛 TradFi ON';
+  b.className='tfi-tgl'+(S.excludeTradFi?'':' off');
+}
+
+// -- DIGEST -----------------------------------------------
+// Compact, pipe-delimited report of the top signals. Small enough to paste into a
+// chat in one go, and every row carries its asset class so crypto and TradFi perps
+// never get read with the same framework.
+function buildDigest(){
+  if(!S.signals.length)return 'Нема резултати — скенирај прво.';
+  const now=new Date();
+  const stamp=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')
+    +' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const uni=Object.keys(_tMap).length;
+  const top=[...S.signals].sort((a,b)=>b.score-a.score).slice(0,12);
+  const favs=S.signals.filter(s=>s.isFav&&!top.includes(s));
+  const rows=[...top,...favs];
+  const CL={CRYPTO:'CRY',STOCK:'ACC',INDEX:'IDX',COMMODITY:'COM',RWA:'RWA'};
+  const n=x=>(x===null||x===undefined||isNaN(x))?'—':((x>=0?'+':'')+x.toFixed(1));
+
+  let o='aSCOUT v'+APP_VER+' '+APP_CODENAME+' | DIGEST | '+stamp+' | TF='+S.tf+' | universe='+uni
+       +(S.excludeTradFi?' (TradFi excluded)':' (TradFi included)')
+       +(S.filters.size?' | filters='+[...S.filters].join(','):'')+'\n';
+  o+='BULL '+S.signals.filter(s=>s.dir==='bull').length
+    +' | BEAR '+S.signals.filter(s=>s.dir==='bear').length
+    +' | LIQ '+S.signals.filter(s=>s.liqHunt).length
+    +' | ALPHA '+S.signals.filter(s=>s.isAlpha).length
+    +' | TOTAL '+S.signals.length+'\n';
+  o+='CVD% = taker buy-share shift, NOT cumulative CVD. OI◆ = real coin flow. '
+    +'DOM = FLOW (real positions) vs REVAL (price revaluation).\n';
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|OI$|dOI$%|dOI◆%|DOM|CVD%|TAKER%B|FR%|L/S|VOL24|SCORE|DIR|TAGS\n\n';
+
+  rows.forEach(s=>{
+    const af=(s.isAlpha?'A':'-')+(s.isFav?'F':'-');
+    const tags=(s.sigs||[]).map(x=>x.l).join(';');
+    o+=[
+      s.coin,
+      CL[assetClass(s.coin)]||'?',
+      af,
+      fmt(s.price),
+      n(s.priceChg),
+      n(s.tfPriceChg),
+      s.oiUsdt>0?fmtM(s.oiUsdt):'—',
+      s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
+      s.oiReal?n(s.oiCoinsChg):'n/a',
+      s.oiDom||'n/a',
+      n(s.cvdDelta),
+      s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
+      (s.fr>=0?'+':'')+(s.fr||0).toFixed(4),
+      s.lsRatio?s.lsRatio.toFixed(2):'—',
+      fmtM(s.volume),
+      s.score,
+      s.dir,
+      tags
+    ].join('|')+'\n';
+  });
+
+  o+='\nNOTE: 1m and 1w have no native openInterestHist period — mapped to 5m / 1d.\n';
+  o+='Rows with "~" on dOI$% are volume-proxy fallbacks, not real OI.\n';
+  return o;
+}
+
+// Diagnostic: dumps how Binance actually labels every USDT symbol, grouped by
+// contractType | underlyingType | underlyingSubType. Use it to verify (and tighten)
+// the TradFi classification instead of guessing at the field values.
+function buildProbe(){
+  if(!Object.keys(_rawMeta).length)return 'Нема exchangeInfo — притисни СКЕНИРАЈ прво (макар една секунда).';
+  const map={},hits=[];
+  const W=['AAPL','MSFT','AMZN','NVDA','TSLA','META','GOOGL','TSM','QQQ','SPY','XAU','XAG',
+           'MRVL','FLNC','BE','BTC','ETH','ONDO','PENDLE','ARIA','BEAT'];
+  Object.entries(_rawMeta).forEach(([coin,m])=>{
+    const k=(m.ct||'?')+' | '+(m.ut||'?')+' | '+JSON.stringify(m.sub||[]);
+    (map[k]=map[k]||[]).push(coin);
+    if(W.includes(coin))hits.push(coin.padEnd(7)+'-> '+(_clsMap[coin]||'?').padEnd(10)+'| '+k);
+  });
+  let o='aSCOUT v'+APP_VER+' '+APP_CODENAME+' | EXCHANGEINFO PROBE | USDT симболи: '+Object.keys(_rawMeta).length+'\n';
+  o+='Класификација: '+Object.entries(Object.values(_clsMap).reduce((a,c)=>(a[c]=(a[c]||0)+1,a),{}))
+      .map(([k,v])=>k+'='+v).join('  ')+'\n\n=== ГРУПИ (contractType | underlyingType | subType) ===\n';
+  Object.entries(map).sort((a,b)=>b[1].length-a[1].length).forEach(([k,v])=>{
+    o+=k+'  ['+v.length+']\n   '+v.slice(0,12).join(', ')+(v.length>12?' …':'')+'\n\n';
+  });
+  o+='=== WATCHLIST ===\n'+(hits.length?hits.join('\n'):'(нема совпаѓања)');
+  return o;
+}
+
+function openDigest(){document.getElementById('dgOv').classList.add('open');showDigest();}
+function closeDigest(){document.getElementById('dgOv').classList.remove('open');}
+function showDigest(){document.getElementById('dgTtl').textContent='// DIGEST ЗА АНАЛИЗА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildDigest();}
+function showProbe(){document.getElementById('dgTtl').textContent='// EXCHANGEINFO ПРОБА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildProbe();}
+function copyDigest(){
+  const ta=document.getElementById('dgTa');
+  const txt=ta.value;
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toast('📋 Копирано')).catch(()=>fallbackCopy(ta));
+  }else fallbackCopy(ta);
+}
+function fallbackCopy(ta){
+  ta.removeAttribute('readonly');ta.focus();ta.setSelectionRange(0,ta.value.length);
+  try{document.execCommand('copy');toast('📋 Копирано');}catch(e){toast('Селектирај рачно и копирај');}
+  ta.setAttribute('readonly','');
+}
+
 function getCatTag(coin) {
   const raw = (_catMap[coin] || '').toLowerCase();
   if (!raw) return '';
@@ -3198,6 +3548,12 @@ fetchAlphaList().then(()=>{
   // Populate Alpha coins in heatmap selector after list is loaded
   hmPopulateAlphaCoins();
 });
+
+// Preload exchangeInfo so the class tags / TradFi toggle / probe work before the
+// first scan finishes. doScan refetches it anyway, this is just for immediate UI.
+syncTradFiBtn();
+(function(){const b=document.getElementById('verBadge');if(b)b.textContent='v'+APP_VER+' '+APP_CODENAME;})();
+apiFetch('/exchangeInfo').then(ei=>{if(ei)buildClassMaps(ei);});
 
 // -- HEATMAP INTEGRATION -----------------------------------
 const HM={coin:'BTC',range:'1h',price:0,ob:{bids:[],asks:[]},timer:null,loaded:false};
