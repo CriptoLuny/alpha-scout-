@@ -392,8 +392,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 /* ASSET CLASS TAGS (TradFi vs Crypto) */
 .ct-cls{font-size:9px;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:bold;white-space:nowrap;border:1px solid}
 .cls-stock{background:rgba(255,102,0,.12);color:var(--orange);border-color:rgba(255,102,0,.3)}
-.cls-index{background:rgba(255,102,0,.08);color:#ff9944;border-color:rgba(255,102,0,.22)}
 .cls-comm{background:rgba(240,192,0,.1);color:var(--alpha);border-color:rgba(240,192,0,.28)}
+.cls-preipo{background:rgba(255,0,200,.1);color:#ff00cc;border-color:rgba(255,0,200,.3)}
+.cls-cindex{background:rgba(160,32,240,.1);color:#c060ff;border-color:rgba(160,32,240,.28)}
 .cls-rwa{background:rgba(0,229,255,.08);color:var(--accent);border-color:rgba(0,229,255,.22)}
 
 /* OI DECOMPOSITION TAGS */
@@ -779,6 +780,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.1 DECOMP
+//   - Asset class rebuilt on Binance's own contractType
+//     "TRADIFI_PERPETUAL" (their typo, extra I), verified
+//     against a live exchangeInfo probe of 836 USDT symbols.
+//   - FIX: XAU/XAG/XPT/XPD/COPPER/CL/BZ/NATGAS were classed
+//     STOCK. Commodity lives in underlyingType, not subType.
+//   - FIX: BTCDOM / DEFI / ALL were excluded from the scan as
+//     TradFi. They are CRYPTO indices -> new CINDEX class, IN.
+//   - Equity region tracked: US / HK / KR / CN. Sessions do not
+//     overlap, so "off-hours" is four windows, not one.
+//   - New PREIPO class (OPENAI, ANTHROPIC).
+//   - Ticker fallback demoted: only fires when exchangeInfo is
+//     unreachable, removing the BE/COIN/ME collision risk.
+//
 //  v2.0 DECOMP
 //   - REAL OI via /futures/data/openInterestHist (coins + USDT
 //     in one call). v1.x read k[7] = quote volume and labelled
@@ -798,7 +813,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.0';
+const APP_VER='2.1';
 const APP_CODENAME='DECOMP';
 
 // -- SIGNAL INFO -------------------------------------------
@@ -894,18 +909,36 @@ const OI_TF={'1m':'5m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d
 const OI_LOOKBACK=6;   // colku periodi nazad se sporeduva (6 x period)
 
 // -- ASSET CLASS CONFIG (TradFi perps vs crypto) --
-// Binance TradFi Perpetual Contracts = stock / index / commodity perps (AAPL, QQQ, XAU...).
-// These are NOT crypto: off-hours candles are smoothed by the index price, so the
-// liq-hunt detector (body/range<0.38) fires garbage on them every weekend.
-// Detection is metadata-first (exchangeInfo), ticker list only as fallback.
-const TRADFI_SUB_HINTS=['STOCK','EQUITY','TRADFI','TRAD-FI','COMMODIT','METAL','INDEX','ETF','FOREX','FX'];
+// Verified against a live /fapi/v1/exchangeInfo probe (836 USDT symbols):
+// Binance carries its own dedicated contractType for these -- note THEIR typo,
+// "TRADIFI_PERPETUAL" with the extra I. That field alone separates 179 TradFi
+// symbols cleanly, so it is the primary discriminator and everything else is
+// only used to sub-classify within it.
+//
+//   TRADIFI_PERPETUAL | EQUITY      -> US stocks + US ETFs   (TSLA, AAPL, EWY)
+//   TRADIFI_PERPETUAL | HK_EQUITY   -> Hong Kong             (TENCENT, MEITUAN)
+//   TRADIFI_PERPETUAL | KR_EQUITY   -> Korea                 (SAMSUNG, SKHYNIX)
+//   TRADIFI_PERPETUAL | CN_EQUITY   -> Mainland China        (CXMT, UNITREE)
+//   TRADIFI_PERPETUAL | COMMODITY   -> metals + energy       (XAU, XAG, CL)
+//   TRADIFI_PERPETUAL | PREMARKET   -> pre-IPO               (OPENAI, ANTHROPIC)
+//   PERPETUAL        | INDEX        -> CRYPTO indices        (BTCDOM, DEFI, ALL)
+//
+// The last line matters: BTCDOM is BTC dominance, a crypto instrument. Matching
+// on the word "INDEX" alone would wrongly exclude it from the scan.
+const TRADFI_CT='TRADIFI_PERPETUAL';
+const EQUITY_REGION={EQUITY:'US',HK_EQUITY:'HK',KR_EQUITY:'KR',CN_EQUITY:'CN',JP_EQUITY:'JP',TW_EQUITY:'TW'};
+// Fallback only -- used when exchangeInfo is unreachable. Metadata resolved all 21
+// probe watchlist symbols correctly, so this must never override live data:
+// tickers collide (BE=Bloom Energy, COIN=Coinbase, ME=Magic Eden).
 const TRADFI_FB={
   STOCK:['AAPL','MSFT','AMZN','NVDA','TSLA','META','GOOGL','GOOG','TSM','NFLX','AMD','AVGO','ORCL',
-         'COIN','MSTR','HOOD','PLTR','MRVL','FLNC','BE','CRCL','SMCI','INTC','MU','ARM','UBER','BABA'],
-  INDEX:['QQQ','SPY','DIA','IWM','ARKK','VOO','GLDX'],
-  COMMODITY:['XAU','XAG','XPT','XPD','WTI','BRENT','NGAS']
+         'COIN','MSTR','HOOD','PLTR','MRVL','FLNC','BE','CRCL','SMCI','INTC','MU','ARM','UBER','BABA',
+         'PAYP','EWY','EWJ','QQQ','SPY','DIA','IWM','ARKK','TENCENT','MEITUAN','KUAISHOU','POPMART',
+         'SAMSUNG','SKHYNIX','HYUNDAI','NAVER','ZHIPU','MINIMAX','CXMT','UNITREE','OPENAI','ANTHROPIC'],
+  COMMODITY:['XAU','XAG','XPT','XPD','COPPER','CL','BZ','NATGAS']
 };
-let _clsMap={};   // coin -> 'CRYPTO' | 'STOCK' | 'INDEX' | 'COMMODITY' | 'RWA'
+let _clsMap={};   // coin -> 'CRYPTO' | 'RWA' | 'CINDEX' | 'STOCK' | 'COMMODITY' | 'PREIPO'
+let _regMap={};   // coin -> 'US' | 'HK' | 'KR' | 'CN'   (equity session region)
 let _rawMeta={};  // coin -> {ct, ut, sub}  (raw exchangeInfo fields, for the probe)
 
 // -- CCIOBV CROSS CONFIG (SMA1100/SMA2650 на CCI(20) на OBV, 1m бара) --
@@ -1185,7 +1218,7 @@ function getCciObvFlags(coin,lookback){
 // Populated once per scan from /fapi/v1/exchangeInfo (already fetched in doScan).
 // Also fills _catMap, which getCatTag() reads but nothing was ever writing to.
 function buildClassMaps(exchangeInfo){
-  _clsMap={};_rawMeta={};_catMap={};
+  _clsMap={};_regMap={};_rawMeta={};_catMap={};
   if(!exchangeInfo?.symbols)return;
   exchangeInfo.symbols.forEach(s=>{
     if(!s.symbol.endsWith('USDT')||s.symbol.includes('_'))return;
@@ -1197,6 +1230,7 @@ function buildClassMaps(exchangeInfo){
     _rawMeta[coin]={ct,ut,sub:subArr};
     _catMap[coin]=subArr[0]||'';
     _clsMap[coin]=classify(coin,ct,ut,sub);
+    if(EQUITY_REGION[ut])_regMap[coin]=EQUITY_REGION[ut];
   });
 }
 
@@ -1204,32 +1238,41 @@ function buildClassMaps(exchangeInfo){
 // so every comparison here is uppercased before matching.
 function classify(coin,ct,ut,sub){
   const subHit=h=>sub.some(x=>x.includes(h));
-  if(sub.some(x=>x==='RWA'))return 'RWA';            // crypto token with RWA narrative - STAYS in scan
-  // 1) explicit metadata on the symbol itself wins
-  if(TRADFI_SUB_HINTS.some(h=>subHit(h))){
-    if(subHit('COMMODIT')||subHit('METAL'))return 'COMMODITY';
-    if(subHit('INDEX')||subHit('ETF'))return 'INDEX';
-    return 'STOCK';
-  }
-  // 2) curated ticker list beats underlyingType-only inference
-  //    (NVDA can carry underlyingType INDEX and still be a single stock)
-  for(const k in TRADFI_FB)if(TRADFI_FB[k].includes(coin))return k;
-  // 3) anything Binance does not back with a COIN underlying is TradFi of some kind
-  if(ut&&ut!=='COIN'&&ut!=='PREMARKET'){
+  // 1) THE discriminator: Binance's own contract type for TradFi perps.
+  if(ct===TRADFI_CT){
     if(ut.includes('COMMODIT')||ut.includes('METAL'))return 'COMMODITY';
-    if(ut.includes('INDEX')||ut.includes('ETF'))return 'INDEX';
-    return 'STOCK';
+    if(ut==='PREMARKET'||subHit('PRE-IPO'))return 'PREIPO';
+    return 'STOCK';   // EQUITY / HK_EQUITY / KR_EQUITY / CN_EQUITY, incl. equity ETFs
   }
-  if(ct&&TRADFI_SUB_HINTS.some(h=>ct.includes(h)))return 'STOCK';
+  // 2) Crypto index products (BTCDOM, DEFI, ALL) are crypto and STAY in the scan.
+  if(ut==='INDEX'||subHit('INDEX'))return 'CINDEX';
+  // 3) Crypto token with an RWA narrative -- also crypto, tagged for context.
+  //    Note PAXG/XAUT sit here: crypto orderbooks, but gold-driven.
+  if(sub.some(x=>x==='RWA'))return 'RWA';
+  // 4) Ticker fallback, only when exchangeInfo gave us nothing at all for this symbol.
+  if(!ct&&!ut&&!sub.length){
+    for(const k in TRADFI_FB)if(TRADFI_FB[k].includes(coin))return k;
+  }
   return 'CRYPTO';
 }
-const assetClass=c=>_clsMap[c.toUpperCase()]||(function(){for(const k in TRADFI_FB)if(TRADFI_FB[k].includes(c.toUpperCase()))return k;return 'CRYPTO';})();
-const isTradFi=c=>{const k=assetClass(c);return k==='STOCK'||k==='INDEX'||k==='COMMODITY';};
-const CLS_TAG={STOCK:['cls-stock','ACC'],INDEX:['cls-index','IDX'],COMMODITY:['cls-comm','COM'],RWA:['cls-rwa','RWA']};
+const assetClass=c=>{
+  const k=c.toUpperCase();
+  if(_clsMap[k])return _clsMap[k];
+  if(!Object.keys(_clsMap).length){   // exchangeInfo missing entirely -> fallback list
+    for(const x in TRADFI_FB)if(TRADFI_FB[x].includes(k))return x;
+  }
+  return 'CRYPTO';
+};
+const assetRegion=c=>_regMap[c.toUpperCase()]||'';
+const isTradFi=c=>{const k=assetClass(c);return k==='STOCK'||k==='COMMODITY'||k==='PREIPO';};
+const CLS_TAG={STOCK:['cls-stock','ACC'],COMMODITY:['cls-comm','COM'],PREIPO:['cls-preipo','IPO'],
+               CINDEX:['cls-cindex','IDX'],RWA:['cls-rwa','RWA']};
 function getClsTag(coin){
   const k=assetClass(coin);const t=CLS_TAG[k];
   if(!t)return '';
-  return `<span class="ct-cls ${t[0]}">${k==='CRYPTO'?'':'🏛 '}${t[1]}</span>`;
+  const reg=k==='STOCK'?assetRegion(coin):'';
+  const icon=(k==='STOCK'||k==='COMMODITY'||k==='PREIPO')?'🏛 ':'';
+  return `<span class="ct-cls ${t[0]}">${icon}${t[1]}${reg?' '+reg:''}</span>`;
 }
 
 // -- REAL OI (openInterestHist) ---------------------------
@@ -2703,7 +2746,7 @@ function buildDigest(){
   const top=[...S.signals].sort((a,b)=>b.score-a.score).slice(0,12);
   const favs=S.signals.filter(s=>s.isFav&&!top.includes(s));
   const rows=[...top,...favs];
-  const CL={CRYPTO:'CRY',STOCK:'ACC',INDEX:'IDX',COMMODITY:'COM',RWA:'RWA'};
+  const CL={CRYPTO:'CRY',STOCK:'ACC',COMMODITY:'COM',PREIPO:'IPO',CINDEX:'IDX',RWA:'RWA'};
   const n=x=>(x===null||x===undefined||isNaN(x))?'—':((x>=0?'+':'')+x.toFixed(1));
 
   let o='aSCOUT v'+APP_VER+' '+APP_CODENAME+' | DIGEST | '+stamp+' | TF='+S.tf+' | universe='+uni
@@ -2723,7 +2766,7 @@ function buildDigest(){
     const tags=(s.sigs||[]).map(x=>x.l).join(';');
     o+=[
       s.coin,
-      CL[assetClass(s.coin)]||'?',
+      (CL[assetClass(s.coin)]||'?')+(assetRegion(s.coin)?'-'+assetRegion(s.coin):''),
       af,
       fmt(s.price),
       n(s.priceChg),
@@ -2754,16 +2797,24 @@ function buildDigest(){
 function buildProbe(){
   if(!Object.keys(_rawMeta).length)return 'Нема exchangeInfo — притисни СКЕНИРАЈ прво (макар една секунда).';
   const map={},hits=[];
-  const W=['AAPL','MSFT','AMZN','NVDA','TSLA','META','GOOGL','TSM','QQQ','SPY','XAU','XAG',
-           'MRVL','FLNC','BE','BTC','ETH','ONDO','PENDLE','ARIA','BEAT'];
+  const W=['AAPL','MSFT','AMZN','NVDA','TSLA','META','GOOGL','TSM','QQQ','SPY','EWJ','XAU','XAG',
+           'CL','NATGAS','TENCENT','SAMSUNG','CXMT','OPENAI','ANTHROPIC','BTCDOM','DEFI','ALL',
+           'PAXG','XAUT','MANTRA','CFG','MRVL','FLNC','BE','BTC','ETH','ONDO','PENDLE','ARIA','BEAT'];
   Object.entries(_rawMeta).forEach(([coin,m])=>{
     const k=(m.ct||'?')+' | '+(m.ut||'?')+' | '+JSON.stringify(m.sub||[]);
     (map[k]=map[k]||[]).push(coin);
-    if(W.includes(coin))hits.push(coin.padEnd(7)+'-> '+(_clsMap[coin]||'?').padEnd(10)+'| '+k);
+    if(W.includes(coin))hits.push(coin.padEnd(10)+'-> '+((_clsMap[coin]||'?')+(_regMap[coin]?'/'+_regMap[coin]:'')).padEnd(12)
+      +(isTradFi(coin)?'[OUT] ':'[ IN] ')+'| '+k);
   });
   let o='aSCOUT v'+APP_VER+' '+APP_CODENAME+' | EXCHANGEINFO PROBE | USDT симболи: '+Object.keys(_rawMeta).length+'\n';
-  o+='Класификација: '+Object.entries(Object.values(_clsMap).reduce((a,c)=>(a[c]=(a[c]||0)+1,a),{}))
-      .map(([k,v])=>k+'='+v).join('  ')+'\n\n=== ГРУПИ (contractType | underlyingType | subType) ===\n';
+  const counts=Object.values(_clsMap).reduce((a,c)=>(a[c]=(a[c]||0)+1,a),{});
+  const out=Object.keys(_clsMap).filter(c=>isTradFi(c)).length;
+  o+='Класификација: '+Object.entries(counts).map(([k,v])=>k+'='+v).join('  ')+'\n';
+  o+='Скен: '+(Object.keys(_clsMap).length-out)+' внатре · '+out+' исклучени (TradFi)'
+    +(S.excludeTradFi?'':'  [toggle ON — сега влегуваат сите]')+'\n';
+  const regs=Object.values(_regMap).reduce((a,c)=>(a[c]=(a[c]||0)+1,a),{});
+  if(Object.keys(regs).length)o+='Берзи: '+Object.entries(regs).map(([k,v])=>k+'='+v).join('  ')+'\n';
+  o+='\n=== ГРУПИ (contractType | underlyingType | subType) ===\n';
   Object.entries(map).sort((a,b)=>b[1].length-a[1].length).forEach(([k,v])=>{
     o+=k+'  ['+v.length+']\n   '+v.slice(0,12).join(', ')+(v.length>12?' …':'')+'\n\n';
   });
