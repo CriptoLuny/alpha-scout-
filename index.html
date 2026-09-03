@@ -780,6 +780,23 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.3 DECOMP
+//   - FIX: dir was inverted on every liq-hunt row. liqType names
+//     the EVENT ('bull' = short squeeze) whose expected follow
+//     through is DOWN. 294 of 524 rows disagreed with their own
+//     CONFLUENCE verdict. dir now follows confluence first.
+//   - OI curve SHAPE from the full 30-point series the endpoint
+//     was already returning and v2.2 threw away after 2 points:
+//     RISING / PEAK / REBUILD / FADED / FLAT, plus % from peak.
+//     REBUILD is the case that reads as fresh accumulation and
+//     is actually a bounce after a collapse.
+//   - REBUILD no longer casts a bullish OI vote in CONFLUENCE.
+//   - Range position: fHI% / fLO% and window bar count. Flat on
+//     24h while 24% under a two-day-old high is a downtrend.
+//   - CVD trajectory: is cumulative taker delta at a new window
+//     extreme, i.e. free fall vs drift.
+//   - Banner honours the active filters (same bug the digest had).
+//
 //  v2.2 DECOMP
 //   - FIX: digest ignored the active filters. Header printed
 //     them, rows did not honour them. renderList and
@@ -826,7 +843,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.2';
+const APP_VER='2.3';
 const APP_CODENAME='DECOMP';
 
 // -- SIGNAL INFO -------------------------------------------
@@ -1000,7 +1017,16 @@ async function fetchTakerCVD(coin,tf){
   const buySellRatio=tS>0?(tB/tS):1;
   const lastBU=parseFloat(kl[kl.length-1][10]);
   const lastTU=parseFloat(kl[kl.length-1][7]);
-  return{cvdDelta,buyPct:tB/(tB+tS)*100,totalBuy:tB,totalSell:tS,buySellRatio,buyVol:lastBU,sellVol:lastTU-lastBU};
+  // Running cumulative taker delta. cvdDelta above compares two halves, which cannot
+  // tell "drifting sideways" from "free fall". Whether the last point IS the extreme
+  // of the window answers that directly.
+  let cum=0;const cser=[];
+  kl.forEach(k=>{const b=parseFloat(k[10]),t=parseFloat(k[7]);cum+=(2*b-t);cser.push(cum);});
+  const last=cser[cser.length-1];
+  const cvdNewLow =last<=Math.min(...cser);
+  const cvdNewHigh=last>=Math.max(...cser);
+  return{cvdDelta,buyPct:tB/(tB+tS)*100,totalBuy:tB,totalSell:tS,buySellRatio,
+    buyVol:lastBU,sellVol:lastTU-lastBU,cvdNewLow,cvdNewHigh,cvdBars:cser.length};
 }
 
 // -- GLOBAL L/S RATIO --
@@ -1312,15 +1338,38 @@ async function fetchOiHist(coin,tf){
   const reval=C0*(P1-P0);        // same positions, new price
   const flow =(C1-C0)*P0;        // real positions opened/closed
   const cross=dV-reval-flow;
+  const oiCoinsChgV=((C1-C0)/C0)*100;
   const mag=Math.abs(reval)+Math.abs(flow)+Math.abs(cross);
+
+  // The endpoint returns 30 points and v2.2 used exactly two of them. The SHAPE of the
+  // curve is what separates "fresh accumulation" from "rebound after a collapse" --
+  // both print the same positive dOI coin %, and only the series tells them apart.
+  const ser=d.map(x=>parseFloat(x.sumOpenInterest)).filter(v=>v>0);
+  const peak=Math.max(...ser);
+  const peakIdx=ser.lastIndexOf(peak);
+  // Trough must be measured AFTER the peak. Taking the window minimum instead would
+  // report a "collapse" for a curve that only ever rose from a low starting point.
+  const post=ser.slice(peakIdx);
+  const trough=Math.min(...post);
+  const fromPeak=peak>0?((C1-peak)/peak)*100:0;
+  const drawdown=peak>0?((trough-peak)/peak)*100:0;   // deepest drop after the peak
+  const offTrough=trough>0?((C1-trough)/trough)*100:0;
+  let shape='FLAT';
+  if(fromPeak>-5&&oiCoinsChgV>2)      shape='RISING';   // at the highs and still building
+  else if(fromPeak>-5)                shape='PEAK';     // at the highs, stalled
+  else if(drawdown<-20&&offTrough>15) shape='REBUILD';  // collapsed, now rebuilding -- the FLOCK trap
+  else if(fromPeak<-15)               shape='FADED';    // well off the highs, unwinding
+
   const res={
     oiCoins:C1,oiUsdt:V1,
     oiUsdtChg:(dV/V0)*100,
-    oiCoinsChg:((C1-C0)/C0)*100,
+    oiCoinsChg:oiCoinsChgV,
     reval,flow,cross,
     dominates:Math.abs(flow)>=Math.abs(reval)?'FLOW':'REVAL',
     revalPct:mag>0?Math.abs(reval)/mag*100:0,
     flowPct:mag>0?Math.abs(flow)/mag*100:0,
+    shape,fromPeak,drawdown,offTrough,
+    peakCoins:peak,barsSincePeak:ser.length-1-peakIdx,seriesBars:ser.length,
     period:p
   };
   _oiCache[ck]={t:Date.now(),v:res};
@@ -1836,6 +1885,9 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null,coil=false,coilRangePct=null,coilVolRatio=null;
   // OI decomposition (real, from openInterestHist) + the old volume proxy kept separately
   let oiCoinsChg=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
+  let oiShape='',oiFromPeak=null,oiDrawdown=null;
+  let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
+  let cvdNewLow=false,cvdNewHigh=false;
 
   // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
   try{
@@ -1846,6 +1898,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       oiChange=oh.oiUsdtChg;      // hierarchy: OI USDT is the primary number
       oiCoinsChg=oh.oiCoinsChg;   // real position flow
       oiDom=oh.dominates;oiRevalPct=oh.revalPct;oiFlowPct=oh.flowPct;
+      oiShape=oh.shape;oiFromPeak=oh.fromPeak;oiDrawdown=oh.drawdown;
     }else{
       const oi=await apiFetch(`/openInterest?symbol=${coin}USDT`);
       if(oi?.openInterest){oiCoins=parseFloat(oi.openInterest);oiUsdt=oiCoins*price;}
@@ -1907,6 +1960,16 @@ async function analyzeOneTF(coin,ticker,fr,tf){
           coil=true;
         }
       }
+      // -- RANGE POSITION: where price sits inside the scanned window --
+      // "+1.4% on 24h" reads as calm consolidation. It is not, if price is also 24%
+      // below a high set two days ago. That distinction was invisible before.
+      if(klFull&&klFull.length){
+        winHi=Math.max(...klFull.map(k=>parseFloat(k[2])));
+        winLo=Math.min(...klFull.map(k=>parseFloat(k[3])));
+        winBars=klFull.length;
+        if(winHi>0)fromHiPct=((price-winHi)/winHi)*100;
+        if(winLo>0)fromLoPct=((price-winLo)/winLo)*100;
+      }
       // -- FIBO + POC --
       if(klFull&&klFull.length>=15){
         fibo=calcFibo(klFull,150,tf);
@@ -1935,6 +1998,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     const td=await fetchTakerCVD(coin,tf);
     if(td){
       cvdDelta=td.cvdDelta;takerBuyPct=td.buyPct;
+      cvdNewLow=!!td.cvdNewLow;cvdNewHigh=!!td.cvdNewHigh;
       if(Math.abs(priceChg)>1.5&&(priceChg>0)!==(cvdDelta>0)){liqHunt=true;liqType=priceChg>0?'bull':'bear';}
       // Net inflow/outflow detection
       netFlowPct=td.buyPct-50; // positive = more buying than selling
@@ -2061,7 +2125,11 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // 9. OI trend -- real position flow (coins) when available; USDT move alone can be pure
   //    revaluation, which is mechanical and should not cast a directional vote.
   if(oiReal){
-    if(Math.abs(oiCoinsChg)>5) cvotes.push({name:'OI Тренд',detail:'коини '+(oiCoinsChg>=0?'+':'')+oiCoinsChg.toFixed(1)+'% · USDT '+(oiChange>=0?'+':'')+oiChange.toFixed(1)+'% ('+oiDom+')',vote:oiCoinsChg>0?1:-1});
+    // REBUILD = OI collapsed inside the window and is only now recovering. The coin %
+    // looks like fresh accumulation and is not; it must not cast a bullish vote.
+    if(oiShape==='REBUILD'&&oiCoinsChg>5)
+      cvotes.push({name:'OI Тренд',detail:'REBUILD по колапс '+oiDrawdown.toFixed(0)+'% — отскок, не свежа акумулација',vote:0});
+    else if(Math.abs(oiCoinsChg)>5) cvotes.push({name:'OI Тренд',detail:'коини '+(oiCoinsChg>=0?'+':'')+oiCoinsChg.toFixed(1)+'% · USDT '+(oiChange>=0?'+':'')+oiChange.toFixed(1)+'% ('+oiDom+') '+oiShape,vote:oiCoinsChg>0?1:-1});
   }else if(Math.abs(oiChange)>5) cvotes.push({name:'OI Тренд (proxy)',detail:(oiChange>=0?'+':'')+oiChange.toFixed(1)+'%',vote:oiChange>0?1:-1});
   // 10. Funding Rate
   if(Math.abs(fr)>0.04) cvotes.push({name:'Funding Rate',detail:(fr>=0?'+':'')+fr.toFixed(3)+'%',vote:fr<0?1:-1}); // negative FR = bullish
@@ -2096,9 +2164,16 @@ async function analyzeOneTF(coin,ticker,fr,tf){
 
   if(score===0)return null;
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
-  const dir=liqs>0?liqType||'liq':bulls>bears?'bull':bears>bulls?'bear':'neutral';
+  // dir = what the indicators expect NEXT.
+  // liqType names the EVENT, not the outlook: liqType 'bull' is a short squeeze
+  // (price up, CVD down) whose expected continuation is DOWN. v2.2 assigned it
+  // straight to dir, so 294 of 524 rows reported a direction opposite to their own
+  // CONFLUENCE verdict. Confluence (4+ indicators agreeing) outranks raw tag counting.
+  const dir=confDir!=='none'?confDir:(bulls>bears?'bull':bears>bulls?'bear':'neutral');
   return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
-    oiCoinsChg,oiDom,oiRevalPct,oiFlowPct,oiReal,volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+    oiCoinsChg,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
+    winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
+    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -2157,10 +2232,14 @@ function applyFilters(){
 }
 
 function renderList(){
+  const data=applyFilters();
+  // Banner reads the filtered view too. v2.2 fixed this for the digest but the
+  // banner still read S.signals, so it surfaced coins the list had excluded.
+  const BS=data;
   document.getElementById('liqArea').innerHTML=
-    S.signals.filter(s=>s.confScore>=5).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,208,0,.08);border-color:rgba(255,208,0,.4);color:var(--yellow);cursor:pointer" onclick="openDetail('${s.coin}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.confLabel} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">${s.tf} · ${s.ts}</span></div>`)
-    .concat(S.signals.filter(s=>s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc;cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
-    .concat(S.signals.filter(s=>s.liqHunt&&!s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
+    BS.filter(s=>s.confScore>=5).slice(0,2).map(s=>`<div class="liq-b" style="background:rgba(255,208,0,.08);border-color:rgba(255,208,0,.4);color:var(--yellow);cursor:pointer" onclick="openDetail('${s.coin}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.confLabel} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">${s.tf} · ${s.ts}</span></div>`)
+    .concat(BS.filter(s=>s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="background:rgba(255,0,200,.08);border-color:rgba(255,0,200,.3);color:#ff00cc;cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">🔥 <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — SQUEEZE ACTIVATION @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
+    .concat(BS.filter(s=>s.liqHunt&&!s.squeezeActivation&&!s.confScore).slice(0,1).map(s=>`<div class="liq-b" style="cursor:pointer" onclick="showSqueezeExplain(event,'${s.coin}','${s.tf}','${fmt(s.price)}')">⚡ <b>${s.coin}USDT</b>${s.isAlpha?' 🅐':''}${s.isFav?' ⭐':''} — ${s.liqType==='bull'?'SHORT SQ':'LONG DMP'} @ $${fmt(s.price)} <span style="margin-left:auto;color:var(--muted);font-size:10px">клик за детали · ${s.tf} · ${s.ts}</span></div>`))
     .join('');
   document.getElementById('sBull').textContent=S.signals.filter(s=>s.dir==='bull').length;
   document.getElementById('sBear').textContent=S.signals.filter(s=>s.dir==='bear').length;
@@ -2168,7 +2247,6 @@ function renderList(){
   document.getElementById('sAlpha').textContent=S.signals.filter(s=>s.isAlpha).length;
   document.getElementById('sFav').textContent=S.signals.filter(s=>s.isFav).length;
   document.getElementById('sTot').textContent=S.signals.length;
-  const data=applyFilters();
   if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+'USDT не пронајден':S.filters.has('fav')?'Нема favorites':'Нема сигнали за избраните филтри'}</div>`;return;}
   document.getElementById('list').innerHTML=data.map(rowHTML).join('');
 }
@@ -2787,10 +2865,17 @@ function buildDigest(){
     +' | LIQ '+S.signals.filter(s=>s.liqHunt).length
     +' | ALPHA '+S.signals.filter(s=>s.isAlpha).length
     +' | TOTAL '+S.signals.length+'   (unfiltered totals)\n';
-  o+='CVD% = taker buy-share shift, NOT cumulative CVD. OI◆ = real coin flow. '
-    +'DOM = FLOW (real positions) vs REVAL (price revaluation). '
-    +'BTC = Pearson corr vs BTC on 1h/150 bars; |corr|<0.4 = decoupled.\n';
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|OI$|dOI$%|dOI◆%|DOM|CVD%|TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
+  o+='CVD% = taker buy-share shift, NOT cumulative CVD. CVDt = trajectory: LOW = cumulative '
+    +'delta at a new window low (free fall), HIGH = new high, -- = neither.\n';
+  o+='OI◆ = real coin flow. DOM = FLOW (real positions) vs REVAL (price revaluation).\n';
+  o+='SHAPE = OI curve over ~30 periods: RISING (at highs, building) / PEAK (at highs, stalled) / '
+    +'REBUILD (collapsed, now recovering -- NOT fresh accumulation) / FADED (unwinding) / FLAT.\n';
+  o+='fHI/fLO = % from the high and low of the scanned window (bars column). A coin can be flat '
+    +'on 24h and still be far under a recent high -- that is a downtrend, not consolidation.\n';
+  o+='BTC = Pearson corr vs BTC on 1h/150 bars; |corr|<0.4 = decoupled, but corr collapses toward '
+    +'0 on coins making large solo moves, so it only carries meaning on quiet ones.\n';
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|CVD%|CVDt|'
+    +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
     const af=(s.isAlpha?'A':'-')+(s.isFav?'F':'-');
@@ -2804,11 +2889,17 @@ function buildDigest(){
       fmt(s.price),
       n(s.priceChg),
       n(s.tfPriceChg),
+      s.winBars||'—',
+      n(s.fromHiPct),
+      n(s.fromLoPct),
       s.oiUsdt>0?fmtM(s.oiUsdt):'—',
       s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
       s.oiReal?n(s.oiCoinsChg):'n/a',
       s.oiDom||'n/a',
+      s.oiShape||'n/a',
+      s.oiReal?n(s.oiFromPeak):'n/a',
       n(s.cvdDelta),
+      s.cvdNewLow?'LOW':s.cvdNewHigh?'HIGH':'--',
       s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
       (s.fr>=0?'+':'')+(s.fr||0).toFixed(4),
       s.lsRatio?s.lsRatio.toFixed(2):'—',
