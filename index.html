@@ -843,8 +843,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.3';
-const APP_CODENAME='DECOMP';
+const APP_VER='2.4';
+const APP_CODENAME='MOMZ';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1871,10 +1871,33 @@ function calcSqzMomAO(klines,diWin){
 
   const i=n-1;
   const risingVal=VAL[i]>VAL[i-1],risingAO=AO[i]>AO[i-1];
+  // ── MOMENTUM LAYER A/B (v2.4) ────────────────────────────
+  // sTR = rma(TR,14) е ATR(14) по Wilder — веќе пресметан горе, не се повторува.
+  // i = последен ЗАТВОРЕН бар (живата свеќа е отфрлена на почетокот од функцијата),
+  // значи моментумот ја наследува истата no-repaint дисциплина како DI кросот.
+  const MOMN=14, SLOPEK=6;
+  const atr=sTR[i];
+  let momz=null, valz=null, mslope=null, mflip=false;
+  if(atr>0 && !isNaN(atr)){
+    momz = (C[i]-C[i-MOMN])/atr;                        // поместување во ATR-и
+    valz = isNaN(VAL[i]) ? null : VAL[i]/atr;           // нормализиран SQZMOM
+    const ms=[];
+    for(let j=i-SLOPEK+1;j<=i;j++){
+      if(j-MOMN<0||isNaN(sTR[j])||sTR[j]<=0){ms.length=0;break;}
+      ms.push((C[j]-C[j-MOMN])/sTR[j]);
+    }
+    if(ms.length===SLOPEK){
+      let sx=0,sy=0,sxy=0,sxx=0;
+      for(let j=0;j<SLOPEK;j++){sx+=j;sy+=ms[j];sxy+=j*ms[j];sxx+=j*j;}
+      mslope=(SLOPEK*sxy-sx*sy)/(SLOPEK*sxx-sx*sx);
+      mflip=(ms[0]>0)!==(ms[SLOPEK-1]>0);
+    }
+  }
   const corr=(risingVal&&risingAO)?'bull':((!risingVal&&!risingAO)?'bear':'div');
   return{
     sqzOn:sqzOnAt(i),val:VAL[i],ao:AO[i],risingVal,risingAO,corr,
     adx:ADX[i],diPlus:DIP[i],diMinus:DIM[i],
+    atr,momz,valz,mslope,mflip,
     bullSignal,bearSignal,bullAdxBrk,bearAdxBrk,diCrossUp,diCrossDown
   };
 }
@@ -2874,7 +2897,10 @@ function buildDigest(){
     +'on 24h and still be far under a recent high -- that is a downtrend, not consolidation.\n';
   o+='BTC = Pearson corr vs BTC on 1h/150 bars; |corr|<0.4 = decoupled, but corr collapses toward '
     +'0 on coins making large solo moves, so it only carries meaning on quiet ones.\n';
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|CVD%|CVDt|'
+  o+='MOMz = (close − close[14]) / ATR(14) — поместување во ATR-и, споредливо меѓу монети. '
+    +'VALz = SQZMOM VAL / ATR(14). MSLP = наклон на MOMz преку 6 бара. '
+    +'Прагови СЕ УШТЕ НЕКАЛИБРИРАНИ — сирови броеви, не гласаат во score.\n';
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|CVD%|CVDt|'
     +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
@@ -2898,6 +2924,9 @@ function buildDigest(){
       s.oiDom||'n/a',
       s.oiShape||'n/a',
       s.oiReal?n(s.oiFromPeak):'n/a',
+      (s.sqz&&s.sqz.momz!=null)?((s.sqz.momz>=0?'+':'')+s.sqz.momz.toFixed(2)):'—',
+      (s.sqz&&s.sqz.valz!=null)?((s.sqz.valz>=0?'+':'')+s.sqz.valz.toFixed(2)):'—',
+      (s.sqz&&s.sqz.mslope!=null)?((s.sqz.mslope>=0?'+':'')+s.sqz.mslope.toFixed(3))+(s.sqz.mflip?'*':''):'—',
       n(s.cvdDelta),
       s.cvdNewLow?'LOW':s.cvdNewHigh?'HIGH':'--',
       s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
