@@ -543,6 +543,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-fr"        onclick="setFil('fr',this)">💰 FR EXT</div>
     <div class="ftab f-oi"        onclick="setFil('oisurge',this)">📈 OI SURGE</div>
     <div class="ftab"             onclick="setFil('oiflow',this)" style="border-color:rgba(0,255,136,.25);color:var(--green)">◆ OI FLOW</div>
+    <div class="ftab"             onclick="setFil('mdrive',this)"  style="border-color:rgba(0,255,136,.35);color:var(--green);font-weight:700">⚙ DRIVE</div>
+    <div class="ftab"             onclick="setFil('mabsorb',this)" style="border-color:rgba(255,170,0,.4);color:#ffaa00;font-weight:700">⚙ ABSORB</div>
+    <div class="ftab"             onclick="setFil('msqueeze',this)" style="border-color:rgba(255,0,200,.3);color:#ff00cc">⚙ SQUEEZE</div>
+    <div class="ftab"             onclick="setFil('maccel',this)"  style="border-color:rgba(0,229,255,.25);color:var(--accent)">↗ ACCEL</div>
+    <div class="ftab"             onclick="setFil('mdecel',this)"  style="border-color:rgba(255,34,68,.25);color:var(--red)">↘ DECEL</div>
     <div class="ftab"             onclick="setFil('tradfi',this)" style="border-color:rgba(255,102,0,.3);color:var(--orange)">🏛 TRADFI</div>
     <div class="ftab f-cvd"       onclick="setFil('cvd',this)">📊 CVD DIV</div>
     <div class="ftab f-strong"    onclick="setFil('strong',this)">⚡ SCORE 7+</div>
@@ -981,6 +986,13 @@ const CCIOBV_MAX_SCAN_COINS=150;     // капа за целосен скен (f
 // -- COIL CONFIG (тесен range + опаѓачки волумен + JMA>DWMA -- пред-пробивна компресија) --
 const COIL_RANGE_MAX=8;      // % — (max High - min Low)/last Close во прозорецот N мора да е под ова
 const COIL_VOL_RATIO_MAX=0.7;// понова половина волумен / постара половина волумен во прозорецот N мора да е под ова
+// ── MOMENTUM (v2.4) ─────────────────────────────────────────
+// Праговите се ПЕРЦЕНТИЛИ низ универзумот на тековниот скен, не фиксни броеви.
+// Фиксен праг калибриран на бичи ден дава DECEL на сè во медвешки скен и обратно.
+const MOM_ACCEL_PCT=70;      // MSLP во горните 30% од универзумот = ACCEL
+const MOM_DECEL_PCT=30;      // MSLP во долните 30% = DECEL
+const MOM_MIN_POP=30;        // под ова население перцентил е бесмислен -> состојба '—'
+const MOM_OI_EPS=1.0;        // |OI◆ %| под ова се смета за рамен OI -> без режим
 
 const S={
   scanning:false,timer:null,abort:false,
@@ -1487,7 +1499,54 @@ async function doScan(){
       await sleep(sl);
     }
   }
-  if(!S.abort){S.signals=buildSignals(S._partial);S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildSetups();}
+  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildSetups();}
+}
+
+// ── MOMENTUM RANKS (v2.4) ───────────────────────────────────
+// Cross-sectional калибрација. Мора да се вика ПО целиот скен — перцентил
+// бара цела популација, а analyzeOneTF гледа само една монета.
+// Групирано по TF: MOMz на 5m и MOMz на 4h не се споредливи.
+function assignMomentumRanks(signals){
+  const byTF={};
+  signals.forEach(s=>{(byTF[s.tf]=byTF[s.tf]||[]).push(s);});
+  const pctOf=(sorted,v)=>{
+    let lo=0,hi=sorted.length;
+    while(lo<hi){const mid=(lo+hi)>>1;if(sorted[mid]<v)lo=mid+1;else hi=mid;}
+    return sorted.length?(lo/sorted.length)*100:null;
+  };
+  Object.values(byTF).forEach(group=>{
+    const mv=group.map(s=>s.sqz?.momz).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    const sv=group.map(s=>s.sqz?.mslope).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    group.forEach(s=>{
+      s.momPct=null;s.mslpPct=null;s.mState='—';s.mRegime=null;s.mPop=sv.length;
+      if(!s.sqz)return;
+      if(s.sqz.momz!=null&&mv.length>=MOM_MIN_POP)s.momPct=pctOf(mv,s.sqz.momz);
+      if(s.sqz.mslope!=null&&sv.length>=MOM_MIN_POP)s.mslpPct=pctOf(sv,s.sqz.mslope);
+      if(s.mslpPct!=null){
+        s.mState=s.sqz.mflip?'FLIP'
+                :s.mslpPct>=MOM_ACCEL_PCT?'ACCEL'
+                :s.mslpPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
+      }
+      s.mRegime=momRegime(s);
+    });
+  });
+  return signals;
+}
+
+// OI × Моментум режим. Оската за OI е РЕАЛЕН coin flow, не USDT —
+// USDT сам по себе може да е чиста ревалуација и не смее да носи режим.
+// Без real OI, со рамен OI, или без ACCEL/DECEL -> нема режим (null),
+// затоа што погодување тука е полошо од молчење.
+function momRegime(s){
+  if(!s||!s.oiReal)return null;
+  const oiUp=s.oiCoinsChg>MOM_OI_EPS,oiDn=s.oiCoinsChg<-MOM_OI_EPS;
+  if(!oiUp&&!oiDn)return null;
+  const acc=s.mState==='ACCEL',dec=s.mState==='DECEL';
+  if(!acc&&!dec)return null;
+  if(oiUp&&acc)return 'DRIVE';    // вистинска експанзија — пари влегуваат и цената реагира
+  if(oiUp&&dec)return 'ABSORB';   // нови позиции, цената НЕ реагира — апсорпција пред PEAK
+  if(oiDn&&acc)return 'SQUEEZE';  // движење од затворања, не од нови пари — не трае
+  return 'DEAD';
 }
 
 function buildSignals(partial){
@@ -2235,6 +2294,11 @@ const FILTER_MAP={
   cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
   tradfi: s=>isTradFi(s.coin),
   oiflow: s=>s.oiReal&&s.oiDom==='FLOW'&&Math.abs(s.oiCoinsChg)>3,
+  mdrive:  s=>s.mRegime==='DRIVE',
+  mabsorb: s=>s.mRegime==='ABSORB',
+  msqueeze:s=>s.mRegime==='SQUEEZE',
+  maccel:  s=>s.mState==='ACCEL',
+  mdecel:  s=>s.mState==='DECEL',
 };
 function numInput(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
 function applyFilters(){
@@ -2284,6 +2348,20 @@ function rowHTML(s){
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
     tags.push(`<span class="ctag ${ccls}" data-coin="${s.coin}" onclick="event.stopPropagation();showConfluenceDetail(event,this.dataset.coin)">⚡${s.confLabel}</span>`);
+  }
+  // MOMENTUM: режимот прв (носи најмногу), инаку само состојбата.
+  if(s.mRegime){
+    const rst={DRIVE:'background:rgba(0,255,136,.16);color:var(--green);border:1px solid rgba(0,255,136,.4)',
+               ABSORB:'background:rgba(255,170,0,.16);color:#ffaa00;border:1px solid rgba(255,170,0,.45)',
+               SQUEEZE:'background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35)',
+               DEAD:'background:rgba(120,120,140,.12);color:#7a7a8c;border:1px solid rgba(120,120,140,.25)'}[s.mRegime];
+    tags.push(`<span class="ctag" style="${rst};font-weight:700">⚙${s.mRegime}</span>`);
+  }else if(s.mState&&s.mState!=='—'&&s.mState!=='STEADY'){
+    const sst={ACCEL:'color:var(--accent);border:1px solid rgba(0,229,255,.3)',
+               DECEL:'color:var(--red);border:1px solid rgba(255,34,68,.3)',
+               FLIP:'color:var(--yellow);border:1px solid rgba(255,208,0,.35)'}[s.mState];
+    const arr={ACCEL:'↗',DECEL:'↘',FLIP:'⇄'}[s.mState];
+    tags.push(`<span class="ctag" style="${sst};background:transparent">${arr}${s.mState}</span>`);
   }
   if(s.btcCorr!==null&&s.btcCorr!==undefined){
     const bab=Math.abs(s.btcCorr);
@@ -2898,9 +2976,36 @@ function buildDigest(){
   o+='BTC = Pearson corr vs BTC on 1h/150 bars; |corr|<0.4 = decoupled, but corr collapses toward '
     +'0 on coins making large solo moves, so it only carries meaning on quiet ones.\n';
   o+='MOMz = (close − close[14]) / ATR(14) — поместување во ATR-и, споредливо меѓу монети. '
-    +'VALz = SQZMOM VAL / ATR(14). MSLP = наклон на MOMz преку 6 бара. '
-    +'Прагови СЕ УШТЕ НЕКАЛИБРИРАНИ — сирови броеви, не гласаат во score.\n';
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|CVD%|CVDt|'
+    +'VALz = SQZMOM VAL / ATR(14). MSLP = наклон на MOMz преку 6 бара, "*" = flip низ нула.\n';
+  o+='MST = состојба од ПЕРЦЕНТИЛ на MSLP во тековниот универзум (ACCEL≥p'+MOM_ACCEL_PCT
+    +' / DECEL≤p'+MOM_DECEL_PCT+' / FLIP / STEADY), не фиксен праг — се адаптира на пазарниот режим.\n';
+  o+='REG = OI◆ × MST: DRIVE (OI↑ + ACCEL, вистинска експанзија) / ABSORB (OI↑ + DECEL, '
+    +'нови позиции без реакција на цената — предупредување пред PEAK) / SQUEEZE (OI↓ + ACCEL, '
+    +'движење од затворања) / DEAD. Празно = нема real OI, рамен OI (|OI◆|<'+MOM_OI_EPS+'%), или STEADY/FLIP.\n';
+  o+='МОМЕНТУМОТ НЕ ГЛАСА ВО SCORE — само набљудување.\n';
+
+  // -- MOMENTUM DISTRIBUTION: пресметана врз ЦЕЛИОТ скен, не врз филтрираните 12 --
+  const mByTF={};
+  S.signals.forEach(s=>{(mByTF[s.tf]=mByTF[s.tf]||[]).push(s);});
+  const qAt=(arr,p)=>{if(!arr.length)return null;const i=Math.min(arr.length-1,Math.max(0,Math.round((p/100)*(arr.length-1))));return arr[i];};
+  Object.keys(mByTF).sort().forEach(t=>{
+    const g=mByTF[t];
+    const mv=g.map(x=>x.sqz?.momz).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    const sv=g.map(x=>x.sqz?.mslope).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    const q=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(2));};
+    const q3=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(3));};
+    o+='MOM DIST ['+t+'] n='+sv.length+'/'+g.length
+      +' | MOMz p10 '+q(mv,10)+' p30 '+q(mv,30)+' p50 '+q(mv,50)+' p70 '+q(mv,70)+' p90 '+q(mv,90)
+      +' | MSLP p10 '+q3(sv,10)+' p30 '+q3(sv,30)+' p50 '+q3(sv,50)+' p70 '+q3(sv,70)+' p90 '+q3(sv,90)+'\n';
+    const cnt=k=>g.filter(x=>x.mState===k).length;
+    const rcnt=k=>g.filter(x=>x.mRegime===k).length;
+    o+='MOM STATE ['+t+'] ACCEL '+cnt('ACCEL')+' | DECEL '+cnt('DECEL')+' | STEADY '+cnt('STEADY')
+      +' | FLIP '+cnt('FLIP')+' | n/a '+cnt('—')
+      +'   REGIME: DRIVE '+rcnt('DRIVE')+' | ABSORB '+rcnt('ABSORB')+' | SQUEEZE '+rcnt('SQUEEZE')
+      +' | DEAD '+rcnt('DEAD')+' | none '+g.filter(x=>!x.mRegime).length+'\n';
+  });
+
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MST|REG|CVD%|CVDt|'
     +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
@@ -2927,6 +3032,8 @@ function buildDigest(){
       (s.sqz&&s.sqz.momz!=null)?((s.sqz.momz>=0?'+':'')+s.sqz.momz.toFixed(2)):'—',
       (s.sqz&&s.sqz.valz!=null)?((s.sqz.valz>=0?'+':'')+s.sqz.valz.toFixed(2)):'—',
       (s.sqz&&s.sqz.mslope!=null)?((s.sqz.mslope>=0?'+':'')+s.sqz.mslope.toFixed(3))+(s.sqz.mflip?'*':''):'—',
+      s.mState||'—',
+      s.mRegime||'—',
       n(s.cvdDelta),
       s.cvdNewLow?'LOW':s.cvdNewHigh?'HIGH':'--',
       s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
