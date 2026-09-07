@@ -854,7 +854,7 @@ const APP_VER='2.5';
 const APP_CODENAME='REGIME';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-09-07-b';
+const APP_BUILD='2026-09-07-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3889,7 +3889,7 @@ fetchAlphaList().then(()=>{
 // Preload exchangeInfo so the class tags / TradFi toggle / probe work before the
 // first scan finishes. doScan refetches it anyway, this is just for immediate UI.
 syncTradFiBtn();
-(function(){const b=document.getElementById('verBadge');if(b)b.textContent='v'+APP_VER+' '+APP_CODENAME;b.title='build '+APP_BUILD;})();
+(function(){const b=document.getElementById('verBadge');if(b)b.textContent='v'+APP_VER+' '+APP_CODENAME+' \u00b7'+APP_BUILD.slice(-1);b.title='build '+APP_BUILD;})();
 apiFetch('/exchangeInfo').then(ei=>{if(ei)buildClassMaps(ei);});
 
 // -- HEATMAP INTEGRATION -----------------------------------
