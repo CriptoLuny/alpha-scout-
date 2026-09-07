@@ -548,6 +548,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab"             onclick="setFil('msqueeze',this)" style="border-color:rgba(255,0,200,.3);color:#ff00cc">⚙ SQUEEZE</div>
     <div class="ftab"             onclick="setFil('maccel',this)"  style="border-color:rgba(0,229,255,.25);color:var(--accent)">↗ ACCEL</div>
     <div class="ftab"             onclick="setFil('mdecel',this)"  style="border-color:rgba(255,34,68,.25);color:var(--red)">↘ DECEL</div>
+    <div class="ftab"             onclick="setFil('mflipup',this)" style="border-color:rgba(255,208,0,.35);color:var(--yellow);font-weight:700">⇄ FLIP↑</div>
+    <div class="ftab"             onclick="setFil('mflipdn',this)" style="border-color:rgba(255,208,0,.35);color:var(--yellow)">⇄ FLIP↓</div>
     <div class="ftab"             onclick="setFil('tradfi',this)" style="border-color:rgba(255,102,0,.3);color:var(--orange)">🏛 TRADFI</div>
     <div class="ftab f-cvd"       onclick="setFil('cvd',this)">📊 CVD DIV</div>
     <div class="ftab f-strong"    onclick="setFil('strong',this)">⚡ SCORE 7+</div>
@@ -852,7 +854,7 @@ const APP_VER='2.5';
 const APP_CODENAME='REGIME';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-09-07-a';
+const APP_BUILD='2026-09-07-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -996,6 +998,9 @@ const MOM_ACCEL_PCT=70;      // MSLP во горните 30% од универз
 const MOM_DECEL_PCT=30;      // MSLP во долните 30% = DECEL
 const MOM_MIN_POP=30;        // под ова население перцентил е бесмислен -> состојба '—'
 const MOM_OI_EPS=1.0;        // |OI◆ %| под ова се смета за рамен OI -> без режим
+// FLIP: смена на знак на MOMz. Праг во ATR единици — без него секое нишање
+// околу нулата се брои како пресврт (154/527 = 29% во првиот реален скен).
+const MOM_FLIP_MIN=0.50;     // минимална амплитуда на замавот за да се смета за пресврт
 
 const S={
   scanning:false,timer:null,abort:false,
@@ -1522,12 +1527,16 @@ function assignMomentumRanks(signals){
     const sv=group.map(s=>s.sqz?.mslope).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
     group.forEach(s=>{
       s.momPct=null;s.mslpPct=null;s.mState='—';s.mRegime=null;s.mPop=sv.length;
+      s.mFlip=false;s.mFlipDir=0;
       if(!s.sqz)return;
       if(s.sqz.momz!=null&&mv.length>=MOM_MIN_POP)s.momPct=pctOf(mv,s.sqz.momz);
       if(s.sqz.mslope!=null&&sv.length>=MOM_MIN_POP)s.mslpPct=pctOf(sv,s.sqz.mslope);
+      // FLIP е паралелен флаг, НЕ состојба. Кога беше состојба со предност,
+      // 154/527 монети губеа ACCEL/DECEL и со тоа и режим. Сега монета може
+      // да биде ACCEL И flipped — што е најинформативната комбинација.
+      s.mFlip=!!s.sqz.mflip;s.mFlipDir=s.sqz.mflipDir||0;
       if(s.mslpPct!=null){
-        s.mState=s.sqz.mflip?'FLIP'
-                :s.mslpPct>=MOM_ACCEL_PCT?'ACCEL'
+        s.mState=s.mslpPct>=MOM_ACCEL_PCT?'ACCEL'
                 :s.mslpPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
       }
       s.mRegime=momRegime(s);
@@ -1545,7 +1554,7 @@ function momRegime(s){
   const oiUp=s.oiCoinsChg>MOM_OI_EPS,oiDn=s.oiCoinsChg<-MOM_OI_EPS;
   if(!oiUp&&!oiDn)return null;
   const acc=s.mState==='ACCEL',dec=s.mState==='DECEL';
-  if(!acc&&!dec)return null;
+  if(!acc&&!dec)return null;      // STEADY -> без режим (FLIP веќе не блокира)
   if(oiUp&&acc)return 'DRIVE';    // вистинска експанзија — пари влегуваат и цената реагира
   if(oiUp&&dec)return 'ABSORB';   // нови позиции, цената НЕ реагира — апсорпција пред PEAK
   if(oiDn&&acc)return 'SQUEEZE';  // движење од затворања, не од нови пари — не трае
@@ -1939,7 +1948,7 @@ function calcSqzMomAO(klines,diWin){
   // значи моментумот ја наследува истата no-repaint дисциплина како DI кросот.
   const MOMN=14, SLOPEK=6;
   const atr=sTR[i];
-  let momz=null, valz=null, mslope=null, mflip=false;
+  let momz=null, valz=null, mslope=null, mflip=false, mflipDir=0;
   if(atr>0 && !isNaN(atr)){
     momz = (C[i]-C[i-MOMN])/atr;                        // поместување во ATR-и
     valz = isNaN(VAL[i]) ? null : VAL[i]/atr;           // нормализиран SQZMOM
@@ -1952,14 +1961,20 @@ function calcSqzMomAO(klines,diWin){
       let sx=0,sy=0,sxy=0,sxx=0;
       for(let j=0;j<SLOPEK;j++){sx+=j;sy+=ms[j];sxy+=j*ms[j];sxx+=j*j;}
       mslope=(SLOPEK*sxy-sx*sy)/(SLOPEK*sxx-sx*sx);
-      mflip=(ms[0]>0)!==(ms[SLOPEK-1]>0);
+      // FLIP е ФЛАГ СО НАСОКА, не состојба. Гола смена на знак не е доволна:
+      // бара материјален замав И материјална тековна страна, инаку осцилација
+      // околу нулата се пријавува како пресврт.
+      const a=ms[0], b=ms[SLOPEK-1];
+      if((a>0)!==(b>0) && Math.abs(b-a)>=MOM_FLIP_MIN && Math.abs(b)>=MOM_FLIP_MIN/2){
+        mflip=true; mflipDir=b>0?1:-1;
+      }
     }
   }
   const corr=(risingVal&&risingAO)?'bull':((!risingVal&&!risingAO)?'bear':'div');
   return{
     sqzOn:sqzOnAt(i),val:VAL[i],ao:AO[i],risingVal,risingAO,corr,
     adx:ADX[i],diPlus:DIP[i],diMinus:DIM[i],
-    atr,momz,valz,mslope,mflip,
+    atr,momz,valz,mslope,mflip,mflipDir,
     bullSignal,bearSignal,bullAdxBrk,bearAdxBrk,diCrossUp,diCrossDown
   };
 }
@@ -2302,6 +2317,8 @@ const FILTER_MAP={
   msqueeze:s=>s.mRegime==='SQUEEZE',
   maccel:  s=>s.mState==='ACCEL',
   mdecel:  s=>s.mState==='DECEL',
+  mflipup: s=>s.mFlip&&s.mFlipDir>0,
+  mflipdn: s=>s.mFlip&&s.mFlipDir<0,
 };
 function numInput(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
 function applyFilters(){
@@ -2359,13 +2376,13 @@ function rowHTML(s){
                SQUEEZE:'background:rgba(255,0,200,.14);color:#ff00cc;border:1px solid rgba(255,0,200,.35)',
                DEAD:'background:rgba(120,120,140,.12);color:#7a7a8c;border:1px solid rgba(120,120,140,.25)'}[s.mRegime];
     tags.push(`<span class="ctag" style="${rst};font-weight:700">⚙${s.mRegime}</span>`);
-  }else if(s.mState&&s.mState!=='—'&&s.mState!=='STEADY'){
+  }else if(s.mState==='ACCEL'||s.mState==='DECEL'){
     const sst={ACCEL:'color:var(--accent);border:1px solid rgba(0,229,255,.3)',
-               DECEL:'color:var(--red);border:1px solid rgba(255,34,68,.3)',
-               FLIP:'color:var(--yellow);border:1px solid rgba(255,208,0,.35)'}[s.mState];
-    const arr={ACCEL:'↗',DECEL:'↘',FLIP:'⇄'}[s.mState];
+               DECEL:'color:var(--red);border:1px solid rgba(255,34,68,.3)'}[s.mState];
+    const arr={ACCEL:'↗',DECEL:'↘'}[s.mState];
     tags.push(`<span class="ctag" style="${sst};background:transparent">${arr}${s.mState}</span>`);
   }
+  if(s.mFlip)tags.push(`<span class="ctag" style="background:rgba(255,208,0,.14);color:var(--yellow);border:1px solid rgba(255,208,0,.4);font-weight:700">⇄FLIP${s.mFlipDir>0?'↑':'↓'}</span>`);
   if(s.btcCorr!==null&&s.btcCorr!==undefined){
     const bab=Math.abs(s.btcCorr);
     const bcls=bab>=0.7?'ct-btc-strong':bab>=0.4?'ct-btc-mod':'ct-btc-free';
@@ -2981,7 +2998,9 @@ function buildDigest(){
   o+='MOMz = (close − close[14]) / ATR(14) — поместување во ATR-и, споредливо меѓу монети. '
     +'VALz = SQZMOM VAL / ATR(14). MSLP = наклон на MOMz преку 6 бара, "*" = flip низ нула.\n';
   o+='MST = состојба од ПЕРЦЕНТИЛ на MSLP во тековниот универзум (ACCEL≥p'+MOM_ACCEL_PCT
-    +' / DECEL≤p'+MOM_DECEL_PCT+' / FLIP / STEADY), не фиксен праг — се адаптира на пазарниот режим.\n';
+    +' / DECEL≤p'+MOM_DECEL_PCT+' / STEADY), не фиксен праг — се адаптира на пазарниот режим.\n';
+  o+='FLIP = ПАРАЛЕЛЕН флаг, не состојба: MOMz сменил знак со замав ≥'+MOM_FLIP_MIN
+    +' ATR. ▲=нагоре ▼=надолу. Монета може да е ACCEL И FLIP▲ истовремено.\n';
   o+='REG = OI◆ × MST: DRIVE (OI↑ + ACCEL, вистинска експанзија) / ABSORB (OI↑ + DECEL, '
     +'нови позиции без реакција на цената — предупредување пред PEAK) / SQUEEZE (OI↓ + ACCEL, '
     +'движење од затворања) / DEAD. Празно = нема real OI, рамен OI (|OI◆|<'+MOM_OI_EPS+'%), или STEADY/FLIP.\n';
@@ -3006,6 +3025,9 @@ function buildDigest(){
       +' | FLIP '+cnt('FLIP')+' | n/a '+cnt('—')
       +'   REGIME: DRIVE '+rcnt('DRIVE')+' | ABSORB '+rcnt('ABSORB')+' | SQUEEZE '+rcnt('SQUEEZE')
       +' | DEAD '+rcnt('DEAD')+' | none '+g.filter(x=>!x.mRegime).length+'\n';
+    o+='MOM FLIP ['+t+'] up '+g.filter(x=>x.mFlip&&x.mFlipDir>0).length
+      +' | down '+g.filter(x=>x.mFlip&&x.mFlipDir<0).length
+      +' | total '+g.filter(x=>x.mFlip).length+' ('+(g.length?(g.filter(x=>x.mFlip).length/g.length*100).toFixed(0):'0')+'%)\n';
   });
 
   o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MST|REG|CVD%|CVDt|'
@@ -3034,7 +3056,7 @@ function buildDigest(){
       s.oiReal?n(s.oiFromPeak):'n/a',
       (s.sqz&&s.sqz.momz!=null)?((s.sqz.momz>=0?'+':'')+s.sqz.momz.toFixed(2)):'—',
       (s.sqz&&s.sqz.valz!=null)?((s.sqz.valz>=0?'+':'')+s.sqz.valz.toFixed(2)):'—',
-      (s.sqz&&s.sqz.mslope!=null)?((s.sqz.mslope>=0?'+':'')+s.sqz.mslope.toFixed(3))+(s.sqz.mflip?'*':''):'—',
+      (s.sqz&&s.sqz.mslope!=null)?((s.sqz.mslope>=0?'+':'')+s.sqz.mslope.toFixed(3))+(s.sqz.mflip?(s.sqz.mflipDir>0?'▲':'▼'):''):'—',
       s.mState||'—',
       s.mRegime||'—',
       n(s.cvdDelta),
