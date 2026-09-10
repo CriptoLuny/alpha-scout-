@@ -854,7 +854,7 @@ const APP_VER='2.5';
 const APP_CODENAME='REGIME';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-09-07-d';
+const APP_BUILD='2026-09-07-e';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1004,6 +1004,9 @@ const MOM_OI_EPS=1.0;        // |OI◆ %| под ова се смета за р�
 // е MIN/2, а медијаната на MOMz е околу -0.23, па скоро цел универзум го
 // поминуваше. 1.00 го крева и замавот и тековната страна на материјално ниво.
 const MOM_FLIP_MIN=1.00;     // минимална амплитуда на замавот за да се смета за пресврт
+// MOMz под ова = монетата нема насока, па "забрзување" е бесмислено -> STEADY.
+// Без deadzone, sign(MOMz) се превртува на шум кај рамни монети.
+const MOM_DIR_EPS=0.15;
 
 const S={
   scanning:false,timer:null,abort:false,
@@ -1525,22 +1528,36 @@ function assignMomentumRanks(signals){
     while(lo<hi){const mid=(lo+hi)>>1;if(sorted[mid]<v)lo=mid+1;else hi=mid;}
     return sorted.length?(lo/sorted.length)*100:null;
   };
+  // mDir = наклон РЕЛАТИВНО на сопствената насока на движењето.
+  // Сиров MSLP е знаковен наклон на знаковна величина, па кај монети што
+  // паѓаат етикетите беа превртени: негативен наклон на негативен моментум
+  // значи ЗАБРЗУВАЊЕ на падот, а се читаше како DECEL. Дополнително, сиров
+  // MSLP е искривен од пазарниот режим (бичи ден го влече нагоре целиот
+  // универзум); mDir е неутрален на тоа.
+  const dirOf=s=>{
+    if(!s.sqz||s.sqz.momz==null||s.sqz.mslope==null)return null;
+    if(isNaN(s.sqz.momz)||isNaN(s.sqz.mslope))return null;
+    if(Math.abs(s.sqz.momz)<MOM_DIR_EPS)return null;   // рамна монета -> нема насока
+    return s.sqz.mslope*Math.sign(s.sqz.momz);
+  };
   Object.values(byTF).forEach(group=>{
     const mv=group.map(s=>s.sqz?.momz).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
-    const sv=group.map(s=>s.sqz?.mslope).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    const dv=group.map(dirOf).filter(x=>x!=null).sort((a,b)=>a-b);
     group.forEach(s=>{
-      s.momPct=null;s.mslpPct=null;s.mState='—';s.mRegime=null;s.mPop=sv.length;
+      s.momPct=null;s.mDir=null;s.mdirPct=null;s.mState='—';s.mRegime=null;s.mPop=dv.length;
       s.mFlip=false;s.mFlipDir=0;
       if(!s.sqz)return;
       if(s.sqz.momz!=null&&mv.length>=MOM_MIN_POP)s.momPct=pctOf(mv,s.sqz.momz);
-      if(s.sqz.mslope!=null&&sv.length>=MOM_MIN_POP)s.mslpPct=pctOf(sv,s.sqz.mslope);
       // FLIP е паралелен флаг, НЕ состојба. Кога беше состојба со предност,
-      // 154/527 монети губеа ACCEL/DECEL и со тоа и режим. Сега монета може
-      // да биде ACCEL И flipped — што е најинформативната комбинација.
+      // 154/527 монети губеа ACCEL/DECEL и со тоа и режим.
       s.mFlip=!!s.sqz.mflip;s.mFlipDir=s.sqz.mflipDir||0;
-      if(s.mslpPct!=null){
-        s.mState=s.mslpPct>=MOM_ACCEL_PCT?'ACCEL'
-                :s.mslpPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
+      s.mDir=dirOf(s);
+      if(s.mDir!=null&&dv.length>=MOM_MIN_POP){
+        s.mdirPct=pctOf(dv,s.mDir);
+        s.mState=s.mdirPct>=MOM_ACCEL_PCT?'ACCEL'
+                :s.mdirPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
+      }else if(s.sqz.mslope!=null){
+        s.mState='STEADY';   // рамна монета: има податок, но нема што да забрзува
       }
       s.mRegime=momRegime(s);
     });
@@ -3000,8 +3017,11 @@ function buildDigest(){
     +'0 on coins making large solo moves, so it only carries meaning on quiet ones.\n';
   o+='MOMz = (close − close[14]) / ATR(14) — поместување во ATR-и, споредливо меѓу монети. '
     +'VALz = SQZMOM VAL / ATR(14). MSLP = наклон на MOMz преку 6 бара, "*" = flip низ нула.\n';
-  o+='MST = состојба од ПЕРЦЕНТИЛ на MSLP во тековниот универзум (ACCEL≥p'+MOM_ACCEL_PCT
-    +' / DECEL≤p'+MOM_DECEL_PCT+' / STEADY), не фиксен праг — се адаптира на пазарниот режим.\n';
+  o+='MDIR = MSLP × знак(MOMz) — наклон РЕЛАТИВНО на сопствената насока. '
+    +'Позитивно = движењето се продолжува, негативно = слабее, БЕЗ РАЗЛИКА НА НАСОКА.\n';
+  o+='MST = состојба од ПЕРЦЕНТИЛ на MDIR (ACCEL≥p'+MOM_ACCEL_PCT+' / DECEL≤p'+MOM_DECEL_PCT
+    +' / STEADY). ACCEL кај монета што паѓа значи падот СЕ ЗАБРЗУВА, не раст. '
+    +'|MOMz|<'+MOM_DIR_EPS+' = рамна монета -> STEADY.\n';
   o+='FLIP = ПАРАЛЕЛЕН флаг, не состојба: MOMz сменил знак со замав ≥'+MOM_FLIP_MIN
     +' ATR. ▲=нагоре ▼=надолу. Монета може да е ACCEL И FLIP▲ истовремено.\n';
   o+='REG = OI◆ × MST: DRIVE (OI↑ + ACCEL, вистинска експанзија) / ABSORB (OI↑ + DECEL, '
@@ -3016,12 +3036,12 @@ function buildDigest(){
   Object.keys(mByTF).sort().forEach(t=>{
     const g=mByTF[t];
     const mv=g.map(x=>x.sqz?.momz).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
-    const sv=g.map(x=>x.sqz?.mslope).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
+    const sv=g.map(x=>x.mDir).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
     const q=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(2));};
     const q3=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(3));};
     o+='MOM DIST ['+t+'] n='+sv.length+'/'+g.length
       +' | MOMz p10 '+q(mv,10)+' p30 '+q(mv,30)+' p50 '+q(mv,50)+' p70 '+q(mv,70)+' p90 '+q(mv,90)
-      +' | MSLP p10 '+q3(sv,10)+' p30 '+q3(sv,30)+' p50 '+q3(sv,50)+' p70 '+q3(sv,70)+' p90 '+q3(sv,90)+'\n';
+      +' | MDIR p10 '+q3(sv,10)+' p30 '+q3(sv,30)+' p50 '+q3(sv,50)+' p70 '+q3(sv,70)+' p90 '+q3(sv,90)+'\n';
     const cnt=k=>g.filter(x=>x.mState===k).length;
     const rcnt=k=>g.filter(x=>x.mRegime===k).length;
     o+='MOM STATE ['+t+'] ACCEL '+cnt('ACCEL')+' | DECEL '+cnt('DECEL')+' | STEADY '+cnt('STEADY')
@@ -3033,7 +3053,7 @@ function buildDigest(){
       +' | total '+g.filter(x=>x.mFlip).length+' ('+(g.length?(g.filter(x=>x.mFlip).length/g.length*100).toFixed(0):'0')+'%)\n';
   });
 
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MST|REG|CVD%|CVDt|'
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
     +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
@@ -3060,6 +3080,7 @@ function buildDigest(){
       (s.sqz&&s.sqz.momz!=null)?((s.sqz.momz>=0?'+':'')+s.sqz.momz.toFixed(2)):'—',
       (s.sqz&&s.sqz.valz!=null)?((s.sqz.valz>=0?'+':'')+s.sqz.valz.toFixed(2)):'—',
       (s.sqz&&s.sqz.mslope!=null)?((s.sqz.mslope>=0?'+':'')+s.sqz.mslope.toFixed(3))+(s.sqz.mflip?(s.sqz.mflipDir>0?'▲':'▼'):''):'—',
+      s.mDir!=null?((s.mDir>=0?'+':'')+s.mDir.toFixed(3)):'—',
       s.mState||'—',
       s.mRegime||'—',
       n(s.cvdDelta),
