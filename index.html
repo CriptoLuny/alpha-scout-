@@ -525,7 +525,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-fav"       onclick="setFil('fav',this)">⭐ FAV</div>
     <div class="ftab f-alpha"     onclick="setFil('alpha',this)">🅐 ALPHA</div>
     <div class="ftab f-liq"       onclick="setFil('liq',this)">⚡ LIQ HUNT</div>
-    <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQUEEZE</div>
+    <div class="ftab"             onclick="setFil('squeeze',this)" style="border-color:rgba(255,0,200,.25);color:#ff00cc">🔥 SQ ACT</div>
     <div class="ftab f-tightsq"   onclick="setFil('tightsq',this)">💎 TIGHT SQ</div>
     <div class="ftab f-masq"      onclick="setFil('masq',this)">🚀 MA SQ</div>
     <div class="ftab f-coil"      onclick="setFil('coil',this)">🌀 COIL</div>
@@ -545,7 +545,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab"             onclick="setFil('oiflow',this)" style="border-color:rgba(0,255,136,.25);color:var(--green)">◆ OI FLOW</div>
     <div class="ftab"             onclick="setFil('mdrive',this)"  style="border-color:rgba(0,255,136,.35);color:var(--green);font-weight:700">⚙ DRIVE</div>
     <div class="ftab"             onclick="setFil('mabsorb',this)" style="border-color:rgba(255,170,0,.4);color:#ffaa00;font-weight:700">⚙ ABSORB</div>
-    <div class="ftab"             onclick="setFil('msqueeze',this)" style="border-color:rgba(255,0,200,.3);color:#ff00cc">⚙ SQUEEZE</div>
+    <div class="ftab"             onclick="setFil('msqueeze',this)" style="border-color:rgba(255,0,200,.3);color:#ff00cc">⚙ REG SQZ</div>
     <div class="ftab"             onclick="setFil('maccel',this)"  style="border-color:rgba(0,229,255,.25);color:var(--accent)">↗ ACCEL</div>
     <div class="ftab"             onclick="setFil('mdecel',this)"  style="border-color:rgba(255,34,68,.25);color:var(--red)">↘ DECEL</div>
     <div class="ftab"             onclick="setFil('mflipup',this)" style="border-color:rgba(255,208,0,.35);color:var(--yellow);font-weight:700">⇄ FLIP↑</div>
@@ -854,7 +854,7 @@ const APP_VER='2.5';
 const APP_CODENAME='REGIME';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-09-07-e';
+const APP_BUILD='2026-09-28-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -887,7 +887,7 @@ const SIG_INFO={
   'MA SQ BULL':{title:'MA Squeeze — Bullish насока (🚀)',desc:'SMA 25/50/99 конвергираат и SMA25 е над SMA99 — bullish распоред. Цената е компресирана и спремна за потег нагоре. Почекај потврда со CVD или DI+ крос.',bull:{cls:'pos-long',txt:'⬆ MA Squeeze BULL — потврди со CVD + волумен'},bear:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
   'MA SQ BEAR':{title:'MA Squeeze — Bearish насока (📉)',desc:'SMA 25/50/99 конвергираат и SMA25 е под SMA99 — bearish распоред. Цената е компресирана и спремна за потег надолу. Почекај потврда со CVD или DI- крос.',bear:{cls:'pos-short',txt:'⬇ MA Squeeze BEAR — потврди со CVD + волумен'},bull:{cls:'pos-watch',txt:'>> Прати — MA може да свртат'}},
   'COIL':{title:'COIL — Пред-пробивна компресија (🌀)',desc:'Цената се движи во тесен range (под 8%) со опаѓачки волумен (понова половина < 70% од постарата) во последните N свеќи (конфигурабилно, полето COIL N до MIN VOL$M), плус JMA е над DWMA. Класична volatility-contraction поставка пред потег.',bull:{cls:'pos-long',txt:'⬆ COIL — следи пробив со волумен, SL под последниот swing low'},bear:{cls:'pos-watch',txt:'>> Прати — компресијата може да пукне и надолу ако JMA свртат'}},
-  'SQUEEZE':{title:'Squeeze Activation (🔥)',desc:'CVD нагло расте + OI паѓа + цената расте + Funding Rate негативен. Комбинација која сигнализира принудно затворање на шортови (short squeeze). Силен bullish потег е во тек или следи.',bull:{cls:'pos-long',txt:'⬆ SHORT SQUEEZE во тек — прати за continuation'},bear:{cls:'pos-watch',txt:'>> Reversal можен по squeeze'}},
+  'SQUEEZE':{title:'Squeeze Activation (🔥)',desc:'Затворени свеќи: цената расте + реален OI (коини) паѓа >3% во последните ~3 периоди + (CVD spike ИЛИ Funding < -0.03%). Без пад на OI нема squeeze. Комбинација која сигнализира принудно затворање на шортови (short squeeze). Силен bullish потег е во тек или следи.',bull:{cls:'pos-long',txt:'⬆ SHORT SQUEEZE во тек — прати за continuation'},bear:{cls:'pos-watch',txt:'>> Reversal можен по squeeze'}},
   'default':{title:'Сигнал',desc:'Детектирана аномалија во пазарните индикатори.',bull:{cls:'pos-long',txt:'⬆ МОЖНА ПОЗИЦИЈА: LONG'},bear:{cls:'pos-short',txt:'⬇ МОЖНА ПОЗИЦИЈА: SHORT'}}
 };
 
@@ -1386,8 +1386,12 @@ async function fetchOiHist(coin,tf){
   else if(drawdown<-20&&offTrough>15) shape='REBUILD';  // collapsed, now rebuilding -- the FLOCK trap
   else if(fromPeak<-15)               shape='FADED';    // well off the highs, unwinding
 
+  // 3-period OI coin change -- aligned with the squeeze detector's 2-3 bar price/CVD window
+  const o3=d[Math.max(0,d.length-1-3)],C3=parseFloat(o3.sumOpenInterest);
+  const oiCoinsChg3=C3>0?((C1-C3)/C3)*100:0;
+
   const res={
-    oiCoins:C1,oiUsdt:V1,
+    oiCoins:C1,oiUsdt:V1,oiCoinsChg3,
     oiUsdtChg:(dV/V0)*100,
     oiCoinsChg:oiCoinsChgV,
     reval,flow,cross,
@@ -2004,7 +2008,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   const price=parseFloat(ticker.lastPrice),priceChg=parseFloat(ticker.priceChangePercent),volume=parseFloat(ticker.quoteVolume),high24=parseFloat(ticker.highPrice),low24=parseFloat(ticker.lowPrice);
   let cvdDelta=0,liqHunt=false,liqType='',oiChange=0,oiUsdt=0,oiCoins=0,tfPriceChg=0,lsRatio=null,takerBuyPct=50,lsExtreme=false,netInflow=false,netOutflow=false,netFlowPct=0,squeezeActivation=false,maSqueeze=false,maSqueezeDir='',maSqueezeWidth=0,closes=[],sqz=null,jmaDwma={crossUp:false,crossDown:false,jmaAbove:false},fibo=null,poc=null,btcCorr=null,coil=false,coilRangePct=null,coilVolRatio=null;
   // OI decomposition (real, from openInterestHist) + the old volume proxy kept separately
-  let oiCoinsChg=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
+  let oiCoinsChg=0,oiCoinsChg3=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
   let oiShape='',oiFromPeak=null,oiDrawdown=null;
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
   let cvdNewLow=false,cvdNewHigh=false;
@@ -2017,6 +2021,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       oiCoins=oh.oiCoins;oiUsdt=oh.oiUsdt;
       oiChange=oh.oiUsdtChg;      // hierarchy: OI USDT is the primary number
       oiCoinsChg=oh.oiCoinsChg;   // real position flow
+      oiCoinsChg3=oh.oiCoinsChg3??0; // short window, for the squeeze detector
       oiDom=oh.dominates;oiRevalPct=oh.revalPct;oiFlowPct=oh.flowPct;
       oiShape=oh.shape;oiFromPeak=oh.fromPeak;oiDrawdown=oh.drawdown;
     }else{
@@ -2101,15 +2106,18 @@ async function analyzeOneTF(coin,ticker,fr,tf){
         if(range>0&&body/range<0.38&&(priceChg>0)!==(cvdDelta>0)){liqHunt=true;liqType=priceChg>0?'bull':'bear';}
       }
       if(kl.length>=15){
+        // SQUEEZE ACTIVATION v2.6 -- closed candles only, aligned windows, OI drop mandatory
+        const kc=(parseInt(kl[kl.length-1][6])>Date.now())?kl.slice(0,-1):kl; // drop the live bar
+        const n=kc.length;
         let cvdE=0,cvdR=0;
-        for(let i=0;i<kl.length-3;i++){const b=parseFloat(kl[i][9]),t=parseFloat(kl[i][5]);cvdE+=(t>0?(b/t-.5)*t:0);}
-        for(let i=kl.length-3;i<kl.length;i++){const b=parseFloat(kl[i][9]),t=parseFloat(kl[i][5]);cvdR+=(t>0?(b/t-.5)*t:0);}
-        const spike=cvdR/3>cvdE/(kl.length-3)*3&&cvdR>0;
-        const pRise=parseFloat(kl[kl.length-1][4])>parseFloat(kl[kl.length-3][4]);
-        // real OI in coins falling = positions closing (short covering fuel), not just lower volume
-        const oiFall=oiReal?(oiCoinsChg<-3):(parseFloat(kl[kl.length-1][5])<parseFloat(kl[kl.length-3][5])*0.97);
-        if(spike&&oiFall&&pRise&&fr<-0.05)squeezeActivation=true;
-        else if(pRise&&((spike&&oiFall)||(spike&&fr<-0.03)||(oiFall&&fr<-0.03))&&Math.abs(fr)>0.03)squeezeActivation=true;
+        for(let i=0;i<n-3;i++){const b=parseFloat(kc[i][9]),t=parseFloat(kc[i][5]);cvdE+=(t>0?(b/t-.5)*t:0);}
+        for(let i=n-3;i<n;i++){const b=parseFloat(kc[i][9]),t=parseFloat(kc[i][5]);cvdR+=(t>0?(b/t-.5)*t:0);}
+        // abs(): with a negative history the old threshold was trivially met by any positive cvdR
+        const spike=cvdR>0&&cvdR/3>Math.abs(cvdE)/(n-3)*3;
+        const pRise=parseFloat(kc[n-1][4])>parseFloat(kc[n-3][4]);
+        // real OI coins falling over ~3 periods = positions closing. No closing -> no squeeze.
+        const oiFall=oiReal?(oiCoinsChg3<-3):(parseFloat(kc[n-1][5])<parseFloat(kc[n-3][5])*0.97);
+        if(pRise&&oiFall&&(spike||fr<-0.03))squeezeActivation=true;
       }
     }
   }catch(e){}
@@ -3692,7 +3700,7 @@ function toggleHelp(){
     {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 конвергираат — spread < 0.5%',when:'Пред голем потег. Колку потесно, толку поголем очекуван move.',action:'Чекај пробив со волумен. Не влегувај без потврда.'},
     {tag:'🚀/📉 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5% — потесна компресија',when:'Цената се компресира, спремна за потег.',action:'Bullish (🚀) = SMA25 > SMA99. Bearish (📉) = SMA25 < SMA99.'},
     {tag:'🌀 COIL',col:'#00c8ff',what:`Range < ${COIL_RANGE_MAX}% + волумен опаѓа + JMA>DWMA (N свеќи, конфигурабилно)`,when:'Цената "коилира" тесно со исушен волумен над JMA — класична пред-пробивна компресија.',action:'Следи пробив со волумен нагоре. SL под последниот swing low од COIL зоната.'},
-    {tag:'🔥 SQUEEZE',col:'#ff00cc',what:'CVD spike + OI паѓа + цена расте + FR негативен',when:'Шортовите се принудно затвораат — short squeeze во тек.',action:'Следи за continuation LONG. SL под последниот swing low.'},
+    {tag:'🔥 SQUEEZE',col:'#ff00cc',what:'OI◆ паѓа (~3 периоди) + цена расте + CVD spike или FR негативен · само затворени свеќи',when:'Шортовите се принудно затвораат — short squeeze во тек.',action:'Следи за continuation LONG. SL под последниот swing low.'},
     {tag:'⚡ LIQ HUNT',col:'var(--orange)',what:'Цената и CVD одат во спротивни насоки',when:'SHORT SQ: цена↑ + CVD↓. LONG DMP: цена↓ + CVD↑.',action:'По squeeze честопати следи reversal. Провери на 15m.'},
     {tag:'▲DI / ▼DI',col:'var(--green)',what:'DI+ го поминува DI- (или обратно) — свеж крос',when:'Свеж на последната затворена свеќа (4h/1d/1w=1 свеќа, 1h и помали=2 свеќи).',action:'▲DI = bullish моментум почнува. ▼DI = bearish моментум почнува.'},
     {tag:'🎯 SQZMOM',col:'#00c896',what:'Squeeze Momentum + AO + ADX confluence',when:'Squeeze ON + Val расте + AO расте + ADX > 20.',action:'Green dot = bullish. Red dot = bearish. Почекај потврда.'},
