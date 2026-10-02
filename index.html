@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Alpha Scout">
 <meta name="theme-color" content="#07070f">
-<title>ALPHA SCOUT v2.0 DECOMP</title>
+<title>ALPHA SCOUT v2.6 CLEAN15</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -453,6 +453,30 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .su-score-fill{height:100%;border-radius:2px;transition:width .5s}
 .su-empty{text-align:center;padding:40px 20px;color:var(--muted);font-family:var(--mono);font-size:12px;line-height:2}
 .su-note{font-size:10px;color:var(--muted);text-align:center;padding:10px 14px;line-height:1.6}
+/* CLEAN15 (v2.6) */
+.ct-clean{font-weight:800;cursor:pointer}
+.ct-clean.l{background:rgba(0,255,136,.18);color:var(--green);border:1px solid rgba(0,255,136,.55)}
+.ct-clean.s{background:rgba(255,34,68,.16);color:var(--red);border:1px solid rgba(255,34,68,.5)}
+.ct-clean.b{border-style:dashed}
+.su-card.clean-l{border-left:3px solid var(--green);border-color:rgba(0,255,136,.35)}
+.su-card.clean-s{border-left:3px solid var(--red);border-color:rgba(255,34,68,.35)}
+.su-levels.cl6{grid-template-columns:repeat(3,1fr)}
+.cl-grade{font-family:var(--mono);font-size:10px;font-weight:800;padding:3px 7px;border-radius:4px;white-space:nowrap}
+.cl-grade.A{background:rgba(0,255,136,.15);color:var(--green)}
+.cl-grade.B{background:rgba(255,208,0,.14);color:var(--yellow)}
+.cl-grade.W{background:rgba(120,120,140,.14);color:var(--text2)}
+.cl-head{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.cl-det{margin-top:6px}
+.cl-det summary{font-family:var(--mono);font-size:11px;color:var(--text2);cursor:pointer;padding:6px 0}
+.cl-wait{font-family:var(--mono);font-size:10px;color:var(--text2);padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;line-height:1.5}
+.cl-wait b{color:var(--text);font-size:11px}
+.cl-ok{color:var(--green);font-weight:700}.cl-x{color:var(--red);font-weight:700}
+.dp-clean{padding:12px 16px;border-bottom:1px solid var(--border)}
+.cl-gt{display:grid;grid-template-columns:auto 1fr 1fr;gap:5px 8px;font-size:10px;font-family:var(--mono);align-items:start}
+.cl-gt .h{color:var(--muted);font-weight:700;padding-bottom:2px;border-bottom:1px solid var(--border)}
+.cl-gt .g{color:var(--text2);white-space:nowrap}
+.cl-gt .c{color:var(--text);line-height:1.35;word-break:break-word}
+.cl-note{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5}
 
 /* COIN TOOLTIP */
 .coin-tip{position:fixed;z-index:500;background:#0d0d1c;border:1px solid var(--accent);border-radius:10px;padding:12px 14px;max-width:260px;box-shadow:0 4px 24px rgba(0,229,255,.15);animation:tipIn .15s ease}
@@ -534,6 +558,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-fibo"        onclick="setFil('fibo',this)">🎯 FIBO</div>
     <div class="ftab f-poc"         onclick="setFil('poc',this)">📊 POC</div>
     <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
+    <div class="ftab"               onclick="setFil('clean',this)" style="border-color:rgba(0,255,136,.45);color:var(--green);font-weight:800">✅ CLEAN15</div>
     <div class="ftab f-btcfree"     onclick="setFil('btcfree',this)">🆓 BTC FREE</div>
     <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
     <div class="ftab f-diup"      onclick="setFil('diup',this)">▲DI</div>
@@ -618,8 +643,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <span id="suMaxPctVal" style="font-family:var(--mono);font-size:12px;font-weight:bold;color:var(--accent);min-width:30px">30%</span>
     </div>
   </div>
-  <div class="su-body" id="suBody">
-    <div class="su-empty">📊<br>Притисни СКЕНИРАЈ прво<br><span style="font-size:10px">Потоа отвори СЕТАПИ за препораки</span></div>
+  <div class="su-body" id="suBodyWrap">
+    <div id="clBody"></div>
+    <div id="suBody">
+      <div class="su-empty">📊<br>Притисни СКЕНИРАЈ прво<br><span style="font-size:10px">Потоа отвори СЕТАПИ за препораки</span></div>
+    </div>
   </div>
 </div>
 
@@ -726,6 +754,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <div class="section-title">// СТАТУС ПО TF · клик = графици</div>
       <div class="tf-grid" id="tfGrid"></div>
     </div>
+    <!-- CLEAN15 PANEL (v2.6) -->
+    <div class="dp-clean" id="dpClean" style="display:none">
+      <div class="flow-title">// CLEAN15 · ЧИСТ ВЛЕЗ 15m</div>
+      <div id="cleanContent"></div>
+    </div>
     <!-- MONEY FLOW PANEL -->
     <div class="dp-flow" id="dpFlow" style="display:none">
       <div class="flow-title">// MONEY FLOW ANALYSIS <span class="flow-badge" id="flowBadge" style="display:none"></span></div>
@@ -786,6 +819,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Named after the change that defines it: Open Interest is
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
+//
+//  v2.6 CLEAN15
+//   - NEW: CLEAN15 entry-timing module. Ten gates on CLOSED 15m bars:
+//     G1 1h trend, G2 location at a level, G3 trigger (TREND bar or
+//     SWEEP & reclaim), G4 real OI flow (DRIVE with DOM=FLOW, or
+//     FLUSH->HOLD after a sweep), G5 CVD + taker on the same side,
+//     G6 momentum, G7 no squeeze on the trigger bar, G8 crowding +
+//     premium index fading under rising OI, G9 risk (TREND: SL 1 ATR
+//     behind the level; SWEEP: just beyond the wick; R:R >= 2),
+//     G10 liquidity trap (stacked OI in a tight range + crowded L/S
+//     -> only a sweep & reclaim may pass).
+//   - Long and short share one code path: the short side runs the
+//     long logic on a price-negated copy of the data, so the two can
+//     never drift apart.
+//   - Grades: A = 10/10, B = 10/10 + context flag (OI near its 30d max,
+//     last 4h/1D candle wicking against the entry, Saturday 00-06 UTC),
+//     WAIT = any failed gate, listed with the reason.
+//   - Runs after each scan on a shortlist (score >= 6 top 30 + FAV +
+//     searched coin), cached per 15m bar, before the 1h+4h setups.
+//     Shown as a row tag, a filter, a section on top of SETUPS, a gate
+//     table in the coin detail, and a block in the digest.
+//   - FIX: MST/REG were STEADY/empty for every coin when the scan had
+//     fewer than 30 coins (single-coin search). Percentiles now fall
+//     back to the last full scan on the same TF (stored quantiles,
+//     valid 6h), and the digest says which distribution was used.
+//   - FIX: STOP rebuilt the signal list without the momentum ranks, so
+//     MST / REG / MDIR went blank in the digest after pressing STOP.
 //
 //  v2.3 DECOMP
 //   - FIX: dir was inverted on every liq-hunt row. liqType names
@@ -850,11 +910,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.5';
-const APP_CODENAME='REGIME';
+const APP_VER='2.6';
+const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-09-28-a';
+const APP_BUILD='2026-10-01-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1007,6 +1067,13 @@ const MOM_FLIP_MIN=1.00;     // минимална амплитуда на за�
 // MOMz под ова = монетата нема насока, па "забрзување" е бесмислено -> STEADY.
 // Без deadzone, sign(MOMz) се превртува на шум кај рамни монети.
 const MOM_DIR_EPS=0.15;
+// v2.6: a scan with fewer than MOM_MIN_POP coins (e.g. a single-coin search) has no usable
+// distribution, so every coin used to fall back to STEADY. The last FULL scan on the same TF
+// is stored as 101 quantiles and used instead, for up to MOM_REF_TTL.
+const MOM_REF_TTL=6*60*60*1000;
+function momQuantiles(arr){const o=[];if(!arr.length)return o;for(let p=0;p<=100;p++){o.push(arr[Math.min(arr.length-1,Math.max(0,Math.round(p/100*(arr.length-1))))]);}return o;}
+function momRefSave(tf,mv,dv){try{localStorage.setItem('momRef_'+tf,JSON.stringify({t:Date.now(),n:dv.length,mv:momQuantiles(mv),dv:momQuantiles(dv)}));}catch(e){}}
+function momRefLoad(tf){try{const r=JSON.parse(localStorage.getItem('momRef_'+tf)||'null');if(r&&Date.now()-r.t<MOM_REF_TTL&&Array.isArray(r.dv)&&r.dv.length>=MOM_MIN_POP&&Array.isArray(r.mv))return r;}catch(e){}return null;}
 
 const S={
   scanning:false,timer:null,abort:false,
@@ -1431,7 +1498,7 @@ function stopScan(){
   document.getElementById('btnS').style.display='inline-block';
   document.getElementById('btnX').style.display='none';
   setDot('off');document.getElementById('prog').style.display='none';
-  if(Object.keys(S._partial).length>0){S.signals=buildSignals(S._partial);renderList();toast(`⏹ ${S.signals.length} сигнали`);}
+  if(Object.keys(S._partial).length>0){S.signals=assignMomentumRanks(buildSignals(S._partial));renderList();toast(`⏹ ${S.signals.length} сигнали`);}
 }
 
 async function doScan(){
@@ -1517,7 +1584,7 @@ async function doScan(){
       await sleep(sl);
     }
   }
-  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildSetups();}
+  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildClean();}
 }
 
 // ── MOMENTUM RANKS (v2.4) ───────────────────────────────────
@@ -1544,20 +1611,24 @@ function assignMomentumRanks(signals){
     if(Math.abs(s.sqz.momz)<MOM_DIR_EPS)return null;   // рамна монета -> нема насока
     return s.sqz.mslope*Math.sign(s.sqz.momz);
   };
-  Object.values(byTF).forEach(group=>{
+  Object.entries(byTF).forEach(([tf,group])=>{
     const mv=group.map(s=>s.sqz?.momz).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
     const dv=group.map(dirOf).filter(x=>x!=null).sort((a,b)=>a-b);
+    // full population -> it becomes the reference; small population -> borrow the reference
+    let mvR=mv,dvR=dv,ref=null;
+    if(dv.length>=MOM_MIN_POP)momRefSave(tf,mv,dv);
+    else{ref=momRefLoad(tf);if(ref){mvR=ref.mv;dvR=ref.dv;}}
     group.forEach(s=>{
       s.momPct=null;s.mDir=null;s.mdirPct=null;s.mState='—';s.mRegime=null;s.mPop=dv.length;
-      s.mFlip=false;s.mFlipDir=0;
+      s.mFlip=false;s.mFlipDir=0;s.mRef=ref?ref.t:null;s.mRefN=ref?ref.n:null;
       if(!s.sqz)return;
-      if(s.sqz.momz!=null&&mv.length>=MOM_MIN_POP)s.momPct=pctOf(mv,s.sqz.momz);
+      if(s.sqz.momz!=null&&mvR.length>=MOM_MIN_POP)s.momPct=pctOf(mvR,s.sqz.momz);
       // FLIP е паралелен флаг, НЕ состојба. Кога беше состојба со предност,
       // 154/527 монети губеа ACCEL/DECEL и со тоа и режим.
       s.mFlip=!!s.sqz.mflip;s.mFlipDir=s.sqz.mflipDir||0;
       s.mDir=dirOf(s);
-      if(s.mDir!=null&&dv.length>=MOM_MIN_POP){
-        s.mdirPct=pctOf(dv,s.mDir);
+      if(s.mDir!=null&&dvR.length>=MOM_MIN_POP){
+        s.mdirPct=pctOf(dvR,s.mDir);
         s.mState=s.mdirPct>=MOM_ACCEL_PCT?'ACCEL'
                 :s.mdirPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
       }else if(s.sqz.mslope!=null){
@@ -2335,6 +2406,7 @@ const FILTER_MAP={
   fibo:   s=>s.sigs?.some(sg=>sg.l?.startsWith('FIBO')),
   poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
   conf:   s=>s.confScore>=4,
+  clean:  s=>{const r=_clean[s.coin];return !!(r&&r.grade!=='WAIT');},
   btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
   cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
   cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
@@ -2392,6 +2464,8 @@ function rowHTML(s){
   const sc=s.score>=6?'g':s.score>=3?'y':'a';
   const dots=Array.from({length:7},(_,i)=>`<div class="sd ${i<s.score?sc:''}"></div>`).join('');
   const tags=[];
+  // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
+  const clT=cleanTagHTML(s.coin);if(clT)tags.push(clT);
   // CONFLUENCE tag — always first if present
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
@@ -2493,6 +2567,7 @@ function openDetail(coin){
   if(s){populateDetail(s);loadAllTFCards(coin,s);loadMoneyFlow(coin,s.tf);}
   else fetchAndShowDetail(coin);
   loadCciObvCross(coin);
+  loadCleanDetail(coin);
 }
 
 async function refreshDetail(){
@@ -2509,6 +2584,7 @@ async function refreshDetail(){
   if(best){populateDetail({...best,isAlpha:isAlpha(coin),isFav:isFav(coin)});loadMoneyFlow(coin,best.tf);}
   TFS_FULL.forEach((tf,i)=>renderTFCard(tf,results[i],coin));
   loadCciObvCross(coin);
+  loadCleanDetail(coin,true);
   btn.classList.remove('spin');toast(`↻ ${coin} освежен`);
 }
 
@@ -3029,13 +3105,16 @@ function buildDigest(){
     +'Позитивно = движењето се продолжува, негативно = слабее, БЕЗ РАЗЛИКА НА НАСОКА.\n';
   o+='MST = состојба од ПЕРЦЕНТИЛ на MDIR (ACCEL≥p'+MOM_ACCEL_PCT+' / DECEL≤p'+MOM_DECEL_PCT
     +' / STEADY). ACCEL кај монета што паѓа значи падот СЕ ЗАБРЗУВА, не раст. '
-    +'|MOMz|<'+MOM_DIR_EPS+' = рамна монета -> STEADY.\n';
+    +'|MOMz|<'+MOM_DIR_EPS+' = рамна монета -> STEADY. Под '+MOM_MIN_POP+' коини (пр. пребарување) '
+    +'перцентилите се од последниот ЦЕЛОСЕН скен на истиот TF (ref, до 6h).\n';
   o+='FLIP = ПАРАЛЕЛЕН флаг, не состојба: MOMz сменил знак со замав ≥'+MOM_FLIP_MIN
     +' ATR. ▲=нагоре ▼=надолу. Монета може да е ACCEL И FLIP▲ истовремено.\n';
   o+='REG = OI◆ × MST: DRIVE (OI↑ + ACCEL, вистинска експанзија) / ABSORB (OI↑ + DECEL, '
     +'нови позиции без реакција на цената — предупредување пред PEAK) / SQUEEZE (OI↓ + ACCEL, '
     +'движење од затворања) / DEAD. Празно = нема real OI, рамен OI (|OI◆|<'+MOM_OI_EPS+'%), или STEADY/FLIP.\n';
   o+='МОМЕНТУМОТ НЕ ГЛАСА ВО SCORE — само набљудување.\n';
+  o+='CLEAN15 = посебен тајминг-модул на ЗАТВОРЕНИ 15m свеќи (10 гејтови, лонг/шорт огледално). '
+    +'НЕ гласа во SCORE. A = 10/10, B = 10/10 + флаг, WAIT = паднат гејт. Блок на дното.\n';
 
   // -- MOMENTUM DISTRIBUTION: пресметана врз ЦЕЛИОТ скен, не врз филтрираните 12 --
   const mByTF={};
@@ -3047,9 +3126,16 @@ function buildDigest(){
     const sv=g.map(x=>x.mDir).filter(x=>x!=null&&!isNaN(x)).sort((a,b)=>a-b);
     const q=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(2));};
     const q3=(a,p)=>{const v=qAt(a,p);return v==null?'—':((v>=0?'+':'')+v.toFixed(3));};
-    o+='MOM DIST ['+t+'] n='+sv.length+'/'+g.length
-      +' | MOMz p10 '+q(mv,10)+' p30 '+q(mv,30)+' p50 '+q(mv,50)+' p70 '+q(mv,70)+' p90 '+q(mv,90)
-      +' | MDIR p10 '+q3(sv,10)+' p30 '+q3(sv,30)+' p50 '+q3(sv,50)+' p70 '+q3(sv,70)+' p90 '+q3(sv,90)+'\n';
+    // small population -> the states were ranked against the stored full-scan distribution
+    let mvD=mv,svD=sv,refTxt='';
+    if(sv.length<MOM_MIN_POP){
+      const ref=momRefLoad(t);
+      if(ref){mvD=ref.mv;svD=ref.dv;refTxt=' -> ref = full scan '+clnHM(ref.t)+' n='+ref.n;}
+      else refTxt=' -> no ref (MST falls back to STEADY)';
+    }
+    o+='MOM DIST ['+t+'] n='+sv.length+'/'+g.length+refTxt
+      +' | MOMz p10 '+q(mvD,10)+' p30 '+q(mvD,30)+' p50 '+q(mvD,50)+' p70 '+q(mvD,70)+' p90 '+q(mvD,90)
+      +' | MDIR p10 '+q3(svD,10)+' p30 '+q3(svD,30)+' p50 '+q3(svD,50)+' p70 '+q3(svD,70)+' p90 '+q3(svD,90)+'\n';
     const cnt=k=>g.filter(x=>x.mState===k).length;
     const rcnt=k=>g.filter(x=>x.mRegime===k).length;
     o+='MOM STATE ['+t+'] ACCEL '+cnt('ACCEL')+' | DECEL '+cnt('DECEL')+' | STEADY '+cnt('STEADY')
@@ -3104,6 +3190,7 @@ function buildDigest(){
     ].join('|')+'\n';
   });
 
+  o+=cleanDigest(rows);
   o+='\nNOTE: 1m and 1w have no native openInterestHist period — mapped to 5m / 1d.\n';
   o+='Rows with "~" on dOI$% are volume-proxy fallbacks, not real OI.\n';
   return o;
@@ -3204,9 +3291,10 @@ function startBuildSetups() {
       const megaCount = S_setups.filter(function(s){return s.isMega;}).length;
       const longs = S_setups.filter(function(s){return !s.isMega&&s.finalDir==='bull';}).length;
       const shorts = S_setups.filter(function(s){return !s.isMega&&s.finalDir==='bear';}).length;
-      btn3.style.borderColor = megaCount > 0 ? 'rgba(255,50,200,.6)' : 'rgba(0,229,255,.4)';
+      const ck = cleanCounts(), cleanAB = ck.A + ck.B;
+      btn3.style.borderColor = cleanAB > 0 ? 'rgba(0,255,136,.6)' : megaCount > 0 ? 'rgba(255,50,200,.6)' : 'rgba(0,229,255,.4)';
       if (!btn3.classList.contains('active')) {
-        btn3.textContent = '📊 СЕТАПИ' + (megaCount > 0 ? ' 🎯' + megaCount : '') + (longs+shorts > 0 ? ' (' + (longs+shorts) + ')' : '');
+        btn3.textContent = '📊 СЕТАПИ' + (cleanAB > 0 ? ' ✅' + cleanAB : '') + (megaCount > 0 ? ' 🎯' + megaCount : '') + (longs+shorts > 0 ? ' (' + (longs+shorts) + ')' : '');
       }
     }
     // If tab is currently open, re-render
@@ -3457,6 +3545,7 @@ function refilterSetups() {
 function renderSetups() {
   const body = document.getElementById('suBody');
   const ts = document.getElementById('suTs');
+  renderCleanSection();
 
   if (!S.signals.length) {
     body.innerHTML = '<div class="su-empty">📊<br>Прво притисни СКЕНИРАЈ</div>';
@@ -3562,6 +3651,555 @@ function setupCardHTML(s) {
     + '</div>';
 }
 
+
+
+// ============================================================
+//  CLEAN15 (v2.6) -- clean-entry gates on CLOSED 15m bars.
+//  Timing layer only: it never votes in SCORE.
+//  Long and short run the SAME code: the short side is evaluated
+//  on a price-negated copy of the data (H<->-L, C->-C, delta->-delta,
+//  taker->100-taker, L/S->1/L/S, FR->-FR), so the two directions can
+//  never drift apart. Results are negated back for display.
+//  Runs after each scan on a shortlist (score-ranked top 30 + FAV +
+//  searched coin), cached per 15m bar, before the 1h+4h setups.
+// ============================================================
+const CLEAN_TF='15m', CLEAN_BAR_MS=15*60*1000;
+const CLEAN_MAX_COINS=30;      // shortlist size (score-ranked)
+const CLEAN_MIN_SCORE=6;       // shortlist score floor (FAV and search bypass it)
+const CLEAN_MIN_VOL=3e6;       // 24h quote volume floor (FAV and search bypass it)
+const CLEAN_LOC_ATR=0.5;       // G2: level touched within this many ATR; MKT entry only if close is this near
+const CLEAN_SWEEP_ATR=0.1;     // G3: wick must pierce the level by at least this much to count as a sweep
+const CLEAN_TRIG_BODY=0.5;     // G3 TREND: body >= 50% of the bar range
+const CLEAN_TRIG_POS=0.7;      // G3 TREND: close in the top (short: bottom) 30% of the bar
+const CLEAN_RECLAIM_POS=0.6;   // G3 SWEEP: reclaim close in the top (short: bottom) 40%
+const CLEAN_OI_MIN=0.5;        // G4 TREND: OI coins change over 3 bars, %
+const CLEAN_OI_PX_ATR=0.3;     // G4 TREND: price move over the same 3 bars, ATR (less = ABSORB)
+const CLEAN_OI_FLUSH=-0.3;     // G4 SWEEP: OI coins change on the sweep bar must be <= this, %
+const CLEAN_TAKER_L=52;        // G5: taker buy share for longs, % (shorts use 100-x)
+const CLEAN_FR_MAX=0.05;       // G8: funding ceiling, % per interval
+const CLEAN_PREM_DROP=0.5;     // G8: premium index fell >= 50% from its 2h extreme ...
+const CLEAN_PREM_MIN=0.00002;  // ... when that extreme was at least this large (fraction) ...
+const CLEAN_PREM_OI=1.0;       // ... while OI coins rose more than this over 8 bars, %
+const CLEAN_SL_ATR=1.0;        // G9 TREND: SL 1 ATR beyond the level -- behind the obvious stops
+const CLEAN_SL_SWEEP_BUF=0.3;  // G9 SWEEP: SL 0.3 ATR beyond the sweep wick (that liquidity is already taken)
+const CLEAN_SL_MAX_ATR=1.5;    // G9: max entry->SL distance, ATR
+const CLEAN_RR_MIN=2.0;        // G9: min R:R to TP1
+const CLEAN_TP_GAP_ATR=0.3;    // TP candidates must clear the entry by this, ATR
+const CLEAN_TRAP_BARS=8, CLEAN_TRAP_MAXBARS=24;  // G10: range length, bars
+const CLEAN_TRAP_ATR=2.0;      // G10: range width ceiling, ATR
+const CLEAN_TRAP_OI=2.0;       // G10: OI coins build-up inside the range, %
+const CLEAN_LS_OVB=1.5;        // same threshold as L/S EXT (shorts use 1/L/S, i.e. 0.67)
+const CLEAN_MMR=0.02, CLEAN_LEV_CAP=20;         // MAX LEV = floor(1/(1.5*SL% + MMR)), capped
+const CLEAN_OI_MAX30=0.95;     // B flag: OI coins >= 95% of the 30d max
+let _clean={}, _cleanCache={}, _cleanBuilding=false, _cleanTs=null;
+
+const clnHM=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+const clnEsc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const clnPct=(x,d)=>x==null||isNaN(x)?'n/a':((x>=0?'+':'')+x.toFixed(d==null?2:d)+'%');
+const clnSgn=(x,d)=>x==null||isNaN(x)?'n/a':((x>=0?'+':'')+x.toFixed(d==null?2:d));
+
+// Wilder ATR series (same smoothing as ta.atr / the SQZMOM port)
+function clnATR(H,L,C,len){
+  const n=C.length,out=new Array(n).fill(NaN);let s=0,prev=NaN;
+  for(let i=0;i<n;i++){
+    const tr=i===0?H[i]-L[i]:Math.max(H[i]-L[i],Math.abs(H[i]-C[i-1]),Math.abs(L[i]-C[i-1]));
+    if(i<len-1){s+=tr;continue;}
+    if(i===len-1){s+=tr;prev=s/len;out[i]=prev;continue;}
+    prev=(prev*(len-1)+tr)/len;out[i]=prev;
+  }
+  return out;
+}
+// Confirmed pivots only: k bars on each side must already be closed.
+function clnPivots(H,L,from,last,k){
+  const hi=[],lo=[];
+  for(let i=Math.max(from,k);i<=last-k;i++){
+    let isH=true,isL=true;
+    for(let j=i-k;j<=i+k;j++){
+      if(j===i)continue;
+      if(j<i?H[j]>=H[i]:H[j]>H[i])isH=false;
+      if(j<i?L[j]<=L[i]:L[j]<L[i])isL=false;
+    }
+    if(isH)hi.push({i,p:H[i]});
+    if(isL)lo.push({i,p:L[i]});
+  }
+  return{hi,lo};
+}
+// Squeeze ON at bar i: Bollinger(20, 1.5) inside Keltner(20, 1.5) -- same definition as calcSqzMomAO
+function clnSqzOn(H,L,C,i){
+  const len=20,mult=1.5;if(i<len)return false;
+  let s=0;for(let j=i-len+1;j<=i;j++)s+=C[j];const basis=s/len;
+  let v=0;for(let j=i-len+1;j<=i;j++)v+=(C[j]-basis)*(C[j]-basis);const dev=mult*Math.sqrt(v/len);
+  let tr=0;for(let j=i-len+1;j<=i;j++)tr+=j===0?H[j]-L[j]:Math.max(H[j]-L[j],Math.abs(H[j]-C[j-1]),Math.abs(L[j]-C[j-1]));
+  const rMA=tr/len;
+  return (basis-dev)>(basis-rMA*mult)&&(basis+dev)<(basis+rMA*mult);
+}
+// Longest tight range (>= CLEAN_TRAP_BARS bars) ending at bar `end`, width <= CLEAN_TRAP_ATR * atrRef
+function clnRange(H,L,end,atrRef){
+  if(!(atrRef>0))return null;
+  for(let w=CLEAN_TRAP_MAXBARS;w>=CLEAN_TRAP_BARS;w--){
+    const s=end-w+1;if(s<1)continue;
+    let hi=-Infinity,lo=Infinity;
+    for(let j=s;j<=end;j++){if(H[j]>hi)hi=H[j];if(L[j]<lo)lo=L[j];}
+    if(hi-lo<=CLEAN_TRAP_ATR*atrRef)return{s,e:end,hi,lo,bars:w};
+  }
+  return null;
+}
+
+// Price-negated copy of the context: the long logic run on it IS the short logic.
+function clnMirror(c){
+  const neg=a=>a.map(v=>-v),ng=v=>v==null?null:-v;
+  const mr=r=>r?{...r,hi:-r.lo,lo:-r.hi}:null;
+  return{...c,dir:-1,
+    O:neg(c.O),C:neg(c.C),H:neg(c.L),L:neg(c.H),D:neg(c.D),
+    tk:(a,b)=>100-c.tk(a,b),
+    cvdLow:c.cvdHigh,cvdHigh:c.cvdLow,
+    mzNow:ng(c.mzNow),mzPrev:ng(c.mzPrev),mslope:ng(c.mslope),flip:-c.flip,
+    jmaAbove:c.jmaAbove==null?null:!c.jmaAbove,
+    pvLo:c.pvHi.map(p=>({i:p.i,p:-p.p})),pvHi:c.pvLo.map(p=>({i:p.i,p:-p.p})),
+    poc:ng(c.poc),hiW:-c.loW,loW:-c.hiW,rngA:mr(c.rngA),rngB:mr(c.rngB),
+    lsr:c.lsr>0?1/c.lsr:null,fr:-c.fr,
+    premNow:ng(c.premNow),premFirst:ng(c.premFirst),premMax:ng(c.premMin),premMin:ng(c.premMax)
+  };
+}
+
+// One side, written as a LONG. On the mirrored context it evaluates the short.
+// Prices inside are in "side space"; notes print real prices via |x| and real
+// signs via dir*x.
+function clnSide(c){
+  const{i,O,H,L,C,D,atr}=c,dir=c.dir,up=dir>0;
+  const P=v=>fmt(Math.abs(v)),R=v=>v==null?null:dir*v;
+  const gates=[];const add=(id,name,ok,note)=>gates.push({id,name,ok:!!ok,note});
+
+  // G1 -- 1h trend in the trade direction
+  if(c.jmaAbove==null)add('G1','Тренд 1h',false,'1h n/a');
+  else add('G1','Тренд 1h',c.jmaAbove,(c.jmaAbove===up)?'JMA>DWMA':'JMA<DWMA');
+
+  // G2 -- the trigger bar (or the one before) traded at a level
+  const touch=Math.min(L[i],L[i-1]);
+  const cands=[];
+  c.pvLo.forEach(p=>cands.push({p:p.p,src:'swing'}));
+  if(c.poc!=null)cands.push({p:c.poc,src:'POC'});
+  [c.rngA,c.rngB].forEach(r=>{if(r&&!cands.some(x=>x.src==='опсег'&&x.p===r.lo))cands.push({p:r.lo,src:'опсег'});});
+  const q=cands.filter(x=>x.p<=C[i]&&touch<=x.p+CLEAN_LOC_ATR*atr&&touch>=x.p-CLEAN_SL_MAX_ATR*atr).sort((a,b)=>b.p-a.p);
+  const lvl=q.length?q[0]:null;
+  add('G2','Локација',lvl,lvl?(lvl.src+' '+P(lvl.p)+' · допир '+clnSgn((touch-lvl.p)/atr)+' ATR')
+    :('нема ниво во '+CLEAN_LOC_ATR+' ATR'));
+
+  // G3 -- closed-bar trigger: SWEEP & reclaim first, else a TREND bar off the level
+  let mode=null,sweepIdx=null,sweepLow=null;
+  const rgI=H[i]-L[i],posI=rgI>0?(C[i]-L[i])/rgI:0;
+  if(lvl){
+    // sweep bar = the deeper of the last two wicks through the level (tie -> the earlier bar);
+    // the reclaim is always judged on the trigger bar's close
+    const pierced=[i-1,i].filter(s=>L[s]<lvl.p-CLEAN_SWEEP_ATR*atr);
+    if(pierced.length){
+      const s=pierced.reduce((a,b)=>L[b]<L[a]?b:a);
+      if(C[i]>lvl.p&&posI>=CLEAN_RECLAIM_POS){mode='SWEEP';sweepIdx=s;sweepLow=Math.min(L[i],L[i-1]);}
+    }
+    if(!mode&&rgI>0&&C[i]>O[i]&&Math.abs(C[i]-O[i])>=CLEAN_TRIG_BODY*rgI&&posI>=CLEAN_TRIG_POS&&C[i]>H[i-1])mode='TREND';
+  }
+  add('G3','Тригер',mode,mode==='SWEEP'?('SWEEP '+(up?'под ':'над ')+P(lvl.p)+' → reclaim')
+    :mode==='TREND'?('TREND свеќа · тело '+(rgI>0?Math.round(Math.abs(C[i]-O[i])/rgI*100):0)+'%')
+    :(lvl?'нема силна 15m свеќа':'без ниво'));
+
+  // G4 -- real OI flow (primary signal)
+  let g4=false,g4n='OI n/a';
+  if(mode==='SWEEP'){
+    const fl=c.oiChg(sweepIdx,sweepIdx-1),hold=sweepIdx===i?0:c.oiChg(i,i-1);
+    if(fl!=null&&hold!=null){
+      if(fl<=CLEAN_OI_FLUSH&&hold>=CLEAN_OI_FLUSH){g4=true;g4n='FLUSH '+clnPct(fl)+(sweepIdx===i?'':' → HOLD '+clnPct(hold));}
+      else if(fl>CLEAN_OI_FLUSH)g4n='нема flush на sweep ('+clnPct(fl)+')';
+      else g4n='OI продолжува да паѓа ('+clnPct(hold)+')';
+    }
+  }else{
+    const d3=c.oiChg(i,i-3),px3=(C[i]-C[i-3])/atr;
+    if(d3!=null){
+      const A=c.oiE(i),B=c.oiE(i-3);let dom='FLOW';
+      if(A&&B&&A.c>0&&B.c>0&&A.v>0&&B.v>0){
+        const P1=A.v/A.c,P0=B.v/B.c,flow=(A.c-B.c)*P0,reval=B.c*(P1-P0);
+        dom=Math.abs(flow)>=Math.abs(reval)?'FLOW':'REVAL';
+      }
+      const tail='OI◆ '+clnPct(d3)+' · цена '+clnSgn(R(px3))+' ATR';
+      if(d3>=CLEAN_OI_MIN&&px3>=CLEAN_OI_PX_ATR){g4=dom==='FLOW';g4n=(g4?'DRIVE ':'REVAL ')+tail;}
+      else if(d3>=CLEAN_OI_MIN&&Math.abs(px3)<CLEAN_OI_PX_ATR)g4n='ABSORB '+tail;
+      else if(d3>=CLEAN_OI_MIN)g4n='нови '+(up?'шортови':'лонгови')+' · '+tail;
+      else g4n='нема прилив · '+tail;
+    }
+  }
+  add('G4','OI◆',g4,g4n);
+
+  // G5 -- CVD + taker in the same direction (stricter than the OI$-overrides-CVD rule)
+  const tkR=v=>Math.round(up?v:100-v);
+  let g5,g5n;
+  if(mode==='SWEEP'){
+    const t1=c.tk(i,i);
+    g5=D[i]>0&&t1>=CLEAN_TAKER_L&&!c.cvdLow;
+    g5n='reclaim Δ'+(D[i]>0===up?'+':'−')+' · taker '+tkR(t1)+'%B'+(c.cvdLow?' · CVDt '+(up?'LOW':'HIGH'):'');
+  }else{
+    const s3=D[i]+D[i-1]+D[i-2],t3=c.tk(i-2,i);
+    g5=s3>0&&t3>=CLEAN_TAKER_L&&!c.cvdLow;
+    g5n='CVD 3св. '+((s3>0)===up?'↑':'↓')+' · taker '+tkR(t3)+'%B'+(c.cvdLow?' · CVDt '+(up?'LOW':'HIGH'):'');
+  }
+  add('G5','CVD/Taker',g5,g5n);
+
+  // G6 -- momentum on 15m
+  let g6=false,g6n='MOMz n/a';
+  if(c.mzNow!=null){
+    if(mode==='SWEEP'){
+      // reversal entry: the opposite move must not be accelerating -- either MOMz turned on the
+      // trigger bar or the 6-bar MOMz slope already points our way
+      const turn=c.mzPrev!=null&&c.mzNow>c.mzPrev,slp=c.mslope!=null&&c.mslope>0;
+      g6=turn||slp;
+      g6n='MOMz '+clnSgn(R(c.mzPrev))+'→'+clnSgn(R(c.mzNow))+' · MSLP '+clnSgn(R(c.mslope),3)+(g6?' (се врти)':' (уште забрзува)');
+    }else{
+      g6=c.mzNow>0&&c.mslope!=null&&c.mslope>0&&c.flip>=0;
+      g6n='MOMz '+clnSgn(R(c.mzNow))+' · MSLP '+clnSgn(R(c.mslope),3)+(c.flip<0?(' · FLIP'+(up?'▼':'▲')):'');
+    }
+  }
+  add('G6','Моментум',g6,g6n);
+
+  // G7 -- no compression on the trigger bar
+  add('G7','Компресија',!c.sqzNow,c.sqzNow?'SQZ ON':'нема SQZ');
+
+  // G8 -- crowding + premium fading under rising OI
+  const f8=[];
+  if(c.fr>CLEAN_FR_MAX)f8.push('FR '+clnSgn(R(c.fr),4)+'%');
+  if(c.lsr!=null&&c.lsr>CLEAN_LS_OVB&&c.premNow!=null&&c.premFirst!=null&&c.premNow>c.premFirst)
+    f8.push('L/S '+(c.lsReal!=null?c.lsReal.toFixed(2):'?')+' + премија '+(up?'↑':'↓'));
+  if(c.premMax!=null&&c.premMax>CLEAN_PREM_MIN&&c.premNow!=null&&c.premNow<=c.premMax*(1-CLEAN_PREM_DROP)
+     &&c.dOI8!=null&&c.dOI8>CLEAN_PREM_OI)
+    f8.push('премија '+clnSgn(R(c.premMax)*100,4)+'→'+clnSgn(R(c.premNow)*100,4)+'% додека OI◆ '+clnPct(c.dOI8));
+  add('G8','Crowding',!f8.length,f8.length?f8.join(' · '):('FR '+clnSgn(R(c.fr),4)+'% · L/S '+(c.lsReal!=null?c.lsReal.toFixed(2):'n/a')));
+
+  // pre-trigger range: the one the trigger bar is reacting to (needed by G9 targets and G10)
+  const rp=(mode==='SWEEP'&&sweepIdx===i-1)?c.rngB:c.rngA;
+
+  // G9 -- risk geometry. TREND: SL 1 ATR behind the level, because the crowd's stops sit AT
+  // the level. SWEEP: that liquidity is already taken, so SL goes just beyond the wick.
+  let entry=null,entryType=null,sl=null,tp1=null,tp2=null,rr=null,slAtr=null,maxLev=null;const flags=[];
+  if(lvl&&mode){
+    if(C[i]-lvl.p<=CLEAN_LOC_ATR*atr){entry=C[i];entryType='MKT';}
+    else{entry=lvl.p+CLEAN_LOC_ATR*atr;entryType='LIMIT';}
+    sl=mode==='SWEEP'?(sweepLow-CLEAN_SL_SWEEP_BUF*atr):(lvl.p-CLEAN_SL_ATR*atr);
+    const risk=entry-sl;slAtr=risk/atr;
+    // Targets: first structure past the entry. After a SWEEP of a range, structure inside the
+    // range is not a target -- the play is the opposite side of the range and beyond.
+    const gap=entry+CLEAN_TP_GAP_ATR*atr,flo=(mode==='SWEEP'&&rp)?rp.hi:gap,tc=[];
+    const tadd=v=>{if(v!=null&&v>gap&&v>=flo)tc.push(v);};
+    c.pvHi.forEach(p=>tadd(p.p));tadd(c.poc);[c.rngA,c.rngB].forEach(r=>{if(r)tadd(r.hi);});tadd(c.hiW);
+    tc.sort((a,b)=>a-b);
+    if(tc.length){tp1=tc[0];const nx=tc.find(v=>v>tp1+CLEAN_TP_GAP_ATR*atr);tp2=nx!=null?nx:tp1+(tp1-entry);}
+    else{tp1=entry+CLEAN_RR_MIN*risk;tp2=entry+3*risk;flags.push('TP1=2R (нема структура)');}
+    rr=risk>0?(tp1-entry)/risk:0;
+    maxLev=Math.max(1,Math.min(CLEAN_LEV_CAP,Math.floor(1/(1.5*(risk/Math.abs(entry))+CLEAN_MMR))));
+    const ok9=slAtr<=CLEAN_SL_MAX_ATR&&rr>=CLEAN_RR_MIN;
+    add('G9','Ризик',ok9,'SL '+slAtr.toFixed(2)+' ATR · R:R '+rr.toFixed(2)
+      +(slAtr>CLEAN_SL_MAX_ATR?' (SL > '+CLEAN_SL_MAX_ATR+' ATR)':'')+(rr<CLEAN_RR_MIN?' (< '+CLEAN_RR_MIN+')':''));
+  }else add('G9','Ризик',false,'—');
+
+  // G10 -- liquidity trap: stacked OI in a tight range + crowd on our side
+  let trap=false,trapN='';
+  if(rp){
+    const oiR=c.oiChg(rp.e,rp.s-1);
+    if(oiR!=null&&oiR>=CLEAN_TRAP_OI&&c.lsr!=null&&c.lsr>CLEAN_LS_OVB){
+      trap=true;
+      trapN='опсег '+fmt(Math.min(Math.abs(rp.lo),Math.abs(rp.hi)))+'–'+fmt(Math.max(Math.abs(rp.lo),Math.abs(rp.hi)))
+        +' · '+rp.bars+' св. · OI◆ '+clnPct(oiR,1)+' · L/S '+(c.lsReal!=null?c.lsReal.toFixed(2):'?');
+    }
+  }
+  if(!trap)add('G10','Замка',true,rp?'опсег без натрупување':'нема тесен опсег');
+  else if(mode==='SWEEP'&&sweepLow<rp.lo-CLEAN_SWEEP_ATR*atr&&C[i]>rp.lo)add('G10','Замка',true,'исчистена: sweep '+(up?'под ':'над ')+P(rp.lo)+' + reclaim');
+  else add('G10','Замка',false,'ЗАМКА: '+trapN+' → чекај sweep '+(up?'под ':'над ')+P(rp.lo));
+
+  return{dir:up?'long':'short',gates,pass:gates.every(g=>g.ok),mode,
+    lvl:lvl?R(lvl.p):null,lvlSrc:lvl?lvl.src:null,entry:R(entry),entryType,sl:R(sl),tp1:R(tp1),tp2:R(tp2),
+    rr,slAtr,maxLev,flags,trap};
+}
+
+// Context flags (only for a side that passed all ten gates). Any flag -> grade B.
+async function clnContextFlags(coin,sd,ctx){
+  const up=sd.dir==='long';
+  const[oiD,k4,k1]=await Promise.all([
+    apiFetch(`/openInterestHist?symbol=${coin}USDT&period=1d&limit=30`,FDAPI),
+    apiFetch(`/klines?symbol=${coin}USDT&interval=4h&limit=3`),
+    apiFetch(`/klines?symbol=${coin}USDT&interval=1d&limit=3`)
+  ]);
+  if(oiD&&oiD.length>=5){
+    const mx=Math.max(...oiD.map(x=>+x.sumOpenInterest)),cur=ctx.oiE(ctx.i);
+    if(cur&&mx>0&&cur.c>=CLEAN_OI_MAX30*mx)sd.flags.push('OI ≈ 30d max ('+Math.round(cur.c/mx*100)+'%)');
+  }
+  const wick=(kk,lbl)=>{
+    if(!kk||kk.length<2)return;
+    const k=(+kk[kk.length-1][6]>Date.now())?kk[kk.length-2]:kk[kk.length-1];
+    const o=+k[1],h=+k[2],l=+k[3],cl=+k[4],rg=h-l,body=Math.abs(cl-o);
+    if(!(rg>0))return;
+    const wk=up?(h-Math.max(o,cl)):(Math.min(o,cl)-l);
+    if(wk>body&&wk>=0.4*rg)sd.flags.push(lbl+' фитил против');
+  };
+  wick(k4,'4h');wick(k1,'1D');
+  const d=new Date(),wd=d.getUTCDay(),hr=d.getUTCHours();
+  if((wd===5&&hr>=20)||(wd===6&&hr<6))sd.flags.push('сабота 00–06 UTC');
+}
+
+async function evalClean15(coin){
+  const needFr=_fMap[coin]===undefined;
+  const[kl,oiH,lsD,prem,c1h,pi]=await Promise.all([
+    apiFetch(`/klines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=120`),
+    apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${CLEAN_TF}&limit=40`,FDAPI),
+    fetchLSRatio(coin,CLEAN_TF).catch(()=>null),
+    apiFetch(`/premiumIndexKlines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=12`),
+    getCoin1hCloses(coin,null,null),
+    needFr?apiFetch(`/premiumIndex?symbol=${coin}USDT`):Promise.resolve(null)
+  ]);
+  if(!kl||kl.length<70)return null;
+  const kc=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl;   // closed bars only
+  const n=kc.length,i=n-1;
+  const T=kc.map(k=>+k[0]),O=kc.map(k=>+k[1]),H=kc.map(k=>+k[2]),L=kc.map(k=>+k[3]),C=kc.map(k=>+k[4]);
+  const QV=kc.map(k=>+k[7]),TB=kc.map(k=>+k[10]);
+  const ATR=clnATR(H,L,C,14),atr=ATR[i];
+  if(!(atr>0)||!(C[i]>0))return null;
+  const fr=needFr?(pi&&pi.lastFundingRate!=null?parseFloat(pi.lastFundingRate)*100:0):(_fMap[coin]||0);
+
+  // OI per bar: the openInterestHist point stamped at a bar's END (= next bar's open)
+  const oiMap=new Map();
+  (oiH||[]).forEach(x=>oiMap.set(+x.timestamp,{c:+x.sumOpenInterest,v:+x.sumOpenInterestValue}));
+  const oiAt=ts=>{if(oiMap.has(ts))return oiMap.get(ts);for(const[t,v]of oiMap){if(Math.abs(t-ts)<=120000)return v;}return null;};
+  let oiLag=false,oiLast=oiAt(T[i]+CLEAN_BAR_MS);
+  if(!oiLast){   // hist lags right after a bar closes -> live snapshot as the trigger-bar value
+    const lo=await apiFetch(`/openInterest?symbol=${coin}USDT`);
+    if(lo&&+lo.openInterest>0){oiLast={c:+lo.openInterest,v:+lo.openInterest*C[i]};oiLag=true;}
+  }
+  const oiE=j=>j===i?oiLast:oiAt(T[j]+CLEAN_BAR_MS);
+  const oiChg=(a,b)=>{const A=oiE(a),B=oiE(b);return(A&&B&&B.c>0)?((A.c-B.c)/B.c)*100:null;};
+
+  // taker delta per bar (quote USDT) and the 20-bar cumulative trajectory
+  const D=QV.map((q,j)=>2*TB[j]-q);
+  const tk=(a,b)=>{let t=0,q=0;for(let j=a;j<=b;j++){t+=TB[j];q+=QV[j];}return q>0?t/q*100:50;};
+  let cum=0;const cs=[];for(let j=Math.max(0,n-20);j<n;j++){cum+=D[j];cs.push(cum);}
+  const lastCs=cs[cs.length-1];
+
+  // momentum, same construction as the SQZMOM layer: MOMz over 14 bars, slope over 6
+  const mz=j=>(j>=14&&ATR[j]>0)?(C[j]-C[j-14])/ATR[j]:null;
+  const ms=[];for(let j=i-5;j<=i;j++)ms.push(mz(j));
+  let mslope=null,flip=0;
+  if(ms.every(v=>v!=null)){
+    let sx=0,sy=0,sxy=0,sxx=0;for(let j=0;j<6;j++){sx+=j;sy+=ms[j];sxy+=j*ms[j];sxx+=j*j;}
+    mslope=(6*sxy-sx*sy)/(6*sxx-sx*sx);
+    const a=ms[0],b=ms[5];
+    if((a>0)!==(b>0)&&Math.abs(b-a)>=MOM_FLIP_MIN&&Math.abs(b)>=MOM_FLIP_MIN/2)flip=b>0?1:-1;
+  }
+
+  // premium index (raw driver of funding), last 8 closed 15m bars = 2h
+  let premNow=null,premMax=null,premMin=null,premFirst=null;
+  if(prem&&prem.length>=5){
+    const pc=(+prem[prem.length-1][6]>Date.now())?prem.slice(0,-1):prem;
+    const pv=pc.slice(-8).map(k=>+k[4]).filter(v=>!isNaN(v));
+    if(pv.length>=4){premNow=pv[pv.length-1];premMax=Math.max(...pv);premMin=Math.min(...pv);premFirst=pv[0];}
+  }
+
+  const from=Math.max(0,n-96);
+  const pv=clnPivots(H,L,from,i,3);
+  let hiW=-Infinity,loW=Infinity;for(let j=from;j<=i;j++){if(H[j]>hiW)hiW=H[j];if(L[j]<loW)loW=L[j];}
+  const pocR=calcPOC(kc.concat([kc[i]]),96);   // duplicate last bar: calcPOC always drops the final (live) bar
+  const lsr=lsD&&lsD.lsRatio>0?lsD.lsRatio:null;
+  let jmaAbove=null;
+  if(c1h&&c1h.length>=40)jmaAbove=detectJMADWMACross(c1h,8,50,2,10,2).jmaAbove;
+
+  const ctx={dir:1,i,O,H,L,C,D,atr,tk,cvdLow:lastCs<=Math.min(...cs),cvdHigh:lastCs>=Math.max(...cs),
+    mzNow:ms[5],mzPrev:ms[4],mslope,flip,sqzNow:clnSqzOn(H,L,C,i),jmaAbove,
+    pvLo:pv.lo,pvHi:pv.hi,poc:pocR?pocR.poc:null,hiW,loW,
+    rngA:clnRange(H,L,i-1,ATR[i-1]),rngB:clnRange(H,L,i-2,ATR[i-2]),
+    oiE,oiChg,lsr,lsReal:lsr,fr,premNow,premMax,premMin,premFirst,dOI8:oiChg(i,i-8)};
+  const Ls=clnSide(ctx),Ss=clnSide(clnMirror(ctx));
+  for(const sd of[Ls,Ss])if(sd.pass)await clnContextFlags(coin,sd,ctx);
+  const pick=[Ls,Ss].filter(s=>s.pass).sort((a,b)=>b.rr-a.rr)[0]||null;
+  return{coin,at:Date.now(),bar:Math.floor(Date.now()/CLEAN_BAR_MS),barT:T[i],price:C[i],atr,atrPct:atr/C[i]*100,
+    ls:lsr,fr,oiLag,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
+}
+
+async function evalClean15Cached(coin,force){
+  const bar=Math.floor(Date.now()/CLEAN_BAR_MS),h=_cleanCache[coin];
+  if(!force&&h&&h.bar===bar&&!(h.oiLag&&Date.now()-h.at>120000))return h;
+  let r=null;
+  try{r=await evalClean15(coin);}catch(e){console.warn('CLEAN15',coin,e);}
+  if(r)_cleanCache[coin]=r;
+  return r;
+}
+
+function pickCleanShortlist(){
+  const out=[],seen=new Set();
+  const push=c=>{if(c&&!seen.has(c)){seen.add(c);out.push(c);}};
+  if(S.srch){const c=S.srch.toUpperCase().replace('USDT','').trim();if(_tMap[c])push(c);}
+  const ok=s=>_tMap[s.coin]&&!isTradFi(s.coin);
+  S.signals.filter(s=>s.isFav&&ok(s)).forEach(s=>push(s.coin));
+  [...S.signals].filter(s=>ok(s)&&s.score>=CLEAN_MIN_SCORE&&(s.volume||0)>=CLEAN_MIN_VOL)
+    .sort((a,b)=>b.score-a.score).slice(0,CLEAN_MAX_COINS).forEach(s=>push(s.coin));
+  return out;
+}
+
+async function buildClean(onProgress){
+  const list=pickCleanShortlist(),out={};
+  for(let k=0;k<list.length;k+=3){
+    if(S.abort)break;
+    const chunk=list.slice(k,k+3);
+    const res=await Promise.all(chunk.map(c=>evalClean15Cached(c)));
+    res.forEach((r,j)=>{if(r)out[chunk[j]]=r;});
+    if(onProgress)onProgress(Math.round(Math.min(k+3,list.length)/Math.max(list.length,1)*100));
+    await sleep(120);
+  }
+  _clean=out;_cleanTs=Date.now();
+}
+
+function cleanCounts(){
+  const v=Object.values(_clean);
+  return{A:v.filter(r=>r.grade==='A').length,B:v.filter(r=>r.grade==='B').length,W:v.filter(r=>r.grade==='WAIT').length,n:v.length};
+}
+
+function startBuildClean(){
+  if(_cleanBuilding){startBuildSetups();return;}
+  _cleanBuilding=true;
+  const lbl=t=>{const b=document.getElementById('suTabBtn');if(b&&!b.classList.contains('active'))b.textContent=t;};
+  lbl('📊 СЕТАПИ ✅⏳');
+  renderCleanSection();
+  buildClean(p=>lbl('📊 СЕТАПИ ✅'+p+'%'))
+    .catch(e=>console.warn('CLEAN15 build',e))
+    .then(()=>{
+      _cleanBuilding=false;
+      renderList();renderCleanSection();
+      const k=cleanCounts();
+      if(k.A+k.B>0)toast('✅ CLEAN15 · A '+k.A+' · B '+k.B+' — отвори СЕТАПИ');
+      startBuildSetups();
+    });
+}
+
+// -- CLEAN15 UI --------------------------------------------
+function cleanTagHTML(coin){
+  const r=_clean[coin];if(!r||r.grade==='WAIT')return '';
+  const up=r.best==='L';
+  return '<span class="ctag ct-clean '+(up?'l':'s')+(r.grade==='B'?' b':'')+'" data-coin="'+coin
+    +'" onclick="event.stopPropagation();openDetail(this.dataset.coin)">✅'+r.grade+(up?'▲':'▼')+'</span>';
+}
+
+function cleanPassCount(r){return Math.max(r.L.gates.filter(g=>g.ok).length,r.S.gates.filter(g=>g.ok).length);}
+
+function cleanCardHTML(r){
+  const up=r.best==='L',sd=up?r.L:r.S;
+  const lv=(l,v,c)=>'<div class="su-lv"><div class="su-lv-l">'+l+'</div><div class="su-lv-v" style="color:'+c+'">'+v+'</div></div>';
+  const key=sd.gates.filter(g=>g.id==='G3'||g.id==='G4'||g.id==='G5').map(g=>'<span class="su-reason">'+clnEsc(g.note)+'</span>').join('');
+  return '<div class="su-card '+(up?'clean-l':'clean-s')+'" data-coin="'+r.coin+'" onclick="openDetail(this.dataset.coin)">'
+    +'<div class="su-top"><div><div class="su-coin">'+(isAlpha(r.coin)?'<span class="ctag ct-alpha">🅐</span> ':'')+r.coin
+    +'<span style="font-size:10px;color:var(--muted);font-weight:normal"> USDT</span></div>'
+    +'<div style="font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)">'+sd.mode+' · ниво $'+fmt(sd.lvl)+' ('+clnEsc(sd.lvlSrc)
+    +') · ATR '+r.atrPct.toFixed(2)+'% · свеќа '+clnHM(r.barT)+'</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center"><span class="cl-grade '+r.grade+'">'+r.grade+'</span>'
+    +'<div class="su-dir '+(up?'long':'short')+'">'+(up?'▲ LONG':'▼ SHORT')+'</div></div></div>'
+    +'<div class="su-levels cl6">'
+    +lv('ВЛЕЗ '+sd.entryType,'$'+fmt(sd.entry),'var(--text)')
+    +lv('SL · '+sd.slAtr.toFixed(1)+' ATR','$'+fmt(sd.sl),'var(--red)')
+    +lv('TP1 · R:R '+sd.rr.toFixed(1),'$'+fmt(sd.tp1),'var(--green)')
+    +lv('TP2','$'+fmt(sd.tp2),'var(--green)')
+    +lv('MAX LEV',sd.maxLev+'x','var(--yellow)')
+    +lv('SL %',(Math.abs(sd.entry-sd.sl)/sd.entry*100).toFixed(2)+'%','var(--text2)')
+    +'</div>'
+    +(sd.flags.length?'<div class="su-reasons">'+sd.flags.map(f=>'<span class="su-reason" style="color:var(--yellow)">⚑ '+clnEsc(f)+'</span>').join('')+'</div>':'')
+    +'<div class="su-reasons">'+key+'</div></div>';
+}
+
+function cleanWaitHTML(r){
+  const line=(sd,a)=>{const x=sd.gates.filter(g=>!g.ok);
+    return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' · '+x.slice(0,3).map(g=>g.id+' '+clnEsc(g.note)).join(' · ')+(x.length>3?' · +'+(x.length-3):'');};
+  return '<div class="cl-wait" data-coin="'+r.coin+'" onclick="openDetail(this.dataset.coin)"><b>'+r.coin+'</b> <span style="color:var(--muted)">$'
+    +fmt(r.price)+' · свеќа '+clnHM(r.barT)+'</span><br>'+line(r.L,'▲')+'<br>'+line(r.S,'▼')+'</div>';
+}
+
+function renderCleanSection(){
+  const el=document.getElementById('clBody');if(!el)return;
+  if(!S.signals.length){el.innerHTML='';return;}
+  const all=Object.values(_clean);
+  const head=k=>'<div class="su-section-title" style="color:var(--green)">✅ CLEAN15 · ЧИСТ ВЛЕЗ 15m <span style="font-size:10px;color:var(--muted)">'+k+'</span></div>';
+  if(!all.length){
+    el.innerHTML=_cleanBuilding?'<div class="su-section">'+head('')+'<div class="su-note">⏳ Ги проверувам гејтовите за shortlist-от...</div></div>':'';
+    return;
+  }
+  const k=cleanCounts();
+  const ab=all.filter(r=>r.grade!=='WAIT').sort((a,b)=>a.grade.localeCompare(b.grade)||((b.best==='L'?b.L:b.S).rr-(a.best==='L'?a.L:a.S).rr));
+  const wait=all.filter(r=>r.grade==='WAIT').sort((a,b)=>cleanPassCount(b)-cleanPassCount(a));
+  let h='<div class="su-section">'+head('A '+k.A+' · B '+k.B+' · WAIT '+k.W+(_cleanTs?' · '+clnHM(_cleanTs):'')+(_cleanBuilding?' · ⏳':''));
+  if(ab.length)ab.forEach(r=>{h+=cleanCardHTML(r);});
+  else h+='<div class="su-note">Нема чист влез на последната затворена 15m свеќа. Гејтовите се строги намерно — WAIT е одговор, не грешка.</div>';
+  if(wait.length){
+    h+='<details class="cl-det"><summary>WAIT ('+wait.length+') — зошто не, најблиските прво</summary>';
+    wait.slice(0,15).forEach(r=>{h+=cleanWaitHTML(r);});
+    h+='</details>';
+  }
+  el.innerHTML=h+'</div>';
+}
+
+function cleanDetailHTML(r){
+  const ic=ok=>ok?'<span class="cl-ok">✓</span>':'<span class="cl-x">✗</span>';
+  const v=sd=>sd.pass?(sd.flags.length?'B':'A'):'WAIT';
+  let h='<div class="cl-head">';
+  [['L','▲ LONG'],['S','▼ SHORT']].forEach(([key,lbl])=>{
+    const sd=r[key],g=v(sd);
+    h+='<span class="cl-grade '+(g==='WAIT'?'W':g)+'">'+lbl+' · '+g+(sd.mode?' · '+sd.mode:'')+' · '+sd.gates.filter(x=>x.ok).length+'/'+sd.gates.length+'</span>';
+  });
+  h+='</div>';
+  [['L',true],['S',false]].forEach(([key,up])=>{
+    const sd=r[key];if(!sd.pass)return;
+    h+='<div class="su-levels cl6" style="margin-bottom:8px">'
+      +['ВЛЕЗ '+sd.entryType+'|$'+fmt(sd.entry)+'|var(--text)','SL · '+sd.slAtr.toFixed(1)+' ATR|$'+fmt(sd.sl)+'|var(--red)',
+        'TP1 · R:R '+sd.rr.toFixed(1)+'|$'+fmt(sd.tp1)+'|var(--green)','TP2|$'+fmt(sd.tp2)+'|var(--green)',
+        'MAX LEV|'+sd.maxLev+'x|var(--yellow)',(up?'▲':'▼')+' '+(sd.flags.length?'B':'A')+'|'+(sd.flags.length?clnEsc(sd.flags.join(', ')):'без флагови')+'|var(--text2)']
+      .map(s=>{const[a,b,c]=s.split('|');return '<div class="su-lv"><div class="su-lv-l">'+a+'</div><div class="su-lv-v" style="color:'+c+'">'+b+'</div></div>';}).join('')
+      +'</div>';
+  });
+  h+='<div class="cl-gt"><div class="h">ГЕЈТ</div><div class="h">▲ LONG</div><div class="h">▼ SHORT</div>';
+  r.L.gates.forEach((g,ix)=>{
+    const s=r.S.gates[ix];
+    h+='<div class="g">'+g.id+' '+clnEsc(g.name)+'</div><div class="c">'+ic(g.ok)+' '+clnEsc(g.note)+'</div><div class="c">'+ic(s.ok)+' '+clnEsc(s.note)+'</div>';
+  });
+  h+='</div><div class="cl-note">Свеќа '+clnHM(r.barT)+'–'+clnHM(r.barT+CLEAN_BAR_MS)+' (затворена) · ATR '+r.atrPct.toFixed(2)+'%'
+    +' · L/S '+(r.ls!=null?r.ls.toFixed(2):'n/a')+' · FR '+clnSgn(r.fr,4)+'%'+(r.oiLag?' · OI: live (hist доцни)':'')+'</div>';
+  return h;
+}
+
+async function loadCleanDetail(coin,force){
+  const box=document.getElementById('dpClean'),ct=document.getElementById('cleanContent');
+  if(!box||!ct)return;
+  box.style.display='block';
+  ct.innerHTML='<span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Ги проверувам 10-те гејта на 15m...</span>';
+  const r=await evalClean15Cached(coin,force);
+  if(S.detailCoin!==coin)return;
+  if(!r){ct.innerHTML='<div class="cl-note">Нема доволно 15m историја (потребни 70+ свеќи) или Binance не одговара.</div>';return;}
+  _clean[coin]=r;
+  ct.innerHTML=cleanDetailHTML(r);
+  renderList();
+}
+
+function cleanDigestLine(r){
+  const sdl=(sd,a)=>{
+    if(sd.pass)return a+' '+(sd.flags.length?'B':'A')+' '+sd.mode+' | E '+fmt(sd.entry)+' '+sd.entryType+' | SL '+fmt(sd.sl)
+      +' ('+sd.slAtr.toFixed(1)+'ATR) | TP1 '+fmt(sd.tp1)+' ('+sd.rr.toFixed(1)+'R) | TP2 '+fmt(sd.tp2)+' | LEV<='+sd.maxLev+'x'
+      +(sd.flags.length?' | flags: '+sd.flags.join(', '):'');
+    const x=sd.gates.filter(g=>!g.ok);
+    return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' x: '+x.map(g=>g.id+' '+g.note).join('; ');
+  };
+  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+'|ATR '+r.atrPct.toFixed(2)+'%|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
+}
+
+function cleanDigest(rows){
+  const all=Object.values(_clean);
+  if(!all.length)return '\nCLEAN15: not built yet (runs after each scan on the shortlist).\n';
+  const k=cleanCounts(),inView=new Set(rows.map(s=>s.coin));
+  let o='\nCLEAN15 [closed 15m bars, trend 1h] built '+(_cleanTs?clnHM(_cleanTs):'—')+' | evaluated '+k.n+' | A '+k.A+' | B '+k.B+' | WAIT '+k.W+'\n';
+  o+='G1 1h JMA/DWMA | G2 level touch <='+CLEAN_LOC_ATR+'ATR | G3 TREND bar or SWEEP&reclaim | G4 OI coins DRIVE (FLOW) or FLUSH->HOLD | '
+    +'G5 CVD+taker same side | G6 MOMz/MSLP | G7 no SQZ ON | G8 FR<='+CLEAN_FR_MAX+'%, L/S+premium, premium fade under OI up | '
+    +'G9 SL TREND=level-'+CLEAN_SL_ATR+'ATR / SWEEP=wick-'+CLEAN_SL_SWEEP_BUF+'ATR, <='+CLEAN_SL_MAX_ATR+'ATR, R:R>='+CLEAN_RR_MIN+' | G10 trap: range<='+CLEAN_TRAP_ATR+'ATR >='+CLEAN_TRAP_BARS
+    +' bars + OI coins >=+'+CLEAN_TRAP_OI+'% + crowded L/S -> SWEEP only. A=10/10, B=10/10+flag, WAIT=any fail.\n';
+  all.filter(r=>r.grade!=='WAIT').forEach(r=>{o+=cleanDigestLine(r)+'\n';});
+  all.filter(r=>r.grade==='WAIT'&&inView.has(r.coin)).forEach(r=>{o+=cleanDigestLine(r)+'\n';});
+  return o;
+}
 
 
 // -- TRADINGVIEW DEEP LINK --
@@ -3691,38 +4329,176 @@ function showSqueezeExplain(e, coin, tf, price) {
 
 
 // -- HELP OVERLAY --
+// Водич за СИТЕ кратенки: контроли, филтри, ознаки на картичка, детални сигнали, score.
+// Праговите се читаат од константите каде постојат, за текстот да не застари при калибрација.
+function helpSections(){
+  const g='var(--green)',r='var(--red)',y='var(--yellow)',a='var(--accent)',o='var(--orange)',m='var(--muted)',pk='#ff00cc',am='#ffaa00',cy='#00c8ff',pu='#c060ff';
+  return [
+  {h:'🧭 КОНТРОЛИ',items:[
+    {tag:'v'+APP_VER+' '+APP_CODENAME+' ·'+APP_BUILD.slice(-1),col:pu,what:'Верзија + последна буква од build-от (APP_BUILD).',action:'Ако по deploy не се смени буквата — PWA го сервира стариот кеш. Клик → DIGEST.'},
+    {tag:'🅐 N',col:y,what:'Број на Binance Alpha токени вчитани од Alpha листата.',action:'Ако е „—“, Alpha листата не се вчитала → ALPHA филтерот ќе е празен.'},
+    {tag:'Пребарај',col:a,what:'Барање по симбол (без USDT).',action:'Додека има текст, филтрите се ИГНОРИРААТ — се прикажува само пронајдениот коин.'},
+    {tag:'● точка',col:g,what:'Статус на скенот: сива = мирува, анимирана = скенира, зелена = live циклус.'},
+    {tag:'📊 СЕТАПИ',col:a,what:'На врвот: ✅ CLEAN15 чисти влезови (15m). Под нив: 1h+4h trade setups од последниот скен (со MAX % лизгач).',when:'Копчето покажува ✅N кога има A/B влез, 🎯N за MEGA сетапи.'},
+    {tag:'⚡ HEATMAP',col:o,what:'Heatmap поглед за избран коин (Alpha + стандардни), со автоосвежување.'},
+    {tag:'⚡ СКЕНИРАЈ / ⏹ СТОП',col:r,what:'Старт/стоп на циклусот на скенирање.'},
+    {tag:'🗑',col:m,what:'Ги брише резултатите и бројачите (не ги брише FAV).'},
+    {tag:'📋',col:m,what:'DIGEST — текстуален извештај на ТОЧНО тоа што е на екран (истите филтри). 🔬 КЛАСИ = exchangeInfo проба.',action:'Копирај и прати за анализа.'},
+    {tag:'🏛 TradFi OFF/ON',col:o,what:'OFF = акции, стоки и pre-IPO (TRADIFI_PERPETUAL) се исклучени од скенот.',action:'TRADFI филтерот ги вклучува и кога е OFF.'},
+    {tag:'1m … 1w',col:a,what:'Timeframe на скенот. OI: 1m→5m, 1w→1d (Binance нема 1m/1w OI).'},
+    {tag:'СИТЕ (TF)',col:a,what:'Скенира 15m + 1h + 4h и за секој коин го прикажува најдобриот TF (TF ознака на картичката).'},
+  ]},
+  {h:'✅ CLEAN15 — ЧИСТ ВЛЕЗ (15m, затворени свеќи)',items:[
+    {tag:'✅ CLEAN15',col:g,what:'Посебен модул за ТАЈМИНГ на влез: 10 гејтови на последната ЗАТВОРЕНА 15m свеќа. Лонг и шорт се пресметуваат со ист код (шортот врз огледална слика на цената), па не можат да се разминат. Не гласа во SCORE.',when:()=>'Автоматски по секој скен, само за shortlist: топ '+CLEAN_MAX_COINS+' со SCORE ≥ '+CLEAN_MIN_SCORE+' и волумен ≥ $'+(CLEAN_MIN_VOL/1e6)+'M, + FAV + пребараниот коин. Резултатот важи до затворање на следната 15m свеќа.',action:'Влегувај само на A или B. WAIT значи „не сега“ — со листа зошто.'},
+    {tag:'G1 · Тренд 1h',col:a,what:'JMA(8) над DWMA(10) на 1h за лонг, под за шорт.',action:'Само влезови во насока на 1h трендот.'},
+    {tag:'G2 · Локација',col:a,what:()=>'Тригер-свеќата или претходната допрела ниво во рамки на '+CLEAN_LOC_ATR+' ATR(15m): 15m swing low/high (pivot 3/3), POC или дно/врв на тесен опсег.',action:()=>'Ако close-от е подалеку од '+CLEAN_LOC_ATR+' ATR од нивото, влезот е LIMIT на ниво ± '+CLEAN_LOC_ATR+' ATR (ретест), не MKT.'},
+    {tag:'G3 · Тригер',col:a,what:'TREND = тело ≥ 50% од свеќата, close во горните 30% (шорт: долните) и над high (шорт: под low) на претходната свеќа. SWEEP = фитил низ нивото (≥ 0.1 ATR), а close назад над него (шорт: под) во горните 40%.',when:'SWEEP има предност — лов на стоповите па враќање е најчистиот тригер.'},
+    {tag:'G4 · OI◆',col:g,what:()=>'TREND: OI во коини +'+CLEAN_OI_MIN+'% за 3 свеќи СО цена ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (DRIVE) и DOM=FLOW. OI↑ а цената рамна = ABSORB → ✗. OI↑ со цена против = нови позиции на спротивната страна → ✗.',when:()=>'SWEEP: OI паѓа ≥ '+Math.abs(CLEAN_OI_FLUSH)+'% на sweep-свеќата (FLUSH) и не продолжува да паѓа на reclaim-от (HOLD).'},
+    {tag:'G5 · CVD / Taker',col:g,what:()=>'TREND: CVD расте 3 свеќи, taker buy ≥ '+CLEAN_TAKER_L+'% (шорт: CVD паѓа, ≤ '+(100-CLEAN_TAKER_L)+'%), CVDt не е на ново дно (шорт: на нов врв). SWEEP: reclaim-свеќата има позитивен delta (шорт: негативен) и taker ≥ '+CLEAN_TAKER_L+'% (шорт: ≤ '+(100-CLEAN_TAKER_L)+'%).',when:'Построго од правилото „OI$ со цената го надгласува CVD“ — за чист влез ги бара и двете.',action:'Пумпи со апсорпција (цена↑, CVD↓) намерно ги пропушта.'},
+    {tag:'G6 · Моментум',col:a,what:'TREND: MOMz во насоката на влезот И наклонот (MSLP) во истата насока, без FLIP против. SWEEP: спротивното движење не смее да забрзува — MOMz се свртел на последната свеќа или MSLP веќе е во насоката.'},
+    {tag:'G7 · Компресија',col:cy,what:'SQZ ON на тригер-свеќата (Bollinger внатре во Keltner) → ✗.',action:'Чекај release — компресијата нема позната насока додека не пукне.'},
+    {tag:'G8 · Crowding',col:pu,what:()=>'Лонг ✗ ако: FR > +'+CLEAN_FR_MAX+'%; или L/S ▲OVB (> '+CLEAN_LS_OVB+') со растечка премија; или premium index падне ≥ '+Math.round(CLEAN_PREM_DROP*100)+'% од 2h максимум додека OI◆ (8 свеќи) расте > '+CLEAN_PREM_OI+'%. Шорт огледално.',when:'Премијата се чита од Binance premium index (15m) — суровата премија што го движи funding-от. Премија што се гаси под растечки OI = новите позиции не се лонгови што плаќаат.'},
+    {tag:'G9 · Ризик',col:r,what:()=>'TREND: SL = ниво − '+CLEAN_SL_ATR+' ATR (стоповите на толпата се НА нивото). SWEEP: SL = под фитилот − '+CLEAN_SL_SWEEP_BUF+' ATR (таа ликвидност е веќе земена). SL ≤ '+CLEAN_SL_MAX_ATR+' ATR од влезот. TP1 = прва структура спроти влезот; по SWEEP на опсег — врвот на опсегот и подалеку. R:R до TP1 ≥ '+CLEAN_RR_MIN+'.',action:'Ако R:R < 2 → WAIT за подобра цена или sweep.'},
+    {tag:'G10 · Замка',col:am,what:()=>'Тесен опсег (≤ '+CLEAN_TRAP_ATR+' ATR, ≥ '+CLEAN_TRAP_BARS+' свеќи) + OI◆ +'+CLEAN_TRAP_OI+'% во опсегот + L/S ▲OVB за лонг (▼OVS за шорт) = позиции натрупани, стоповите под/над опсегот се мета.',action:'Лонг во опсегот ✗. Дозволен е само SWEEP под дното + reclaim (OI паѓа на sweep, CVD расте на reclaim). Шорт огледално.'},
+    {tag:'A / B / WAIT',col:y,what:()=>'A = сите 10 гејтови. B = 10/10 + контекст-флаг: OI во коини ≥ '+Math.round(CLEAN_OI_MAX30*100)+'% од 30d максимум (таван), последната 4h или 1D свеќа има фитил против влезот, петок 20h – сабота 06h UTC (тенка ликвидност), или нема структура за TP1 (TP1 = 2R). WAIT = барем еден паднат гејт.',action:'A = цела позиција · B = половина · WAIT = не.'},
+    {tag:'ВЛЕЗ MKT / LIMIT',col:a,what:()=>'MKT = close-от е во рамки на '+CLEAN_LOC_ATR+' ATR од нивото. LIMIT = чекај ретест на ниво ± '+CLEAN_LOC_ATR+' ATR; ако не се наполни, нема влез.'},
+    {tag:'MAX LEV',col:y,what:()=>'floor(1 / (1.5 × SL% + '+Math.round(CLEAN_MMR*100)+'% MMR)), најмногу '+CLEAN_LEV_CAP+'x — ликвидацијата е секогаш барем 1.5× подалеку од SL.',action:'Над ова, SL е зад liq-цената = нефункционален.'},
+    {tag:'TREND / SWEEP',col:a,what:'Режим на тригерот: TREND = продолжение од ниво; SWEEP = лов на стоповите под/над нивото, па враќање.'},
+    {tag:'Каде се гледа',col:g,what:'Ознака ✅A▲ / ✅B▼ на картичката · филтер ✅ CLEAN15 · секција на врвот на СЕТАПИ (A/B картички + WAIT листа „зошто не“, најблиските прво) · табела со сите 10 гејта за лонг и шорт во деталите на коинот · CLEAN15 блок на дното на DIGEST.'},
+  ]},
+  {h:'📊 БРОЈАЧИ',items:[
+    {tag:'BULL / BEAR',col:g,what:'Коини со очекувана насока нагоре/надолу. CONFLUENCE ја надгласува обичната бројка на ознаки.'},
+    {tag:'LIQ',col:o,what:'Коини со LIQ HUNT (ликвидациски лов).'},
+    {tag:'ALPHA / FAV',col:y,what:'Коини во резултатите што се Binance Alpha / во твоите фаворити.'},
+    {tag:'ВКУПНО',col:a,what:'Сите коини со score > 0 (пред филтри).'},
+  ]},
+  {h:'🔎 ФИЛТРИ — повеќе активни = AND (коинот мора да ги исполни СИТЕ)',items:[
+    {tag:'📋 СИТЕ',col:a,what:'Ги чисти сите филтри.'},
+    {tag:'⭐ FAV',col:y,what:'Само фаворити. Ако е единствен филтер, скенот оди САМО низ фаворитите (побрзо).',action:'Фаворит се додава со ☆ во деталниот приказ. +1 score.'},
+    {tag:'🅐 ALPHA',col:y,what:'Токени од Binance Alpha листата. +1 score.'},
+    {tag:'⚡ LIQ HUNT',col:o,what:'Цена и CVD во спротивни насоки: |цена|>1.5%, или свеќа со долг фитил (тело < 38% од range) во последните 3.',when:'⚡SHORT SQ = цена↑ CVD↓ (шортови ликвидирани). ⚡LONG DMP = цена↓ CVD↑.',action:'По лов честопати следи reversal. +2 score.'},
+    {tag:'🔥 SQ ACT',col:pk,what:'Squeeze Activation (само затворени свеќи): цена расте + реален OI◆ паѓа >3% за ~3 периоди + (CVD spike ИЛИ FR < −0.03%).',when:'Шортовите се принудно затвораат. Без пад на OI нема squeeze.',action:'Continuation LONG, SL под swing low.'},
+    {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 spread < 0.5% од цената — екстремна компресија.',action:'Чекај пробив со волумен.'},
+    {tag:'🚀 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5%. 🚀 = SMA25>SMA99 (bull), 📉 = SMA25<SMA99 (bear).',action:'Потврди со CVD или DI крос.'},
+    {tag:'🌀 COIL',col:cy,what:()=>'Range < '+COIL_RANGE_MAX+'% + понова половина волумен < '+Math.round(COIL_VOL_RATIO_MAX*100)+'% од постарата + JMA>DWMA, во последните COIL N свеќи.',action:'Пробив нагоре со волумен; SL под swing low. +2 score.'},
+    {tag:'📈 JMA↑ / 📉 JMA↓',col:g,what:'JMA(8) над/под DWMA(10) — свеж крос ИЛИ тековна состојба.',action:'Свежиот крос (JMA X) носи +2 score.'},
+    {tag:'🎯 FIBO',col:y,what:'Цена ±2% од Fib ниво (23.6/38.2/50/61.8) од последниот значаен swing (до 150 свеќи).',action:'38.2% и 61.8% носат +1 score.'},
+    {tag:'📊 POC',col:a,what:'Цена ±2% од Point of Control (ниво со најголем волумен, 150 свеќи). SUP = над POC, RES = под. +1 score.'},
+    {tag:'✅ CLEAN15',col:g,what:'Само коини со A или B чист влез на 15m (види секција CLEAN15).'},
+    {tag:'⚡ CONFLUENCE',col:y,what:'≥4 индикатори гласаат во иста насока и се повеќе од спротивните. Гласачи: MA SQ, COIL, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI тренд (реален), FR, CCIOBV, + бонус за BTC независност.',action:'Најсилен сигнал. +3 score. Моментумот НЕ гласа.'},
+    {tag:'🆓 BTC FREE',col:g,what:'|корелација со BTC| < 0.4 (Pearson, фиксно 1h, 150 свеќи, без разлика на TF).',action:'Сигналите се „чисти“, не BTC шум. Дава бонус глас во CONFLUENCE.'},
+    {tag:'🎯 SQZMOM',col:'#00c896',what:'SQZMOM_LB_AO: squeeze активен ИЛИ пукнал сигнал (SQZ▲▼, ADX▲▼, DI крос).',when:'SQZ▲ = squeeze + Momentum↑ + AO↑ + ADX>20 + DI+>20.',action:'SQZ▲/▼ +2 score, ADX брејк +1.'},
+    {tag:'▲DI / ▼DI',col:g,what:'Свеж крос DI+ над DI− (▲) или обратно (▼).',when:'4h/12h/1d/1w = последната 1 свеќа, 1h и помали = последните 2.',action:'Појак ако ADX>20.'},
+    {tag:'🚀 SPIKE+VOL',col:g,what:'Промена > +3% и волумен > $20M.',action:'Потврди со CVD — ако CVD паѓа, можен pump&dump.'},
+    {tag:'💥 DUMP+VOL',col:r,what:'Промена < −3% и волумен > $20M.',action:'Capitulation или short; можен bounce.'},
+    {tag:'💰 FR EXT',col:pu,what:'|Funding Rate| > 0.08%.',when:'+FR = лонговите преплатени → bearish. −FR = шортовите плаќаат → bullish.'},
+    {tag:'📈 OI SURGE',col:a,what:'Реален OI во КОИНИ > +15% (без real OI: OI$ > +20%).',action:'Нов левериџ. Насоката ја кажуваат цена + CVD.'},
+    {tag:'◆ OI FLOW',col:g,what:'Реален OI: |OI◆| > 3% и промената е доминантно FLOW (нови/затворени позиции), не ревалуација од цената.'},
+    {tag:'⚙ DRIVE',col:g,what:'Режим OI◆↑ + ACCEL — нови пари влегуваат и цената реагира.',action:'Вистинска експанзија; тренд со гориво.'},
+    {tag:'⚙ ABSORB',col:am,what:'Режим OI◆↑ + DECEL — нови позиции, а движењето слабее.',action:'Апсорпција — предупредување пред PEAK/reversal.'},
+    {tag:'⚙ REG SQZ',col:pk,what:'Режим OI◆↓ + ACCEL — движењето е од ЗАТВОРАЊА, не нови пари.',action:'Не трае долго. (DEAD = OI↓ + DECEL, нема филтер.)'},
+    {tag:'↗ ACCEL / ↘ DECEL',col:a,what:()=>'MDIR (наклон на моментумот × неговиот знак) во горните '+(100-MOM_ACCEL_PCT)+'% / долните '+MOM_DECEL_PCT+'% од универзумот на тој TF.',when:'ACCEL кај коин што паѓа = падот СЕ ЗАБРЗУВА (не раст). Под '+MOM_MIN_POP+' коини (пр. пребарување на еден коин) перцентилот се зема од последниот ЦЕЛОСЕН скен на истиот TF (до 6h) — DIGEST пишува „ref“. Без таков скен → STEADY.'},
+    {tag:'⇄ FLIP↑ / FLIP↓',col:y,what:()=>'MOMz (поместување во ATR-и) сменил знак со замав ≥ '+MOM_FLIP_MIN.toFixed(2)+' ATR.',when:'Паралелен флаг — коин може да е ACCEL и FLIP истовремено.',action:'Рана смена на насока; бара потврда.'},
+    {tag:'🏛 TRADFI',col:o,what:'Само TradFi перпетуали: акции (ACC US/HK/KR/CN), стоки (COM), pre-IPO (IPO).'},
+    {tag:'📊 CVD DIV',col:a,what:'|CVD делта| > 3% и спротивно од цената.',when:'Цена↑ CVD↓ = дистрибуција. Цена↓ CVD↑ = акумулација.',action:'+2 score. Комбинирај со OI◆.'},
+    {tag:'⚡ SCORE 7+',col:y,what:'Вкупен score ≥ 7 (види секција SCORE подолу).'},
+    {tag:'⚖️ L/S EXT',col:'#ff9a3c',what:'Long/Short сметки > 1.5 (▲OVB → contrarian bearish) или < 0.67 (▼OVS → bullish). +1 score.'},
+    {tag:'📥 INFLOW / 📤 OUTFLOW',col:g,what:'Taker buy > 58% (купувачите агресивни) / < 42% (продавачите). +1 score.'},
+    {tag:'💵 USDT0',col:a,what:'„USDT FLOW“: (волумен > $50M + OI$ > +10% + CVD > +3%) ИЛИ (INFLOW + волумен > $30M).',action:'Свеж капитал влегува во коинот.'},
+    {tag:'🔺 CCIOBV S1100',col:g,what:'CCI(20) пресметан на OBV (1m свеќи) пробива НАД својот SMA1100.',action:'Се пресметува САМО кога филтерот е активен (до '+CCIOBV_MAX_SCAN_COINS+' коини, FAV+ALPHA секогаш). +2 score.'},
+    {tag:'🔺 CCIOBV S2650',col:g,what:'SMA1100 од CCIOBV пробива НАД SMA2650 — подолгорочна смена на протокот.',action:'+2 score.'},
+    {tag:'50 / 150',col:a,what:'Прозорец (во 1m свеќи) во кој мора да се случил CCIOBV пресекот.'},
+  ]},
+  {h:'🏷 ОЗНАКИ НА КАРТИЧКА',items:[
+    {tag:'✅A▲ / ✅B▼',col:g,what:'CLEAN15 чист влез: оценка A или B, ▲ лонг / ▼ шорт. Испрекината рамка = B. Секогаш прва ознака.',action:'Клик → детали со сите 10 гејта.'},
+    {tag:'Лева лента',col:g,what:'Зелена = BULL, црвена = BEAR, портокалова = LIQ HUNT, сива = неутрално.'},
+    {tag:'$цена · TV',col:'#2962ff',what:'Последна цена. TV отвора TradingView layout на тој TF.'},
+    {tag:'±% · N M',col:g,what:'Промена на цената и 24h волумен во USDT (M = милиони).'},
+    {tag:'●●●●●○○',col:y,what:'Score во точки (макс. 7 прикажани). Зелени ≥ 6, жолти ≥ 3.'},
+    {tag:'⚙DRIVE/ABSORB/SQUEEZE/DEAD',col:g,what:'OI×Моментум режим (види филтри). Ако нема режим, се покажува ↗ACCEL / ↘DECEL.'},
+    {tag:'⇄FLIP↑↓',col:y,what:'Пресврт на моментумот (види филтри).'},
+    {tag:'🆓 / 〰️ / 🔗 BTC ±0.xx',col:g,what:'Корелација со BTC: 🆓 < 0.4 независен · 〰️ 0.4–0.7 умерено · 🔗 ≥ 0.7 силно врзан.',action:'🔗 → провери BTC пред влез.'},
+    {tag:'⭐ / 🅐',col:y,what:'Фаворит / Binance Alpha токен.'},
+    {tag:'🏛 ACC US·HK·KR·CN',col:o,what:'TradFi акција и берзански регион. COM = стока, IPO = pre-IPO, IDX = крипто индекс (BTCDOM…), RWA = real-world asset.'},
+    {tag:'L1 L2 DeFi MEME AI GameFi Infra PoW Stable',col:m,what:'Категорија од Binance exchangeInfo. Друг текст (пр. „Alpha“) = суровата Binance категорија. Клик → коини од истата категорија.'},
+    {tag:'OI◆ ±x%',col:g,what:'Промена на реалниот OI во КОИНИ (вистински позиции), кога |OI◆| > 3%.'},
+    {tag:'REVAL x%',col:m,what:'OI$ промената е главно ревалуација (цената ги помрднала истите позиции), не нови пари.',action:'Не ја читај како прилив.'},
+    {tag:'⚡SHORT SQ / ⚡LONG DMP',col:o,what:'LIQ HUNT тип — види филтри.'},
+    {tag:'🔥SQUEEZE',col:pk,what:'SQ ACT — short squeeze во тек.'},
+    {tag:'FIBO xx% / POC SUP·RES',col:y,what:'Fib ниво / POC поддршка или отпор до цената.'},
+    {tag:'📈JMA X↑ / 📉JMA X↓',col:g,what:'СВЕЖ JMA/DWMA крос.'},
+    {tag:'JMA↑ / JMA↓',col:g,what:'Само тековна состојба (JMA над/под DWMA), без свеж крос.'},
+    {tag:'💎TIGHT SQ / 🌀COIL / 🚀MA SQ / ▲BULL / ▼BEAR / >>NEU',col:'#ff32cc',what:'Едно поле по приоритет: прво компресија (TIGHT → COIL → MA SQ), инаку конечната насока.'},
+    {tag:'🎯SQZ▲▼ · ADX▲▼ · SQZ●ON',col:'#00c896',what:'SQZMOM сигнал / ADX брејк над 20 / squeeze активен без насока (чекај пробив).'},
+    {tag:'▲DI / ▼DI',col:g,what:'Свеж DI крос.'},
+    {tag:'CVD DIV',col:a,what:'Цена и CVD дивергираат.'},
+    {tag:'🔺S1100 / 🔺S2650',col:g,what:'CCIOBV пресек (само со активен CCIOBV филтер).'},
+    {tag:'🚀+VOL / 💥+VOL',col:g,what:'SPIKE+VOL / DUMP+VOL.'},
+    {tag:'FR⚠️',col:pu,what:'Екстремен funding (|FR| > 0.08%).'},
+    {tag:'OI↑',col:a,what:'OI SURGE.'},
+    {tag:'📥 INFLOW / 📤 OUTFLOW / 💵 USDT FLOW',col:g,what:'Taker проток / USDT0 — види филтри.'},
+    {tag:'15m / 1h / 4h',col:a,what:'Најдобриот TF за коинот (само во СИТЕ режим).'},
+  ]},
+  {h:'📋 СИГНАЛИ ВО ДЕТАЛИ / DIGEST',items:[
+    {tag:'+x.x%',col:g,what:'|промена| > 2%. +1 score.'},
+    {tag:'CVD CONF',col:g,what:'CVD и цена во ИСТА насока (> 3%) — трендот е потврден. +1 score.'},
+    {tag:'TAKER x%B / x%S',col:g,what:'Taker buy > 62% (B) или sell > 62% (S). +1 score.'},
+    {tag:'OI$ ±x%',col:a,what:'Промена на OI во USDT (> 2%). Може да е чиста ревалуација. +1 score.'},
+    {tag:'OI◆ ±x%',col:g,what:'Промена на OI во коини (> 3%) — реален проток. +1 score.'},
+    {tag:'OI REVAL x%',col:m,what:'Колкав дел од OI$ промената е ревалуација.'},
+    {tag:'FR ±x%',col:pu,what:'|Funding| > 0.03%. +1 score.'},
+    {tag:'L/S x ▲OVB / ▼OVS',col:'#ff9a3c',what:'L/S EXT со вредноста.'},
+    {tag:'MOM/AO DIV',col:m,what:'Squeeze Momentum и AO одат спротивно (портокалова позадина во TV).',action:'Не влегувај против двата — чекај усогласување.'},
+    {tag:'CONFL x/y LONG·SHORT',col:y,what:'x гласови за насоката од вкупно y гласачи.'},
+    {tag:'OI облик',col:a,what:'RISING = на врв и расте · PEAK = на врв, застанал · FADED = >15% под врвот · REBUILD = колапс па отскок (НЕ е свежа акумулација — не гласа) · FLAT.'},
+  ]},
+  {h:'⚖️ СОРТИРАЊЕ И ПРАГОВИ',items:[
+    {tag:'Score · % Промена · Волумен · FR · OI',col:a,what:'Сортирање по score, |промена|, волумен, |FR|, |OI$ промена|.'},
+    {tag:'MIN % / MAX %',col:o,what:'Минимум / максимум |промена| на цената. 0 = без лимит.',action:'MAX % = барај коини што уште не тргнале.'},
+    {tag:'MIN VOL $M',col:a,what:'Минимален волумен во милиони USDT.'},
+    {tag:'COIL N',col:cy,what:'Број свеќи за COIL проверката (20–150). Важи од СЛЕДНИОТ скен.'},
+  ]},
+  {h:'🧮 SCORE — како се собира',items:[
+    {tag:'+3',col:y,what:'CONFLUENCE.'},
+    {tag:'+2',col:g,what:'CVD DIV · LIQ HUNT · SQZ▲/▼ · JMA X крос · COIL · CCIOBV пресек.'},
+    {tag:'+1',col:a,what:'|%|>2 · CVD CONF · TAKER · OI$ · OI◆ · FR>0.03% · ADX брејк · L/S EXT · INFLOW/OUTFLOW · волумен > $10M · ALPHA · FAV · FIBO 38.2/61.8 · POC.'},
+    {tag:'0',col:m,what:'Моментум (ACCEL/DECEL/FLIP/режими), SQZ ON, DI крос, MOM/AO DIV, REVAL, CLEAN15 — само информација или тајминг, намерно не гласаат.'},
+  ]},
+  ];
+}
+function helpFilter(q){
+  q=(q||'').trim().toLowerCase();
+  document.querySelectorAll('#helpContent .hlp-it').forEach(el=>{el.style.display=(!q||el.dataset.k.includes(q))?'':'none';});
+  document.querySelectorAll('#helpContent .hlp-sec').forEach(sec=>{
+    const any=[...sec.querySelectorAll('.hlp-it')].some(el=>el.style.display!=='none');
+    sec.style.display=any?'':'none';
+  });
+}
 function toggleHelp(){
   const ov=document.getElementById('helpOv');
   const isOpen=ov.style.display!=='none';
   if(isOpen){ov.style.display='none';return;}
-  // Build content
-  const indicators=[
-    {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 конвергираат — spread < 0.5%',when:'Пред голем потег. Колку потесно, толку поголем очекуван move.',action:'Чекај пробив со волумен. Не влегувај без потврда.'},
-    {tag:'🚀/📉 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5% — потесна компресија',when:'Цената се компресира, спремна за потег.',action:'Bullish (🚀) = SMA25 > SMA99. Bearish (📉) = SMA25 < SMA99.'},
-    {tag:'🌀 COIL',col:'#00c8ff',what:`Range < ${COIL_RANGE_MAX}% + волумен опаѓа + JMA>DWMA (N свеќи, конфигурабилно)`,when:'Цената "коилира" тесно со исушен волумен над JMA — класична пред-пробивна компресија.',action:'Следи пробив со волумен нагоре. SL под последниот swing low од COIL зоната.'},
-    {tag:'🔥 SQUEEZE',col:'#ff00cc',what:'OI◆ паѓа (~3 периоди) + цена расте + CVD spike или FR негативен · само затворени свеќи',when:'Шортовите се принудно затвораат — short squeeze во тек.',action:'Следи за continuation LONG. SL под последниот swing low.'},
-    {tag:'⚡ LIQ HUNT',col:'var(--orange)',what:'Цената и CVD одат во спротивни насоки',when:'SHORT SQ: цена↑ + CVD↓. LONG DMP: цена↓ + CVD↑.',action:'По squeeze честопати следи reversal. Провери на 15m.'},
-    {tag:'▲DI / ▼DI',col:'var(--green)',what:'DI+ го поминува DI- (или обратно) — свеж крос',when:'Свеж на последната затворена свеќа (4h/1d/1w=1 свеќа, 1h и помали=2 свеќи).',action:'▲DI = bullish моментум почнува. ▼DI = bearish моментум почнува.'},
-    {tag:'🎯 SQZMOM',col:'#00c896',what:'Squeeze Momentum + AO + ADX confluence',when:'Squeeze ON + Val расте + AO расте + ADX > 20.',action:'Green dot = bullish. Red dot = bearish. Почекај потврда.'},
-    {tag:'📊 CVD DIV',col:'var(--accent)',what:'Цена и CVD одат во различни насоки',when:'Цена расте но CVD паѓа = дистрибуција. Цена паѓа но CVD расте = акумулација.',action:'Силен reversal сигнал. Комбинирај со OI.'},
-    {tag:'🚀 SPIKE+VOL',col:'var(--green)',what:'Голем % пораст + натпросечен волумен',when:'Силен bullish моментум — можен breakout или pump.',action:'Потврди со CVD. Ако CVD паѓа = можна манипулација.'},
-    {tag:'💥 DUMP+VOL',col:'var(--red)',what:'Голем % пад + натпросечен волумен',when:'Силен bearish моментум — можен breakdown.',action:'Потврди со CVD. Можен bounce ако е oversold.'},
-    {tag:'💰 FR EXT',col:'#c060ff',what:'Funding Rate екстремно позитивен (>0.05%) или негативен (<-0.05%)',when:'FR > 0.05% = лонговите преплатени → bearish. FR < -0.05% = шортовите преплатени → bullish.',action:'Екстремен FR + обратна цена = можен reversal.'},
-    {tag:'📈 OI SURGE',col:'var(--accent)',what:'Нагол пораст на Open Interest',when:'OI расте + цена расте = bullish. OI расте + цена паѓа = bearish.',action:'OI пад по движење = позициите се затвораат.'},
-    {tag:'⚡ SCORE 7+',col:'var(--yellow)',what:'Вкупен score >= 7/9 поени',when:'Множество сигнали се совпаѓаат — јак confluence.',action:'Највисок приоритет за анализа.'},
-  ];
-  
-  let html='<div style="display:flex;flex-direction:column;gap:10px">';
-  indicators.forEach(function(ind){
-    html+='<div style="background:var(--card);border-radius:10px;padding:12px 14px;border-left:3px solid '+ind.col+'">'
-      +'<div style="font-family:var(--mono);font-size:13px;font-weight:bold;color:'+ind.col+';margin-bottom:6px">'+ind.tag+'</div>'
-      +'<div style="display:grid;grid-template-columns:90px 1fr;gap:4px 10px;font-size:11px">'
-      +'<span style="color:var(--muted)">Што е:</span><span style="color:var(--text2)">'+ind.what+'</span>'
-      +'<span style="color:var(--muted)">Кога:</span><span style="color:var(--text2)">'+ind.when+'</span>'
-      +'<span style="color:var(--muted)">Акција:</span><span style="color:var(--text)">'+ind.action+'</span>'
-      +'</div></div>';
+  const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const val=v=>typeof v==='function'?v():v;
+  let html='<input id="hlpQ" placeholder="🔍 Барај кратенка (пр. REVAL, FLIP, OI◆)..." oninput="helpFilter(this.value)" autocomplete="off" autocorrect="off" spellcheck="false" '
+    +'style="width:100%;box-sizing:border-box;margin-bottom:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px">';
+  helpSections().forEach(function(sec){
+    html+='<div class="hlp-sec" style="margin-bottom:18px">'
+      +'<div style="font-family:var(--mono);font-size:12px;font-weight:bold;color:var(--accent);margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">'+esc(sec.h)+'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:8px">';
+    sec.items.forEach(function(ind){
+      const what=val(ind.what),when=val(ind.when),act=val(ind.action);
+      const k=(ind.tag+' '+what+' '+(when||'')+' '+(act||'')).toLowerCase();
+      html+='<div class="hlp-it" data-k="'+esc(k)+'" style="background:var(--card);border-radius:10px;padding:10px 12px;border-left:3px solid '+ind.col+'">'
+        +'<div style="font-family:var(--mono);font-size:12px;font-weight:bold;color:'+ind.col+';margin-bottom:5px">'+esc(ind.tag)+'</div>'
+        +'<div style="display:grid;grid-template-columns:62px 1fr;gap:3px 8px;font-size:11px;line-height:1.4">'
+        +'<span style="color:var(--muted)">Што е:</span><span style="color:var(--text2)">'+esc(what)+'</span>'
+        +(when?'<span style="color:var(--muted)">Кога:</span><span style="color:var(--text2)">'+esc(when)+'</span>':'')
+        +(act?'<span style="color:var(--muted)">Акција:</span><span style="color:var(--text)">'+esc(act)+'</span>':'')
+        +'</div></div>';
+    });
+    html+='</div></div>';
   });
-  html+='</div>';
   document.getElementById('helpContent').innerHTML=html;
   ov.style.display='block';
 }
@@ -4261,10 +5037,10 @@ window.addEventListener('resize',()=>{if(HM.loaded&&document.getElementById('hmV
 <div id="helpOv" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.92);backdrop-filter:blur(8px);overflow-y:auto;-webkit-overflow-scrolling:touch">
   <div style="max-width:700px;margin:20px auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-family:var(--mono);font-size:16px;font-weight:bold;color:var(--accent)">❓ ВОДИЧ — ИНДИКАТОРИ</div>
+      <div style="font-family:var(--mono);font-size:16px;font-weight:bold;color:var(--accent)">❓ ВОДИЧ — КРАТЕНКИ</div>
       <button onclick="toggleHelp()" style="background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 14px;font-family:var(--mono);font-size:12px;cursor:pointer">✕ ЗАТВОРИ</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Кликни на индикатор во скенерот за детален tooltip. Ова е брз преглед.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Сите кратенки во скенерот. Клик на ознака во картичката отвора детален tooltip.</div>
     <div id="helpContent"></div>
   </div>
 </div>
