@@ -504,7 +504,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <div class="logo">α<b>SCOUT</b><span class="ver-badge" id="verBadge" onclick="openDigest()">—</span></div>
   <div class="alpha-count" id="alphaCount">🅐 —</div>
   <div class="search-wrap">
-    <input class="search" id="srch" placeholder="Пребарај коин..." oninput="onSrch(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
+    <input class="search" id="srch" placeholder="Коин или листа: RESOLV,DYDX" oninput="onSrch(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
     <span class="search-x" id="srchX" onclick="clrSrch()">✕</span>
   </div>
   <div class="dot" id="dot"></div>
@@ -846,6 +846,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //     valid 6h), and the digest says which distribution was used.
 //   - FIX: STOP rebuilt the signal list without the momentum ranks, so
 //     MST / REG / MDIR went blank in the digest after pressing STOP.
+//   - NEW (2026-10-05-a): multi-coin search. Type RESOLV,DYDX,CAP (comma
+//     or space). SCAN scans only those coins; the list and the digest show
+//     all of them with no top-12 cut; unknown symbols are listed as
+//     MISSING instead of aborting the scan; every searched coin goes to
+//     the CLEAN15 shortlist. A single term keeps the old substring match.
 //
 //  v2.3 DECOMP
 //   - FIX: dir was inverted on every liq-hunt row. liqType names
@@ -914,7 +919,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-01-a';
+const APP_BUILD='2026-10-05-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1077,7 +1082,7 @@ function momRefLoad(tf){try{const r=JSON.parse(localStorage.getItem('momRef_'+tf
 
 const S={
   scanning:false,timer:null,abort:false,
-  signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',
+  signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',srchList:[],srchMissing:[],
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
   _partial:{},detailCoin:null,chartTF:null,
@@ -1528,7 +1533,14 @@ async function doScan(){
 
   const tfsToScan=S.tf==='all'?TFS_ALL:[S.tf];
   let coins=[];
-  if(S.srch){const c=S.srch.toUpperCase().replace('USDT','').trim();if(_tMap[c])coins=[c];else{errShow(`⚠️ ${c}USDT не постои`);stopScan();return;}}
+  if(S.srch){
+    // multi-coin search: scan only the listed coins, report the ones not on futures
+    const list=S.srchList.length?S.srchList:[S.srch];
+    coins=list.filter(c=>_tMap[c]);
+    S.srchMissing=list.filter(c=>!_tMap[c]);
+    if(!coins.length){errShow(`⚠️ Не постои на Futures: ${S.srchMissing.map(c=>c+'USDT').join(', ')}`);stopScan();return;}
+    if(S.srchMissing.length)errShow(`⚠️ Прескокнати (не постојат): ${S.srchMissing.map(c=>c+'USDT').join(', ')}`);
+  }
   else if(S.filters.has('fav')&&S.filters.size===1){coins=[...S.favorites].filter(c=>_tMap[c]);if(!coins.length){errShow('⚠️ Нема favorites');stopScan();return;}}
   else{coins=[...[...S.favorites].filter(c=>_tMap[c]),...Object.keys(_tMap).filter(c=>!S.favorites.has(c))];}
 
@@ -2423,7 +2435,7 @@ const FILTER_MAP={
 function numInput(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
 function applyFilters(){
   let data=S.signals;
-  if(S.srch)data=data.filter(s=>s.coin.includes(S.srch));
+  if(S.srch)data=data.filter(srchMatch);
   else if(S.filters.size>0){
     // AND logic - a coin must match every active filter
     data=data.filter(s=>[...S.filters].every(f=>FILTER_MAP[f]?FILTER_MAP[f](s):true));
@@ -2454,7 +2466,7 @@ function renderList(){
   document.getElementById('sAlpha').textContent=S.signals.filter(s=>s.isAlpha).length;
   document.getElementById('sFav').textContent=S.signals.filter(s=>s.isFav).length;
   document.getElementById('sTot').textContent=S.signals.length;
-  if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+'USDT не пронајден':S.filters.has('fav')?'Нема favorites':'Нема сигнали за избраните филтри'}</div>`;return;}
+  if(!data.length){document.getElementById('list').innerHTML=`<div class="empty">🔍<br>${S.srch?S.srch+' не пронајден':S.filters.has('fav')?'Нема favorites':'Нема сигнали за избраните филтри'}</div>`;return;}
   document.getElementById('list').innerHTML=data.map(rowHTML).join('');
 }
 
@@ -3033,8 +3045,31 @@ function errHide(){document.getElementById('errB').style.display='none';}
 function setM(id,val,cls,sub){document.getElementById(id).textContent=val;document.getElementById(id).className='dm-v '+(cls||'');const s=document.getElementById(id+'S');if(s)s.textContent=sub||'';}
 function ovClick(e){if(e.target===document.getElementById('ov'))closeOv();}
 function closeOv(){document.getElementById('ov').classList.remove('open');document.getElementById('ov').style.display='none';destroyCharts();}
-function onSrch(v){S.srch=v.toUpperCase().replace('USDT','').trim();document.getElementById('srchX').style.display=v?'block':'none';if(S.srch){renderList();if(!S.signals.filter(s=>s.coin.includes(S.srch)).length)document.getElementById('list').innerHTML=`<div class="empty">🔍<br><b>${S.srch}USDT</b><br><span style="font-size:11px;color:var(--muted)">Притисни ⚡ СКЕНИРАЈ за само овој коин</span></div>`;}else renderList();}
-function clrSrch(){document.getElementById('srch').value='';document.getElementById('srchX').style.display='none';S.srch='';renderList();}
+// Search: one term = substring match (old behaviour); several terms (comma or
+// space separated) = exact symbols, scanned together and shown without the top-12 cut.
+function parseSrch(v){
+  const out=[];
+  String(v||'').toUpperCase().split(/[\s,;]+/).forEach(t=>{
+    t=t.trim().replace(/USDT$/,'');
+    if(t&&!out.includes(t))out.push(t);
+  });
+  return out;
+}
+function srchMatch(s){
+  if(S.srchList.length>1)return S.srchList.includes(s.coin);
+  return s.coin.includes(S.srch);
+}
+function onSrch(v){
+  S.srchList=parseSrch(v);S.srch=S.srchList.join(',');S.srchMissing=[];
+  document.getElementById('srchX').style.display=v?'block':'none';
+  if(!S.srch){renderList();return;}
+  renderList();
+  if(!S.signals.filter(srchMatch).length){
+    const multi=S.srchList.length>1;
+    document.getElementById('list').innerHTML=`<div class="empty">🔍<br><b>${multi?S.srchList.join(', '):S.srch+'USDT'}</b><br><span style="font-size:11px;color:var(--muted)">Притисни ⚡ СКЕНИРАЈ за ${multi?'овие '+S.srchList.length+' коини':'само овој коин'}</span></div>`;
+  }
+}
+function clrSrch(){document.getElementById('srch').value='';document.getElementById('srchX').style.display='none';S.srch='';S.srchList=[];S.srchMissing=[];renderList();}
 function fmt(p){if(p>=1000)return p.toLocaleString('en-US',{maximumFractionDigits:2});if(p>=1)return p.toFixed(4);if(p>=0.01)return p.toFixed(5);return p.toFixed(8);}
 function fmtM(n){if(n===undefined||isNaN(n))return'—';const a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+'B';if(a>=1e6)return(n/1e6).toFixed(2)+'M';if(a>=1e3)return(n/1e3).toFixed(1)+'K';return n.toFixed(0);}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -3068,7 +3103,8 @@ function buildDigest(){
   // Same filtered+sorted set the list is showing, so a copied digest never
   // disagrees with what is on screen.
   const view=applyFilters();
-  const top=view.slice(0,12);
+  // A search shows every searched coin; otherwise top 12 by the active sort.
+  const top=S.srch?view:view.slice(0,12);
   // Favorites bypass the top-12 cut, but only if they survived the active filters.
   const favs=view.filter(s=>s.isFav&&!top.includes(s));
   const rows=[...top,...favs];
@@ -3085,6 +3121,13 @@ function buildDigest(){
   o+='VIEW: '+(S.srch?'search='+S.srch:(S.filters.size?'filters='+[...S.filters].join(','):'no filters'))
     +(thr.length?' | '+thr.join(' '):'')+' | sort='+S.sort
     +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
+  if(S.srch&&S.srchList.length>1){
+    const shown=new Set(rows.map(r=>r.coin));
+    const noSig=S.srchList.filter(c=>!shown.has(c)&&!S.srchMissing.includes(c));
+    if(S.srchMissing.length)o+='MISSING (not on futures): '+S.srchMissing.join(', ')+'\n';
+    if(noSig.length)o+='NO SIGNAL (scanned, score 0 or filtered out): '+noSig.join(', ')+'\n';
+  }
+
   o+='BULL '+S.signals.filter(s=>s.dir==='bull').length
     +' | BEAR '+S.signals.filter(s=>s.dir==='bear').length
     +' | LIQ '+S.signals.filter(s=>s.liqHunt).length
@@ -4029,7 +4072,7 @@ async function evalClean15Cached(coin,force){
 function pickCleanShortlist(){
   const out=[],seen=new Set();
   const push=c=>{if(c&&!seen.has(c)){seen.add(c);out.push(c);}};
-  if(S.srch){const c=S.srch.toUpperCase().replace('USDT','').trim();if(_tMap[c])push(c);}
+  if(S.srch)(S.srchList.length?S.srchList:[S.srch]).forEach(c=>{if(_tMap[c])push(c);});
   const ok=s=>_tMap[s.coin]&&!isTradFi(s.coin);
   S.signals.filter(s=>s.isFav&&ok(s)).forEach(s=>push(s.coin));
   [...S.signals].filter(s=>ok(s)&&s.score>=CLEAN_MIN_SCORE&&(s.volume||0)>=CLEAN_MIN_VOL)
