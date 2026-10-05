@@ -517,6 +517,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-stop"  id="btnX" onclick="stopScan()" style="display:none">⏹ СТОП</button>
   <button class="btn btn-clear" onclick="clearAll()">🗑</button>
   <button class="btn btn-clear" onclick="openDigest()" title="Извештај за анализа">📋</button>
+  <button class="btn btn-clear" onclick="openFavShare()" title="Пренеси ⭐ FAV на друг уред (линк / QR)">⭐🔗</button>
   <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
     <div class="tf active" id="tf-1m"  onclick="setTF('1m',this)">1m</div>
@@ -868,6 +869,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //     Blocked coins: out of the scan universe (unless searched), out of
 //     CLEAN15 and SETUPS, red DELIST tag + countdown, red banner on top,
 //     warning in the detail panel, and a BLOCKED line in the digest.
+//   - NEW (2026-10-05-d): FAV TRANSFER. Favorites live in each browser's
+//     localStorage, so the phone never saw the PC's list. The ⭐🔗 button
+//     builds a link (#fav=RSR,UMA,...) + QR code; opening it on another
+//     device imports the list (replace or merge) and strips the hash.
+//     No server, no account, nothing leaves the two devices but the link.
 //
 //  v2.3 DECOMP
 //   - FIX: dir was inverted on every liq-hunt row. liqType names
@@ -936,7 +942,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-05-c';
+const APP_BUILD='2026-10-05-d';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3082,6 +3088,65 @@ async function fetchAndShowDetail(coin){
   TFS_FULL.forEach((tf,i)=>renderTFCard(tf,results[i],coin));
   loadCciObvCross(coin);
 }
+// -- FAV TRANSFER (2026-10-05-d) ----------------------------
+function favLink(){return location.href.split('#')[0]+'#fav='+[...S.favorites].sort().join(',');}
+function saveFavs(){localStorage.setItem('favs',JSON.stringify([...S.favorites]));S.signals.forEach(s=>{s.isFav=S.favorites.has(s.coin);});}
+function applyFavFromUrl(){
+  const m=location.hash.match(/(?:^#|&)fav=([^&]*)/);if(!m)return;
+  const list=decodeURIComponent(m[1]).toUpperCase().split(/[\s,;]+/).map(t=>t.replace(/USDT$/,'').trim()).filter(t=>/^[A-Z0-9]{1,20}$/.test(t));
+  history.replaceState(null,'',location.href.split('#')[0]);
+  if(!list.length)return;
+  const cur=[...S.favorites],same=cur.length===list.length&&list.every(c=>S.favorites.has(c));
+  if(same){toast('⭐ Favorites се веќе исти ('+list.length+')');return;}
+  let replace=true;
+  if(cur.length)replace=confirm('Линкот носи '+list.length+' favorites: '+list.join(', ')
+    +'\n\nОвој уред има '+cur.length+': '+cur.join(', ')
+    +'\n\nOK = ЗАМЕНИ со листата од линкот\nCancel = СПОИ ги двете');
+  if(replace)S.favorites=new Set(list);else list.forEach(c=>S.favorites.add(c));
+  saveFavs();renderList();
+  toast('⭐ '+(replace?'Заменети':'Споени')+' · сега '+S.favorites.size+' favorites');
+}
+function loadQRLib(){
+  if(window.QRCode)return Promise.resolve(true);
+  return new Promise(res=>{const sc=document.createElement('script');
+    sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    sc.onload=()=>res(!!window.QRCode);sc.onerror=()=>res(false);document.head.appendChild(sc);});
+}
+function closeFavShare(){const o=document.getElementById('favShareOv');if(o)o.remove();}
+async function openFavShare(){
+  closeFavShare();
+  const favs=[...S.favorites].sort();
+  const ov=document.createElement('div');ov.id='favShareOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{if(e.target===ov)closeFavShare();};
+  if(!favs.length){
+    ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;max-width:360px;font-family:var(--mono);font-size:12px;color:var(--text2);line-height:1.7">Нема ⭐ favorites на овој уред. Додади со ⭐ во деталите на коинот, па пак притисни ⭐🔗.<br><br><button class="btn btn-clear" onclick="closeFavShare()">Затвори</button></div>';
+    document.body.appendChild(ov);return;
+  }
+  const link=favLink(),local=location.protocol==='file:';
+  ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;width:100%;max-width:380px;font-family:var(--mono);font-size:12px;color:var(--text2);line-height:1.6">'
+    +'<div style="color:var(--yellow);font-size:13px;margin-bottom:6px">⭐ '+favs.length+' favorites</div>'
+    +'<div style="color:var(--text);margin-bottom:10px;word-break:break-word">'+favs.join(', ')+'</div>'
+    +(local?'<div style="color:var(--red);margin-bottom:10px">⚠️ Скенерот е отворен од локален фајл. Линкот ќе работи на телефон само ако скенерот е отворен од веб адреса (GitHub Pages).</div>':'')
+    +'<div id="favQR" style="background:#fff;border-radius:8px;padding:10px;width:fit-content;margin:0 auto 10px;display:none"></div>'
+    +'<div style="font-size:11px;margin-bottom:8px">Скенирај го QR кодот со камерата на телефонот, или испрати си го линкот.</div>'
+    +'<input id="favLinkIn" readonly value="'+link.replace(/"/g,'&quot;')+'" style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px;border-radius:6px;font-family:var(--mono);font-size:11px;margin-bottom:10px">'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="btn btn-start" onclick="copyFavLink()">Копирај линк</button>'
+    +(navigator.share?'<button class="btn btn-clear" onclick="navigator.share({title:\'αSCOUT ⭐\',url:document.getElementById(\'favLinkIn\').value}).catch(()=>{})">Сподели</button>':'')
+    +'<button class="btn btn-clear" onclick="closeFavShare()">Затвори</button></div></div>';
+  document.body.appendChild(ov);
+  if(await loadQRLib()){
+    const box=document.getElementById('favQR');if(!box)return;
+    try{new QRCode(box,{text:link,width:200,height:200,correctLevel:QRCode.CorrectLevel.M});box.style.display='block';}catch(e){}
+  }
+}
+function copyFavLink(){
+  const i=document.getElementById('favLinkIn');if(!i)return;
+  const done=()=>toast('🔗 Линкот е копиран');
+  if(navigator.clipboard)navigator.clipboard.writeText(i.value).then(done,()=>{i.select();document.execCommand('copy');done();});
+  else{i.select();document.execCommand('copy');done();}
+}
 function toggleFav(coin){S.favorites.has(coin)?S.favorites.delete(coin):S.favorites.add(coin);localStorage.setItem('favs',JSON.stringify([...S.favorites]));S.signals.forEach(s=>{if(s.coin===coin)s.isFav=S.favorites.has(coin);});renderList();}
 function toggleFavFromDetail(){if(!S.detailCoin)return;toggleFav(S.detailCoin);const fav=isFav(S.detailCoin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');toast(fav?`⭐ ${S.detailCoin} додаден`:`${S.detailCoin} отстранет`);}
 function openBinance(coin,tf){const url=`https://www.binance.com/en/futures/${coin}USDT?type=isolated&interval=${BN_TF[tf]||tf}`;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();document.body.removeChild(a);}
@@ -4831,6 +4896,7 @@ fetchAlphaList().then(()=>{
 // first scan finishes. doScan refetches it anyway, this is just for immediate UI.
 syncTradFiBtn();
 (function(){const b=document.getElementById('verBadge');if(b)b.textContent='v'+APP_VER+' '+APP_CODENAME+' \u00b7'+APP_BUILD.slice(-1);b.title='build '+APP_BUILD;})();
+applyFavFromUrl();window.addEventListener('hashchange',applyFavFromUrl);
 Promise.all([apiFetch('/exchangeInfo'),apiFetch('/premiumIndex')]).then(([ei,pi])=>{if(ei)buildClassMaps(ei);if(pi)pi.forEach(f=>{if(f.symbol.endsWith('USDT'))_mMap[f.symbol.replace('USDT','')]=parseFloat(f.markPrice||0);});renderDelistBanner();});
 
 // -- HEATMAP INTEGRATION -----------------------------------
