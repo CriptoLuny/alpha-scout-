@@ -622,6 +622,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 </div>
 
 <div class="scanner-view" id="scannerView">
+<div class="liq-area" id="delistArea"></div>
 <div class="liq-area" id="liqArea"></div>
 <div class="list-wrap"><div id="list"><div class="empty">🔍<br>Притисни СКЕНИРАЈ<br><span style="font-size:10px;color:#1a1a28">Сите Binance Futures + live Alpha таг</span></div></div></div>
 </div>
@@ -856,6 +857,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //     shortlist (score >= 6 top 30) - low-score watch coins got no grade, and
 //     graded ones kept the bar from the last scan. Now every searched coin is
 //     (re)evaluated on the latest closed 15m bar, 0.7s after typing stops.
+//   - NEW (2026-10-05-c): DELIST GUARD. PUMPBTCUSDT was settled and delisted
+//     on 2026-10-05 09:00 UTC (reduce-only from 08:30 UTC); the scanner kept
+//     scoring it as a bullish pump. Two independent layers now block such coins:
+//     1) exchangeInfo: a PERPETUAL whose deliveryDate is no longer the far-future
+//        default has a scheduled settlement (set when the delisting is
+//        announced); status != TRADING = halted/settling.
+//     2) price dislocation: |last - mark| / mark > 25% (frozen or squeezed
+//        last price), which catches it even if layer 1 is missing.
+//     Blocked coins: out of the scan universe (unless searched), out of
+//     CLEAN15 and SETUPS, red DELIST tag + countdown, red banner on top,
+//     warning in the detail panel, and a BLOCKED line in the digest.
 //
 //  v2.3 DECOMP
 //   - FIX: dir was inverted on every liq-hunt row. liqType names
@@ -924,7 +936,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-05-b';
+const APP_BUILD='2026-10-05-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1050,6 +1062,37 @@ const TRADFI_FB={
 let _clsMap={};   // coin -> 'CRYPTO' | 'RWA' | 'CINDEX' | 'STOCK' | 'COMMODITY' | 'PREIPO'
 let _regMap={};   // coin -> 'US' | 'HK' | 'KR' | 'CN'   (equity session region)
 let _rawMeta={};  // coin -> {ct, ut, sub}  (raw exchangeInfo fields, for the probe)
+// -- DELIST GUARD (2026-10-05-c) --
+let _delistMap={};   // coin -> {t: settlement ms or null, status, reason:'SCHED'|'HALT'}
+let _mMap={};        // coin -> mark price (premiumIndex)
+const DELIST_SENTINEL=4e12;   // perps carry deliveryDate 4133404800000 (year 2100) until a delisting is scheduled
+const DISLOC_PCT=25;          // |last-mark|/mark above this = price dislocation
+function fmtLeft(ms){if(ms<=0)return 'порамнет';const m=Math.round(ms/60000),d=Math.floor(m/1440),h=Math.floor((m%1440)/60),mm=m%60;return d?d+'д '+h+'ч':h?h+'ч '+mm+'м':mm+'м';}
+function fmtLocal(t){return new Date(t).toLocaleString('mk-MK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function dislocPct(coin){const t=_tMap[coin],m=_mMap[coin];if(!t||!m)return 0;const l=parseFloat(t.lastPrice);return m>0&&l>0?Math.abs(l-m)/m*100:0;}
+// '' = tradable. Otherwise a short reason; used everywhere a coin could be acted on.
+function blockReason(coin){
+  const d=_delistMap[coin];
+  if(d&&d.reason==='SCHED')return 'DELIST '+fmtLocal(d.t)+' ('+fmtLeft(d.t-Date.now())+')';
+  if(d&&d.reason==='HALT')return 'STATUS '+d.status;
+  const x=dislocPct(coin);
+  if(x>DISLOC_PCT)return 'LAST/MARK '+x.toFixed(0)+'%';
+  return '';
+}
+// Old, long-dead contracts stay in exchangeInfo with status SETTLING/CLOSE; only list a
+// blocked coin if it is scheduled, or still has a ticker with 24h volume (i.e. it could fool the scan).
+function blockedList(){
+  const set=new Set([...Object.keys(_delistMap),...Object.keys(_tMap).filter(c=>dislocPct(c)>DISLOC_PCT)]);
+  const live=c=>_delistMap[c]?.reason==='SCHED'||(_tMap[c]&&parseFloat(_tMap[c].quoteVolume||0)>0);
+  return [...set].filter(c=>blockReason(c)&&live(c)).sort((a,b)=>((_delistMap[a]?.t)||9e15)-((_delistMap[b]?.t)||9e15));
+}
+function renderDelistBanner(){
+  const el=document.getElementById('delistArea');if(!el)return;
+  const list=blockedList();
+  if(!list.length){el.innerHTML='';return;}
+  el.innerHTML='<div class="liq-b" style="background:rgba(255,34,68,.10);border-color:rgba(255,34,68,.45);color:var(--red);flex-wrap:wrap;line-height:1.6">⛔ <b>НЕ ВЛЕГУВАЈ</b> · исклучени од скенот: '
+    +list.map(c=>'<b>'+c+'</b> '+blockReason(c)).join(' · ')+'</div>';
+}
 
 // -- CCIOBV CROSS CONFIG (SMA1100/SMA2650 на CCI(20) на OBV, 1m бара) --
 const CCIOBV_LEN=20;   // CCI период применет врз OBV серијата
@@ -1362,6 +1405,7 @@ function getCciObvFlags(coin,lookback){
 function buildClassMaps(exchangeInfo){
   _clsMap={};_regMap={};_rawMeta={};_catMap={};
   if(!exchangeInfo?.symbols)return;
+  _delistMap={};
   exchangeInfo.symbols.forEach(s=>{
     if(!s.symbol.endsWith('USDT')||s.symbol.includes('_'))return;
     const coin=s.symbol.replace('USDT','');
@@ -1370,6 +1414,9 @@ function buildClassMaps(exchangeInfo){
     const subArr=Array.isArray(s.underlyingSubType)?s.underlyingSubType:(s.underlyingSubType?[s.underlyingSubType]:[]);
     const sub=subArr.map(x=>String(x).toUpperCase());
     _rawMeta[coin]={ct,ut,sub:subArr};
+    const st=(s.status||'').toUpperCase(),dd=+s.deliveryDate||0;
+    if(ct.includes('PERPETUAL')&&dd>0&&dd<DELIST_SENTINEL&&dd>Date.now()-864e5)_delistMap[coin]={t:dd,status:st,reason:'SCHED'};
+    else if(st&&st!=='TRADING')_delistMap[coin]={t:null,status:st,reason:'HALT'};
     _catMap[coin]=subArr[0]||'';
     _clsMap[coin]=classify(coin,ct,ut,sub);
     if(EQUITY_REGION[ut])_regMap[coin]=EQUITY_REGION[ut];
@@ -1535,6 +1582,8 @@ async function doScan(){
     }
   });
   if(fundings)fundings.forEach(f=>{if(f.symbol.endsWith('USDT'))_fMap[f.symbol.replace('USDT','')]=parseFloat(f.lastFundingRate||0)*100;});
+  _mMap={};if(fundings)fundings.forEach(f=>{if(f.symbol.endsWith('USDT'))_mMap[f.symbol.replace('USDT','')]=parseFloat(f.markPrice||0);});
+  renderDelistBanner();
 
   const tfsToScan=S.tf==='all'?TFS_ALL:[S.tf];
   let coins=[];
@@ -1548,6 +1597,13 @@ async function doScan(){
   }
   else if(S.filters.has('fav')&&S.filters.size===1){coins=[...S.favorites].filter(c=>_tMap[c]);if(!coins.length){errShow('⚠️ Нема favorites');stopScan();return;}}
   else{coins=[...[...S.favorites].filter(c=>_tMap[c]),...Object.keys(_tMap).filter(c=>!S.favorites.has(c))];}
+
+  // -- DELIST GUARD: scheduled delistings, halted contracts and dislocated prices are
+  //    never scanned unless explicitly searched (then they are shown, tagged and blocked).
+  if(!S.srch){
+    const blk=coins.filter(c=>blockReason(c));
+    if(blk.length){coins=coins.filter(c=>!blockReason(c));setP('⛔ Исклучени (delist/halt): '+blk.join(', '),4);}
+  }
 
   // -- TradFi perps out of the scan universe (saves API calls AND stops the weekend
   //    false-positive liq hunts, since their off-hours candles are index-smoothed dojis) --
@@ -2456,6 +2512,7 @@ function applyFilters(){
 }
 
 function renderList(){
+  renderDelistBanner();
   const data=applyFilters();
   // Banner reads the filtered view too. v2.2 fixed this for the digest but the
   // banner still read S.signals, so it surfaced coins the list had excluded.
@@ -2481,8 +2538,11 @@ function rowHTML(s){
   const sc=s.score>=6?'g':s.score>=3?'y':'a';
   const dots=Array.from({length:7},(_,i)=>`<div class="sd ${i<s.score?sc:''}"></div>`).join('');
   const tags=[];
+  // DELIST GUARD outranks everything
+  const blk=blockReason(s.coin);
+  if(blk)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.22);color:var(--red);border:1px solid var(--red);font-weight:700">⛔${blk}</span>`);
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
-  const clT=cleanTagHTML(s.coin);if(clT)tags.push(clT);
+  const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   // CONFLUENCE tag — always first if present
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
@@ -2608,7 +2668,8 @@ async function refreshDetail(){
 function populateDetail(s){
   const coin=s.coin;
   document.getElementById('dpSym').textContent=coin;
-  document.getElementById('dpAlphaBadge').innerHTML=s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'';
+  const blk=blockReason(coin);
+  document.getElementById('dpAlphaBadge').innerHTML=(blk?`<div class="dp-alpha-badge" style="background:rgba(255,34,68,.18);color:var(--red);border-color:var(--red)">⛔ НЕ ВЛЕГУВАЈ · ${blk}</div>`:'')+(s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'');
   document.getElementById('dpSub').textContent=`${coin}USDT PERP . Најдобар TF: ${s.tf} . ${s.ts}`;
   const fb=document.getElementById('dpFavBtn');fb.textContent=s.isFav?'★':'☆';fb.className='dp-fav-btn'+(s.isFav?' on':'');
   const pc=s.priceChg>=0;
@@ -3146,6 +3207,8 @@ function buildDigest(){
   o+='VIEW: '+(S.srch?'search='+S.srch:(S.filters.size?'filters='+[...S.filters].join(','):'no filters'))
     +(thr.length?' | '+thr.join(' '):'')+' | sort='+S.sort
     +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
+  const blkAll=blockedList();
+  if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
   if(S.srch&&S.srchList.length>1){
     const shown=new Set(rows.map(r=>r.coin));
     const noSig=S.srchList.filter(c=>!shown.has(c)&&!S.srchMissing.includes(c));
@@ -3410,7 +3473,7 @@ async function buildSetups(onProgress) {
   if (!S.signals.length) return;
   setP('Анализирам сетапи (1h+4h)...', 95);
   const candidates = S.signals.filter(function(s) {
-    return s.volume > 3000000; // min 3M vol
+    return s.volume > 3000000 && !blockReason(s.coin); // min 3M vol, never delisting/halted
   }).slice(0, 80); // top 80 by score
 
   const results = [];
@@ -4086,6 +4149,7 @@ async function evalClean15(coin){
 }
 
 async function evalClean15Cached(coin,force){
+  if(blockReason(coin))return null;
   const bar=Math.floor(Date.now()/CLEAN_BAR_MS),h=_cleanCache[coin];
   if(!force&&h&&h.bar===bar&&!(h.oiLag&&Date.now()-h.at>120000))return h;
   let r=null;
@@ -4098,7 +4162,7 @@ function pickCleanShortlist(){
   const out=[],seen=new Set();
   const push=c=>{if(c&&!seen.has(c)){seen.add(c);out.push(c);}};
   if(S.srch)(S.srchList.length?S.srchList:[S.srch]).forEach(c=>{if(_tMap[c])push(c);});
-  const ok=s=>_tMap[s.coin]&&!isTradFi(s.coin);
+  const ok=s=>_tMap[s.coin]&&!isTradFi(s.coin)&&!blockReason(s.coin);
   S.signals.filter(s=>s.isFav&&ok(s)).forEach(s=>push(s.coin));
   [...S.signals].filter(s=>ok(s)&&s.score>=CLEAN_MIN_SCORE&&(s.volume||0)>=CLEAN_MIN_VOL)
     .sort((a,b)=>b.score-a.score).slice(0,CLEAN_MAX_COINS).forEach(s=>push(s.coin));
@@ -4238,6 +4302,7 @@ async function loadCleanDetail(coin,force){
   ct.innerHTML='<span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Ги проверувам 10-те гејта на 15m...</span>';
   const r=await evalClean15Cached(coin,force);
   if(S.detailCoin!==coin)return;
+  if(!r&&blockReason(coin)){ct.innerHTML='<div class="cl-note" style="color:var(--red)">⛔ CLEAN15 исклучен: '+blockReason(coin)+'</div>';return;}
   if(!r){ct.innerHTML='<div class="cl-note">Нема доволно 15m историја (потребни 70+ свеќи) или Binance не одговара.</div>';return;}
   _clean[coin]=r;
   ct.innerHTML=cleanDetailHTML(r);
@@ -4766,7 +4831,7 @@ fetchAlphaList().then(()=>{
 // first scan finishes. doScan refetches it anyway, this is just for immediate UI.
 syncTradFiBtn();
 (function(){const b=document.getElementById('verBadge');if(b)b.textContent='v'+APP_VER+' '+APP_CODENAME+' \u00b7'+APP_BUILD.slice(-1);b.title='build '+APP_BUILD;})();
-apiFetch('/exchangeInfo').then(ei=>{if(ei)buildClassMaps(ei);});
+Promise.all([apiFetch('/exchangeInfo'),apiFetch('/premiumIndex')]).then(([ei,pi])=>{if(ei)buildClassMaps(ei);if(pi)pi.forEach(f=>{if(f.symbol.endsWith('USDT'))_mMap[f.symbol.replace('USDT','')]=parseFloat(f.markPrice||0);});renderDelistBanner();});
 
 // -- HEATMAP INTEGRATION -----------------------------------
 const HM={coin:'BTC',range:'1h',price:0,ob:{bids:[],asks:[]},timer:null,loaded:false};
