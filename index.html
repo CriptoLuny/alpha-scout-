@@ -851,6 +851,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //     all of them with no top-12 cut; unknown symbols are listed as
 //     MISSING instead of aborting the scan; every searched coin goes to
 //     the CLEAN15 shortlist. A single term keeps the old substring match.
+//   - FIX (2026-10-05-b): a search typed over an existing scan only filtered
+//     the view, so CLEAN15 graded only coins that were on the scan-time
+//     shortlist (score >= 6 top 30) - low-score watch coins got no grade, and
+//     graded ones kept the bar from the last scan. Now every searched coin is
+//     (re)evaluated on the latest closed 15m bar, 0.7s after typing stops.
 //
 //  v2.3 DECOMP
 //   - FIX: dir was inverted on every liq-hunt row. liqType names
@@ -919,7 +924,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-05-a';
+const APP_BUILD='2026-10-05-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3055,6 +3060,25 @@ function parseSrch(v){
   });
   return out;
 }
+// CLEAN15 for searched coins: grade any that are missing or graded on an older 15m bar.
+async function evalSearchClean(){
+  const list=(S.srchList.length?S.srchList:[S.srch]).filter(c=>c&&_tMap[c]);
+  if(!list.length||typeof evalClean15Cached!=='function')return;
+  const key=S.srch,bar=Math.floor(Date.now()/CLEAN_BAR_MS);
+  const todo=list.filter(c=>{const h=_cleanCache[c];return !(h&&h.bar===bar&&_clean[c]);});
+  if(!todo.length)return;
+  toast('⏳ CLEAN15 за '+todo.length+' пребарани коини...');
+  for(let k=0;k<todo.length;k+=3){
+    const chunk=todo.slice(k,k+3);
+    const res=await Promise.all(chunk.map(c=>evalClean15Cached(c)));
+    res.forEach((r,j)=>{if(r)_clean[chunk[j]]=r;});
+    await sleep(120);
+  }
+  if(S.srch!==key)return;
+  renderList();if(typeof renderCleanSection==='function')renderCleanSection();
+  const k=list.map(c=>_clean[c]).filter(Boolean);
+  toast('✅ CLEAN15 пребарани: '+k.length+'/'+list.length+' · A '+k.filter(r=>r.grade==='A').length+' · B '+k.filter(r=>r.grade==='B').length+' — сега копирај DIGEST');
+}
 function srchMatch(s){
   if(S.srchList.length>1)return S.srchList.includes(s.coin);
   return s.coin.includes(S.srch);
@@ -3064,6 +3088,7 @@ function onSrch(v){
   document.getElementById('srchX').style.display=v?'block':'none';
   if(!S.srch){renderList();return;}
   renderList();
+  clearTimeout(S._srchCleanT);S._srchCleanT=setTimeout(evalSearchClean,700);
   if(!S.signals.filter(srchMatch).length){
     const multi=S.srchList.length>1;
     document.getElementById('list').innerHTML=`<div class="empty">🔍<br><b>${multi?S.srchList.join(', '):S.srch+'USDT'}</b><br><span style="font-size:11px;color:var(--muted)">Притисни ⚡ СКЕНИРАЈ за ${multi?'овие '+S.srchList.length+' коини':'само овој коин'}</span></div>`;
