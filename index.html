@@ -822,6 +822,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.6 CLEAN15 · build 2026-10-07-a
+//   - FIX: ⚡SHORT SQ / ⚡LONG DMP fired without any OI check (24h price sign vs
+//     TF CVD sign; one path even used the live bar and the kline CVD before the taker
+//     value overwrote it, so the printed CVD% was not the number that fired the tag).
+//     Now: price and CVD over the same bars, closed-bar wick test, and real OI coins
+//     <= -LIQ_OI_MIN % over 3 periods are mandatory. No real OI -> no tag.
+//     It no longer votes in CONFL (it voted LONG while ULTIMATE read it as SHORT).
+//   - NEW: BASE◆% / BASE@ -- OI coins vs the first OI point of the scanned window
+//     (openInterestHist limit now covers the kline window). Guards against reading a
+//     short-lookback REVAL as move-wide closing (NMR.P case).
+//   - NEW: LOOKBACK line in the digest header; OI@ column = stamp of the last OI point
+//     (OI lags the live price by up to one period; CLEAN15 already corrects for it).
+//   - FIX: 1h closes cache (CLEAN15 G1) was valid for a whole scan; a digest copied
+//     after STOP could grade G1 on stale 1h bars. Now valid only inside the same 1h bar.
+//
 //  v2.6 CLEAN15
 //   - NEW: CLEAN15 entry-timing module. Ten gates on CLOSED 15m bars:
 //     G1 1h trend, G2 location at a level, G3 trigger (TREND bar or
@@ -942,7 +957,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-05-d';
+const APP_BUILD='2026-10-07-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1035,6 +1050,15 @@ const BN_TF={'1m':'1m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d
 // No 1m and no 1w -> mapped to the nearest supported period. History is 30 days.
 const OI_TF={'1m':'5m','5m':'5m','15m':'15m','1h':'1h','4h':'4h','12h':'12h','1d':'1d','1w':'1d'};
 const OI_LOOKBACK=6;   // colku periodi nazad se sporeduva (6 x period)
+// 2026-10-07-a: minutes per TF / OI period, used to align the OI window with the kline window
+const TF_MIN={'1m':1,'5m':5,'15m':15,'30m':30,'1h':60,'2h':120,'4h':240,'6h':360,'12h':720,'1d':1440,'1w':10080};
+// kline window the row is built on (same rule as klLimit in analyzeOneTF)
+const winBarsFor=tf=>(tf==='1h'||tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w'||tf==='15m'||tf==='5m')?150:70;
+// OI points that cover that same window (capped by the endpoint: 500 points, 30 days)
+const oiWinPts=tf=>{const p=OI_TF[tf]||'15m';return Math.min(500,Math.max(30,Math.ceil(winBarsFor(tf)*TF_MIN[tf]/TF_MIN[p])+1));};
+// LIQ HUNT (SHORT SQ / LONG DMP) now requires real positions CLOSING:
+// OI coins over the last 3 OI periods must be <= -LIQ_OI_MIN %. No real OI -> no tag.
+const LIQ_OI_MIN=1.0;
 
 // -- ASSET CLASS CONFIG (TradFi perps vs crypto) --
 // Verified against a live /fapi/v1/exchangeInfo probe (836 USDT symbols):
@@ -1177,7 +1201,9 @@ async function fetchTakerCVD(coin,tf){
   const last=cser[cser.length-1];
   const cvdNewLow =last<=Math.min(...cser);
   const cvdNewHigh=last>=Math.max(...cser);
-  return{cvdDelta,buyPct:tB/(tB+tS)*100,totalBuy:tB,totalSell:tS,buySellRatio,
+  const c0=parseFloat(kl[0][4]),cN=parseFloat(kl[kl.length-1][4]);
+  const pxChg=c0>0?((cN-c0)/c0)*100:null;   // same bars as cvdDelta (for LIQ HUNT)
+  return{cvdDelta,pxChg,buyPct:tB/(tB+tS)*100,totalBuy:tB,totalSell:tS,buySellRatio,
     buyVol:lastBU,sellVol:lastTU-lastBU,cvdNewLow,cvdNewHigh,cvdBars:cser.length};
 }
 
@@ -1480,9 +1506,12 @@ async function fetchOiHist(coin,tf){
   const p=OI_TF[tf]||'15m';
   // /futures/data/* shares a tighter IP budget with the L/S ratio calls this scanner
   // already makes per coin, so repeat cycles reuse a short-lived snapshot.
-  const ck=coin+'|'+p, hit=_oiCache[ck];
+  const wp=oiWinPts(tf);
+  const ck=coin+'|'+p+'|'+wp, hit=_oiCache[ck];
   if(hit&&Date.now()-hit.t<OI_CACHE_TTL)return hit.v;
-  const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${p}&limit=30`,FDAPI);
+  // 2026-10-07-a: limit covers the whole kline window (was 30) so BASE◆% can be measured
+  // from the window start. SHAPE still uses only the last 30 points, as before.
+  const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${p}&limit=${wp}`,FDAPI);
   if(!d||d.length<2){_oiCache[ck]={t:Date.now(),v:null};return null;}
   const n=d[d.length-1];
   const o=d[Math.max(0,d.length-1-OI_LOOKBACK)];
@@ -1500,7 +1529,12 @@ async function fetchOiHist(coin,tf){
   // The endpoint returns 30 points and v2.2 used exactly two of them. The SHAPE of the
   // curve is what separates "fresh accumulation" from "rebound after a collapse" --
   // both print the same positive dOI coin %, and only the series tells them apart.
-  const ser=d.map(x=>parseFloat(x.sumOpenInterest)).filter(v=>v>0);
+  const ser=d.slice(-30).map(x=>parseFloat(x.sumOpenInterest)).filter(v=>v>0);
+  // BASE = first OI point of the window (aligned with fHI/fLO). Long-window coin flow:
+  // a short-lookback REVAL/outflow can sit on top of a move that was BUILT on new positions.
+  const b0=d[0],CB=parseFloat(b0.sumOpenInterest),VB=parseFloat(b0.sumOpenInterestValue);
+  const baseCoinsChg=CB>0?((C1-CB)/CB)*100:null;
+  const baseUsdtChg=VB>0?((V1-VB)/VB)*100:null;
   const peak=Math.max(...ser);
   const peakIdx=ser.lastIndexOf(peak);
   // Trough must be measured AFTER the peak. Taking the window minimum instead would
@@ -1530,7 +1564,9 @@ async function fetchOiHist(coin,tf){
     flowPct:mag>0?Math.abs(flow)/mag*100:0,
     shape,fromPeak,drawdown,offTrough,
     peakCoins:peak,barsSincePeak:ser.length-1-peakIdx,seriesBars:ser.length,
-    period:p
+    period:p,
+    ts:+n.timestamp,                       // OI@ : stamp of the last hist point (lags live price)
+    baseCoinsChg,baseUsdtChg,baseTs:+b0.timestamp,basePts:d.length
   };
   _oiCache[ck]={t:Date.now(),v:res};
   return res;
@@ -1900,12 +1936,14 @@ async function ensureBtcReference() {
 async function getCoin1hCloses(coin, tfBeingScanned, closesFromCurrentTf) {
   // reuse if we're already scanning 1h (closes already has up to 150 1h candles)
   if (tfBeingScanned === '1h' && closesFromCurrentTf && closesFromCurrentTf.length >= 20) return closesFromCurrentTf;
-  if (_coin1hCache[coin]) return _coin1hCache[coin];
+  const hNow=Math.floor(Date.now()/3600000);
+  const hit=_coin1hCache[coin];
+  if (hit && hit.h===hNow) return hit.c;   // 2026-10-07-a: valid only inside the same 1h bar
   try {
     const kl = await apiFetch(`/klines?symbol=${coin}USDT&interval=1h&limit=150`);
     if (kl && kl.length >= 20) {
       const c1h = kl.map(k => parseFloat(k[4]));
-      _coin1hCache[coin] = c1h;
+      _coin1hCache[coin] = {h:hNow, c:c1h};
       return c1h;
     }
   } catch (e) {}
@@ -2160,8 +2198,9 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // OI decomposition (real, from openInterestHist) + the old volume proxy kept separately
   let oiCoinsChg=0,oiCoinsChg3=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
   let oiShape='',oiFromPeak=null,oiDrawdown=null;
+  let oiTs=null,oiBaseChg=null,oiBaseUsdtChg=null,oiBaseTs=null,oiBasePts=0;
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
-  let cvdNewLow=false,cvdNewHigh=false;
+  let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null;
 
   // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
   try{
@@ -2174,6 +2213,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       oiCoinsChg3=oh.oiCoinsChg3??0; // short window, for the squeeze detector
       oiDom=oh.dominates;oiRevalPct=oh.revalPct;oiFlowPct=oh.flowPct;
       oiShape=oh.shape;oiFromPeak=oh.fromPeak;oiDrawdown=oh.drawdown;
+      oiTs=oh.ts;oiBaseChg=oh.baseCoinsChg;oiBaseUsdtChg=oh.baseUsdtChg;oiBaseTs=oh.baseTs;oiBasePts=oh.basePts;
     }else{
       const oi=await apiFetch(`/openInterest?symbol=${coin}USDT`);
       if(oi?.openInterest){oiCoins=parseFloat(oi.openInterest);oiUsdt=oiCoins*price;}
@@ -2250,11 +2290,14 @@ async function analyzeOneTF(coin,ticker,fr,tf){
         fibo=calcFibo(klFull,150,tf);
         poc=calcPOC(klFull,150);
       }
-      for(const k of kl.slice(-3)){
-        const hi=parseFloat(k[2]),lo=parseFloat(k[3]),op=parseFloat(k[1]),cl=parseFloat(k[4]);
-        const body=Math.abs(cl-op),range=hi-lo;
-        if(range>0&&body/range<0.38&&(priceChg>0)!==(cvdDelta>0)){liqHunt=true;liqType=priceChg>0?'bull':'bear';}
-      }
+      // LIQ HUNT wick test: last 3 CLOSED bars only (was: included the live bar).
+      // The decision itself is made after the taker CVD fetch, with the OI condition.
+      {const kcw=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl;
+       for(const k of kcw.slice(-3)){
+         const hi=parseFloat(k[2]),lo=parseFloat(k[3]),op=parseFloat(k[1]),cl=parseFloat(k[4]);
+         const body=Math.abs(cl-op),range=hi-lo;
+         if(range>0&&body/range<0.38)liqWick=true;
+       }}
       if(kl.length>=15){
         // SQUEEZE ACTIVATION v2.6 -- closed candles only, aligned windows, OI drop mandatory
         const kc=(parseInt(kl[kl.length-1][6])>Date.now())?kl.slice(0,-1):kl; // drop the live bar
@@ -2277,7 +2320,16 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     if(td){
       cvdDelta=td.cvdDelta;takerBuyPct=td.buyPct;
       cvdNewLow=!!td.cvdNewLow;cvdNewHigh=!!td.cvdNewHigh;
-      if(Math.abs(priceChg)>1.5&&(priceChg>0)!==(cvdDelta>0)){liqHunt=true;liqType=priceChg>0?'bull':'bear';}
+      // 2026-10-07-a LIQ HUNT, one rule:
+      //  - price and CVD over the SAME bars (taker window), not 24h price vs TF CVD
+      //  - opposite signs, and (|price| > 1.5% OR a long-wick closed bar in the last 3)
+      //  - MANDATORY: real OI coins fell >= LIQ_OI_MIN % over the last 3 OI periods.
+      //    A "squeeze" with OI rising is new positioning, not liquidation.
+      liqPx=td.pxChg;
+      const oiClosing=oiReal&&oiCoinsChg3<=-LIQ_OI_MIN;
+      if(oiClosing&&liqPx!=null&&cvdDelta!==0&&(liqPx>0)!==(cvdDelta>0)&&(Math.abs(liqPx)>1.5||liqWick)){
+        liqHunt=true;liqType=liqPx>0?'bull':'bear';
+      }
       // Net inflow/outflow detection
       netFlowPct=td.buyPct-50; // positive = more buying than selling
       if(td.buyPct>58){netInflow=true;}
@@ -2399,7 +2451,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(sqz?.bullSignal||sqz?.bullAdxBrk) cvotes.push({name:'SQZMOM',detail:'bullish сигнал',vote:1});
   else if(sqz?.bearSignal||sqz?.bearAdxBrk) cvotes.push({name:'SQZMOM',detail:'bearish сигнал',vote:-1});
   // 8. Liq Hunt
-  if(liqHunt) cvotes.push({name:'Liq Hunt',detail:liqType==='bull'?'short squeeze':'long dump',vote:liqType==='bull'?1:-1});
+  // 2026-10-07-a: Liq Hunt removed from CONFL. It voted +1 LONG on a short squeeze while
+  // ULTIMATE and the tooltip read the same event as a SHORT reversal. An event is not a direction.
   // 9. OI trend -- real position flow (coins) when available; USDT move alone can be pure
   //    revaluation, which is mechanical and should not cast a directional vote.
   if(oiReal){
@@ -2449,7 +2502,8 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // CONFLUENCE verdict. Confluence (4+ indicators agreeing) outranks raw tag counting.
   const dir=confDir!=='none'?confDir:(bulls>bears?'bull':bears>bulls?'bear':'neutral');
   return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
-    oiCoinsChg,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
+    oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
+    oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
     volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
@@ -3289,6 +3343,13 @@ function buildDigest(){
   o+='CVD% = taker buy-share shift, NOT cumulative CVD. CVDt = trajectory: LOW = cumulative '
     +'delta at a new window low (free fall), HIGH = new high, -- = neither.\n';
   o+='OI◆ = real coin flow. DOM = FLOW (real positions) vs REVAL (price revaluation).\n';
+  {const pO=OI_TF[S.tf==='all'?'15m':S.tf]||'15m',m=TF_MIN[pO]*OI_LOOKBACK;
+   const lb=m>=1440?(m/1440)+'d':m>=60?(m/60)+'h':m+'m';
+   o+='LOOKBACK: dOI$%/dOI◆%/DOM = last OI point vs '+OI_LOOKBACK+' periods earlier ('+OI_LOOKBACK+'×'+pO+' = '+lb+'). '
+     +'LIQ test = last 3 OI periods. SHAPE/oiPK = last 30 periods. BASE◆% = OI coins vs the FIRST point of the window '
+     +'(same window as fHI/fLO; per-row start in BASE@). OI@ = stamp of the last openInterestHist point -- it LAGS the live PX by up to one period.\n';
+   o+='⚡SHORT SQ / ⚡LONG DMP (2026-10-07-a) = price and CVD opposite over the same bars + (|px|>1.5% or long wick) '
+     +'+ OI coins <= -'+LIQ_OI_MIN+'% over 3 periods. No real OI -> no tag. No longer votes in CONFL.\n';}
   o+='SHAPE = OI curve over ~30 periods: RISING (at highs, building) / PEAK (at highs, stalled) / '
     +'REBUILD (collapsed, now recovering -- NOT fresh accumulation) / FADED (unwinding) / FLAT.\n';
   o+='fHI/fLO = % from the high and low of the scanned window (bars column). A coin can be flat '
@@ -3343,7 +3404,7 @@ function buildDigest(){
       +' | total '+g.filter(x=>x.mFlip).length+' ('+(g.length?(g.filter(x=>x.mFlip).length/g.length*100).toFixed(0):'0')+'%)\n';
   });
 
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|dOI$%|dOI◆%|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|OI@|dOI$%|dOI◆%|BASE◆%|BASE@|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
     +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
 
   rows.forEach(s=>{
@@ -3362,8 +3423,11 @@ function buildDigest(){
       n(s.fromHiPct),
       n(s.fromLoPct),
       s.oiUsdt>0?fmtM(s.oiUsdt):'—',
+      s.oiTs?clnHM(s.oiTs):'—',
       s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
       s.oiReal?n(s.oiCoinsChg):'n/a',
+      (s.oiReal&&s.oiBaseChg!=null)?n(s.oiBaseChg):'n/a',
+      s.oiBaseTs?(()=>{const d=new Date(s.oiBaseTs);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+' '+clnHM(s.oiBaseTs);})():'—',
       s.oiDom||'n/a',
       s.oiShape||'n/a',
       s.oiReal?n(s.oiFromPeak):'n/a',
@@ -4574,7 +4638,7 @@ function helpSections(){
     {tag:'📋 СИТЕ',col:a,what:'Ги чисти сите филтри.'},
     {tag:'⭐ FAV',col:y,what:'Само фаворити. Ако е единствен филтер, скенот оди САМО низ фаворитите (побрзо).',action:'Фаворит се додава со ☆ во деталниот приказ. +1 score.'},
     {tag:'🅐 ALPHA',col:y,what:'Токени од Binance Alpha листата. +1 score.'},
-    {tag:'⚡ LIQ HUNT',col:o,what:'Цена и CVD во спротивни насоки: |цена|>1.5%, или свеќа со долг фитил (тело < 38% од range) во последните 3.',when:'⚡SHORT SQ = цена↑ CVD↓ (шортови ликвидирани). ⚡LONG DMP = цена↓ CVD↑.',action:'По лов честопати следи reversal. +2 score.'},
+    {tag:'⚡ LIQ HUNT',col:o,what:'Цена и CVD во спротивни насоки ПРЕКУ ИСТИТЕ свеќи (|цена|>1.5% или долг фитил на затворена свеќа во последните 3) + ЗАДОЛЖИТЕЛНО реален OI◆ паѓа ≥'+LIQ_OI_MIN+'% за 3 периоди. Без пад на OI нема таг — тоа е ново позиционирање, не ликвидација.',when:'⚡SHORT SQ = цена↑ CVD↓ (шортови ликвидирани). ⚡LONG DMP = цена↓ CVD↑.',action:'По лов честопати следи reversal. +2 score.'},
     {tag:'🔥 SQ ACT',col:pk,what:'Squeeze Activation (само затворени свеќи): цена расте + реален OI◆ паѓа >3% за ~3 периоди + (CVD spike ИЛИ FR < −0.03%).',when:'Шортовите се принудно затвораат. Без пад на OI нема squeeze.',action:'Continuation LONG, SL под swing low.'},
     {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 spread < 0.5% од цената — екстремна компресија.',action:'Чекај пробив со волумен.'},
     {tag:'🚀 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5%. 🚀 = SMA25>SMA99 (bull), 📉 = SMA25<SMA99 (bear).',action:'Потврди со CVD или DI крос.'},
