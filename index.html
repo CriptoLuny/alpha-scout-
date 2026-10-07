@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Alpha Scout">
 <meta name="theme-color" content="#07070f">
-<title>ALPHA SCOUT v2.6 CLEAN15</title>
+<title>ALPHA SCOUT v2.7 STRUCT</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -822,6 +822,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.7 STRUCT · build 2026-10-07-c   (phase 0 + phase 1 of the TREND/LOCATION plan)
+//   - NEW: TRND (15m+1h) -- three votes in a fixed order: 1h JMA/DWMA, close vs SMA200 on
+//     closed 15m bars, confirmed-pivot structure (HH/HL vs LH/LL, a break of the last pivot
+//     counts). UP = 2+ votes up, DOWN = 2+ votes down, RANGE otherwise. RLC 07.10 15:15:
+//     the short was with 1h↓, <MA200 and LH/LL while FLIP▲ read the relief bounce as a turn.
+//   - NEW: LOC (15m) -- nearest support/resistance from confirmed pivots, MA200, POC and
+//     Fibo .5/.618/.786 of the current leg; levels within 0.15 ATR are merged (confluence).
+//     Structure and levels use a zigzag over the pivots (swings >= 1 ATR), so a 2-bar dip
+//     inside a bounce is not read as a higher low.
+//     AT-S / AT-R = close within CLEAN_LOC_ATR of the level, MID otherwise, EXT = |MOMz|>=3.
+//     Shown as a 📐 badge, in the CLEAN15 detail/cards, in two digest columns and in the
+//     CLEAN15 digest line. Descriptive only: no gate and no SCORE vote changed in this build.
+//   - CLEAN15 15m klines: limit 120 -> 260 (SMA200 needs 200 closed bars; same request weight).
+//   - FIX: MST printed STEADY when a small scan had no reference distribution. STEADY is
+//     now only a flat coin (|MOMz|<0.15); no ref -> n/a, so it can no longer pass for a state.
+//   - FIX: JMA tags in the digest carry their TF (JMA X UP[15m]); G1 is 1h and the two
+//     read as a contradiction. OI@ gets "!" when the last OI point is older than 2 periods.
+//
 //  v2.6 CLEAN15 · build 2026-10-07-b
 //   - FIX: LIQ HUNT price and OI windows were not aligned in -a (price over 20 bars,
 //     OI over 3 periods). MOVR 07.10 14:00: a long flush (OI -2.5%, price -2 ATR)
@@ -959,11 +977,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
-const APP_VER='2.6';
-const APP_CODENAME='CLEAN15';
+const APP_VER='2.7';
+const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-07-b';
+const APP_BUILD='2026-10-07-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1752,8 +1770,10 @@ function assignMomentumRanks(signals){
         s.mdirPct=pctOf(dvR,s.mDir);
         s.mState=s.mdirPct>=MOM_ACCEL_PCT?'ACCEL'
                 :s.mdirPct<=MOM_DECEL_PCT?'DECEL':'STEADY';
-      }else if(s.sqz.mslope!=null){
+      }else if(s.mDir==null&&s.sqz.mslope!=null){
         s.mState='STEADY';   // рамна монета: има податок, но нема што да забрзува
+      }else if(s.mDir!=null){
+        s.mState='n/a';      // 2026-10-07-c: има насока, но нема распределба (ни ref) за рангирање
       }
       s.mRegime=momRegime(s);
     });
@@ -2525,7 +2545,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
     oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
-    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -2623,6 +2643,7 @@ function rowHTML(s){
   if(blk)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.22);color:var(--red);border:1px solid var(--red);font-weight:700">⛔${blk}</span>`);
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
+  const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
   // CONFLUENCE tag — always first if present
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
@@ -3384,7 +3405,7 @@ function buildDigest(){
   o+='MST = состојба од ПЕРЦЕНТИЛ на MDIR (ACCEL≥p'+MOM_ACCEL_PCT+' / DECEL≤p'+MOM_DECEL_PCT
     +' / STEADY). ACCEL кај монета што паѓа значи падот СЕ ЗАБРЗУВА, не раст. '
     +'|MOMz|<'+MOM_DIR_EPS+' = рамна монета -> STEADY. Под '+MOM_MIN_POP+' коини (пр. пребарување) '
-    +'перцентилите се од последниот ЦЕЛОСЕН скен на истиот TF (ref, до 6h).\n';
+    +'перцентилите се од последниот ЦЕЛОСЕН скен на истиот TF (ref, до 6h). Без ref -> MST = n/a (не STEADY).\n';
   o+='FLIP = ПАРАЛЕЛЕН флаг, не состојба: MOMz сменил знак со замав ≥'+MOM_FLIP_MIN
     +' ATR. ▲=нагоре ▼=надолу. Монета може да е ACCEL И FLIP▲ истовремено.\n';
   o+='REG = OI◆ × MST: DRIVE (OI↑ + ACCEL, вистинска експанзија) / ABSORB (OI↑ + DECEL, '
@@ -3409,7 +3430,7 @@ function buildDigest(){
     if(sv.length<MOM_MIN_POP){
       const ref=momRefLoad(t);
       if(ref){mvD=ref.mv;svD=ref.dv;refTxt=' -> ref = full scan '+clnHM(ref.t)+' n='+ref.n;}
-      else refTxt=' -> no ref (MST falls back to STEADY)';
+      else refTxt=' -> no ref (MST = n/a: run a FULL scan on this TF, valid 6h)';
     }
     o+='MOM DIST ['+t+'] n='+sv.length+'/'+g.length+refTxt
       +' | MOMz p10 '+q(mvD,10)+' p30 '+q(mvD,30)+' p50 '+q(mvD,50)+' p70 '+q(mvD,70)+' p90 '+q(mvD,90)
@@ -3417,7 +3438,7 @@ function buildDigest(){
     const cnt=k=>g.filter(x=>x.mState===k).length;
     const rcnt=k=>g.filter(x=>x.mRegime===k).length;
     o+='MOM STATE ['+t+'] ACCEL '+cnt('ACCEL')+' | DECEL '+cnt('DECEL')+' | STEADY '+cnt('STEADY')
-      +' | FLIP '+cnt('FLIP')+' | n/a '+cnt('—')
+      +' | FLIP '+cnt('FLIP')+' | n/a '+(cnt('—')+cnt('n/a'))
       +'   REGIME: DRIVE '+rcnt('DRIVE')+' | ABSORB '+rcnt('ABSORB')+' | SQUEEZE '+rcnt('SQUEEZE')
       +' | DEAD '+rcnt('DEAD')+' | none '+g.filter(x=>!x.mRegime).length+'\n';
     o+='MOM FLIP ['+t+'] up '+g.filter(x=>x.mFlip&&x.mFlipDir>0).length
@@ -3425,12 +3446,16 @@ function buildDigest(){
       +' | total '+g.filter(x=>x.mFlip).length+' ('+(g.length?(g.filter(x=>x.mFlip).length/g.length*100).toFixed(0):'0')+'%)\n';
   });
 
+  o+='TAGS are computed on the row TF (JMA tags carry it: JMA X UP[15m]); TRND15/LOC15 come from CLEAN15 (closed 15m + 1h), '
+    +'n/a = coin not in the CLEAN15 shortlist. OI@ "!" = last OI point older than 2 periods (stale).\n';
   o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|OI@|dOI$%|dOI◆%|BASE◆%|BASE@|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
-    +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TAGS\n\n';
+    +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TRND15|LOC15|TAGS\n\n';
 
   rows.forEach(s=>{
     const af=(s.isAlpha?'A':'-')+(s.isFav?'F':'-');
-    const tl=(s.sigs||[]).map(x=>x.l);
+    const tl=(s.sigs||[]).map(x=>/^JMA/.test(x.l)?x.l+'['+s.tf+']':x.l);   // v2.7: TF on JMA tags (G1/TRND are 1h)
+    const cr=_clean[s.coin],stR=cr&&cr.st?cr.st:null;
+    const oiStale=s.oiTs&&((s.tsMs||Date.now())-s.oiTs)>2*TF_MIN[OI_TF[s.tf]||'15m']*60000;   // vs the row's scan time, not copy time
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
     const tags=tl.join(';');
     o+=[
@@ -3444,7 +3469,7 @@ function buildDigest(){
       n(s.fromHiPct),
       n(s.fromLoPct),
       s.oiUsdt>0?fmtM(s.oiUsdt):'—',
-      s.oiTs?clnHM(s.oiTs):'—',
+      s.oiTs?clnHM(s.oiTs)+(oiStale?'!':''):'—',
       s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
       s.oiReal?n(s.oiCoinsChg):'n/a',
       (s.oiReal&&s.oiBaseChg!=null)?n(s.oiBaseChg):'n/a',
@@ -3467,6 +3492,8 @@ function buildDigest(){
       fmtM(s.volume),
       s.score,
       s.dir,
+      stR?stR.trend+'('+(stR.votes>0?'+':'')+stR.votes+')':'n/a',
+      stR?stR.loc+(stR.ext?'/EXT':''):'n/a',
       tags
     ].join('|')+'\n';
   });
@@ -4026,6 +4053,98 @@ function clnRange(H,L,end,atrRef){
   return null;
 }
 
+// ── TREND + LOCATION (v2.7 STRUCT) ───────────────────────────
+// Descriptive layer, evaluated in a fixed order: where is the market (TRND), and is price
+// at a level (LOC). No gate and no SCORE vote reads it in this build.
+const CLEAN_MA_LEN=200;        // SMA200 on closed 15m bars
+const CLEAN_EXT_ATR=3.0;       // |MOMz 15m| >= this = extended, do not chase
+const CLEAN_LVL_MERGE=0.15;    // levels closer than this many ATR are one zone (confluence)
+const CLEAN_FIB=[0.5,0.618,0.786];
+const CLEAN_SWING_ATR=1.0;     // a pivot only counts for structure/levels if the swing to it is >= this many ATR
+// Zigzag over the confirmed pivots: alternating highs/lows, same-side pivots keep the extreme,
+// swings smaller than CLEAN_SWING_ATR are ignored. Without it a 2-bar dip inside a bounce
+// prints a "higher low" and flips the structure.
+function clnSwings(pv,atr){
+  const all=pv.hi.map(p=>({i:p.i,p:p.p,t:1})).concat(pv.lo.map(p=>({i:p.i,p:p.p,t:-1}))).sort((a,b)=>a.i-b.i);
+  const z=[];
+  for(const p of all){
+    const last=z[z.length-1];
+    if(!last){z.push(p);continue;}
+    if(p.t===last.t){if((p.t>0&&p.p>last.p)||(p.t<0&&p.p<last.p))z[z.length-1]=p;continue;}
+    if(Math.abs(p.p-last.p)<CLEAN_SWING_ATR*atr)continue;
+    z.push(p);
+  }
+  return{hi:z.filter(x=>x.t>0),lo:z.filter(x=>x.t<0)};
+}
+function clnStruct(H,L,C,atr,i,pvRaw,jmaAbove,poc,mzNow){
+  const pv=clnSwings(pvRaw,atr);
+  const px=C[i];
+  let ma=null;
+  if(i+1>=CLEAN_MA_LEN){let s=0;for(let j=i-CLEAN_MA_LEN+1;j<=i;j++)s+=C[j];ma=s/CLEAN_MA_LEN;}
+  const vMa=ma==null?0:(px>ma?1:-1),maAtr=ma==null?null:(px-ma)/atr;
+  const vJ=jmaAbove==null?0:(jmaAbove?1:-1);
+  // structure: the last two confirmed pivot highs and lows. A close beyond the last
+  // pivot counts as the next one (confirmation lags k bars, a break does not).
+  const hs=pv.hi.slice(-2),ls=pv.lo.slice(-2);
+  const lastH=hs.length?hs[hs.length-1]:null,lastL=ls.length?ls[ls.length-1]:null;
+  const brk=(lastL&&px<lastL.p)?-1:(lastH&&px>lastH.p)?1:0;
+  let vS=0,stL='n/a';
+  if(hs.length===2&&ls.length===2){
+    let hh=hs[1].p>hs[0].p,hl=ls[1].p>ls[0].p;
+    if(brk<0)hl=false;
+    if(brk>0)hh=true;
+    stL=(hh?'HH':'LH')+'/'+(hl?'HL':'LL');
+    vS=(hh&&hl)?1:(!hh&&!hl)?-1:0;
+    if(brk)stL+=brk>0?' BRK↑':' BRK↓';
+  }else if(brk){   // not enough confirmed pivots yet: a break of the one we have is the structure
+    vS=brk;stL=brk>0?'BRK↑':'BRK↓';
+  }
+  const votes=vJ+vMa+vS;
+  const trend=votes>=2?'UP':votes<=-2?'DOWN':'RANGE';
+
+  // levels: significant swings (either side -- a broken high is support), MA200, POC, Fibo of the current leg
+  const lv=[];
+  pv.hi.forEach(p=>lv.push({p:p.p,src:'swingH'}));
+  pv.lo.forEach(p=>lv.push({p:p.p,src:'swingL'}));
+  if(ma!=null)lv.push({p:ma,src:'MA200'});
+  if(poc!=null)lv.push({p:poc,src:'POC'});
+  let fib=null;
+  if(lastH&&lastL){
+    if(lastH.i>lastL.i){          // leg down from the last pivot high to the low printed since
+      let lo=Infinity;for(let j=lastH.i;j<=i;j++)if(L[j]<lo)lo=L[j];
+      if(lastH.p-lo>=atr){fib={dir:-1,from:lastH.p,to:lo};CLEAN_FIB.forEach(r=>lv.push({p:lo+r*(lastH.p-lo),src:'Fib'+String(r).slice(1)}));}
+    }else{                        // leg up from the last pivot low to the high printed since
+      let hi=-Infinity;for(let j=lastL.i;j<=i;j++)if(H[j]>hi)hi=H[j];
+      if(hi-lastL.p>=atr){fib={dir:1,from:lastL.p,to:hi};CLEAN_FIB.forEach(r=>lv.push({p:hi-r*(hi-lastL.p),src:'Fib'+String(r).slice(1)}));}
+    }
+  }
+  lv.sort((a,b)=>a.p-b.p);
+  const zones=[];
+  lv.forEach(x=>{
+    const z=zones[zones.length-1];
+    if(z&&x.p-z.hi<=CLEAN_LVL_MERGE*atr){z.hi=x.p;z.sum+=x.p;z.n++;if(!z.src.includes(x.src))z.src.push(x.src);}
+    else zones.push({lo:x.p,hi:x.p,sum:x.p,n:1,src:[x.src]});
+  });
+  zones.forEach(z=>{z.p=z.sum/z.n;z.lbl=z.src.join('+');z.d=(z.p-px)/atr;});
+  const sup=zones.filter(z=>z.p<=px).sort((a,b)=>b.p-a.p)[0]||null;
+  const res=zones.filter(z=>z.p>px).sort((a,b)=>a.p-b.p)[0]||null;
+  const nS=!!sup&&(-sup.d)<=CLEAN_LOC_ATR,nR=!!res&&res.d<=CLEAN_LOC_ATR;
+  const loc=nS&&nR?((-sup.d)<=res.d?'AT-S':'AT-R'):nS?'AT-S':nR?'AT-R':'MID';
+  const ext=(mzNow!=null&&Math.abs(mzNow)>=CLEAN_EXT_ATR)?(mzNow>0?1:-1):0;
+  return{trend,votes,vJ,vMa,vS,ma,maAtr,stL,brk,sup,res,loc,ext,mz:mzNow,fib};
+}
+function clnTrendTxt(st){
+  if(!st)return 'n/a';
+  const j=st.vJ>0?'1h↑':st.vJ<0?'1h↓':'1h n/a';
+  const m=st.ma==null?'MA200 n/a':((st.vMa>0?'>':'<')+'MA200 '+clnSgn(st.maAtr,1)+'ATR');
+  return st.trend+' '+(st.votes>0?'+':'')+st.votes+' ('+j+' · '+m+' · '+st.stL+')';
+}
+function clnLocTxt(st){
+  if(!st)return 'n/a';
+  const z=(k,x)=>x?(k+' '+fmt(x.p)+' '+x.lbl+' '+clnSgn(x.d,1)+'ATR'):(k+' —');
+  return st.loc+' · '+z('R',st.res)+' · '+z('S',st.sup)+(st.ext?(' · EXT'+(st.ext>0?'↑':'↓')+' MOMz '+clnSgn(st.mz)):'');   // no "|": the digest uses it as the field separator
+}
+
 // Price-negated copy of the context: the long logic run on it IS the short logic.
 function clnMirror(c){
   const neg=a=>a.map(v=>-v),ng=v=>v==null?null:-v;
@@ -4225,7 +4344,7 @@ async function clnContextFlags(coin,sd,ctx){
 async function evalClean15(coin){
   const needFr=_fMap[coin]===undefined;
   const[kl,oiH,lsD,prem,c1h,pi]=await Promise.all([
-    apiFetch(`/klines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=120`),
+    apiFetch(`/klines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=260`),   // v2.7: 200+ closed bars for SMA200
     apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${CLEAN_TF}&limit=40`,FDAPI),
     fetchLSRatio(coin,CLEAN_TF).catch(()=>null),
     apiFetch(`/premiumIndexKlines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=12`),
@@ -4291,11 +4410,12 @@ async function evalClean15(coin){
     pvLo:pv.lo,pvHi:pv.hi,poc:pocR?pocR.poc:null,hiW,loW,
     rngA:clnRange(H,L,i-1,ATR[i-1]),rngB:clnRange(H,L,i-2,ATR[i-2]),
     oiE,oiChg,lsr,lsReal:lsr,fr,premNow,premMax,premMin,premFirst,dOI8:oiChg(i,i-8)};
+  const st=clnStruct(H,L,C,atr,i,pv,jmaAbove,pocR?pocR.poc:null,ms[5]);   // v2.7 TRND + LOC (descriptive)
   const Ls=clnSide(ctx),Ss=clnSide(clnMirror(ctx));
   for(const sd of[Ls,Ss])if(sd.pass)await clnContextFlags(coin,sd,ctx);
   const pick=[Ls,Ss].filter(s=>s.pass).sort((a,b)=>b.rr-a.rr)[0]||null;
   return{coin,at:Date.now(),bar:Math.floor(Date.now()/CLEAN_BAR_MS),barT:T[i],price:C[i],atr,atrPct:atr/C[i]*100,
-    ls:lsr,fr,oiLag,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
+    ls:lsr,fr,oiLag,st,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
 }
 
 async function evalClean15Cached(coin,force){
@@ -4362,6 +4482,15 @@ function cleanTagHTML(coin){
     +'" onclick="event.stopPropagation();openDetail(this.dataset.coin)">✅'+r.grade+(up?'▲':'▼')+'</span>';
 }
 
+// v2.7: TRND + LOC badge (visible text -- no tooltips on the iPhone PWA)
+function structTagHTML(coin){
+  const r=_clean[coin];if(!r||!r.st)return '';
+  const st=r.st,c=st.trend==='UP'?'var(--green)':st.trend==='DOWN'?'var(--red)':'var(--muted)';
+  const a=st.trend==='UP'?'▲UP':st.trend==='DOWN'?'▼DN':'↔RNG';
+  const l=st.loc==='AT-S'?'@S':st.loc==='AT-R'?'@R':'mid';
+  return '<span class="ctag" style="background:transparent;color:'+c+';border:1px solid '+c+';font-family:var(--mono)">📐'+a+'·'+l+(st.ext?'·EXT':'')+'</span>';
+}
+
 function cleanPassCount(r){return Math.max(r.L.gates.filter(g=>g.ok).length,r.S.gates.filter(g=>g.ok).length);}
 
 function cleanCardHTML(r){
@@ -4372,7 +4501,9 @@ function cleanCardHTML(r){
     +'<div class="su-top"><div><div class="su-coin">'+(isAlpha(r.coin)?'<span class="ctag ct-alpha">🅐</span> ':'')+r.coin
     +'<span style="font-size:10px;color:var(--muted);font-weight:normal"> USDT</span></div>'
     +'<div style="font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)">'+sd.mode+' · ниво $'+fmt(sd.lvl)+' ('+clnEsc(sd.lvlSrc)
-    +') · ATR '+r.atrPct.toFixed(2)+'% · свеќа '+clnHM(r.barT)+'</div></div>'
+    +') · ATR '+r.atrPct.toFixed(2)+'% · свеќа '+clnHM(r.barT)+'</div>'
+    +(r.st?'<div style="font-size:10px;color:var(--text2);margin-top:2px;font-family:var(--mono)">📐 '+clnEsc(clnTrendTxt(r.st))+'<br>📍 '+clnEsc(clnLocTxt(r.st))+'</div>':'')
+    +'</div>'
     +'<div style="display:flex;gap:6px;align-items:center"><span class="cl-grade '+r.grade+'">'+r.grade+'</span>'
     +'<div class="su-dir '+(up?'long':'short')+'">'+(up?'▲ LONG':'▼ SHORT')+'</div></div></div>'
     +'<div class="su-levels cl6">'
@@ -4391,7 +4522,9 @@ function cleanWaitHTML(r){
   const line=(sd,a)=>{const x=sd.gates.filter(g=>!g.ok);
     return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' · '+x.slice(0,3).map(g=>g.id+' '+clnEsc(g.note)).join(' · ')+(x.length>3?' · +'+(x.length-3):'');};
   return '<div class="cl-wait" data-coin="'+r.coin+'" onclick="openDetail(this.dataset.coin)"><b>'+r.coin+'</b> <span style="color:var(--muted)">$'
-    +fmt(r.price)+' · свеќа '+clnHM(r.barT)+'</span><br>'+line(r.L,'▲')+'<br>'+line(r.S,'▼')+'</div>';
+    +fmt(r.price)+' · свеќа '+clnHM(r.barT)+'</span>'
+    +(r.st?'<br><span style="color:var(--text2)">📐 '+clnEsc(clnTrendTxt(r.st))+' · 📍 '+clnEsc(r.st.loc)+'</span>':'')
+    +'<br>'+line(r.L,'▲')+'<br>'+line(r.S,'▼')+'</div>';
 }
 
 function renderCleanSection(){
@@ -4426,6 +4559,7 @@ function cleanDetailHTML(r){
     h+='<span class="cl-grade '+(g==='WAIT'?'W':g)+'">'+lbl+' · '+g+(sd.mode?' · '+sd.mode:'')+' · '+sd.gates.filter(x=>x.ok).length+'/'+sd.gates.length+'</span>';
   });
   h+='</div>';
+  if(r.st)h+='<div class="cl-note" style="margin:6px 0">📐 TRND '+clnEsc(clnTrendTxt(r.st))+'<br>📍 LOC '+clnEsc(clnLocTxt(r.st))+'</div>';
   [['L',true],['S',false]].forEach(([key,up])=>{
     const sd=r[key];if(!sd.pass)return;
     h+='<div class="su-levels cl6" style="margin-bottom:8px">'
@@ -4467,7 +4601,7 @@ function cleanDigestLine(r){
     const x=sd.gates.filter(g=>!g.ok);
     return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' x: '+x.map(g=>g.id+' '+g.note).join('; ');
   };
-  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+'|ATR '+r.atrPct.toFixed(2)+'%|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
+  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+'|ATR '+r.atrPct.toFixed(2)+'%|TRND '+clnTrendTxt(r.st)+'|LOC '+clnLocTxt(r.st)+'|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
 }
 
 function cleanDigest(rows){
@@ -4479,6 +4613,11 @@ function cleanDigest(rows){
     +'G5 CVD+taker same side | G6 MOMz/MSLP | G7 no SQZ ON | G8 FR<='+CLEAN_FR_MAX+'%, L/S+premium, premium fade under OI up | '
     +'G9 SL TREND=level-'+CLEAN_SL_ATR+'ATR / SWEEP=wick-'+CLEAN_SL_SWEEP_BUF+'ATR, <='+CLEAN_SL_MAX_ATR+'ATR, R:R>='+CLEAN_RR_MIN+' | G10 trap: range<='+CLEAN_TRAP_ATR+'ATR >='+CLEAN_TRAP_BARS
     +' bars + OI coins >=+'+CLEAN_TRAP_OI+'% + crowded L/S -> SWEEP only. A=10/10, B=10/10+flag, WAIT=any fail.\n';
+  o+='TRND (v2.7) = 3 votes in order: 1h JMA/DWMA | close vs SMA'+CLEAN_MA_LEN+' on closed 15m | pivot structure HH/HL vs LH/LL '
+    +'(BRK = close beyond the last confirmed pivot). UP/DOWN = 2+ votes the same way, RANGE = conflict. '
+    +'LOC = nearest S/R zone from pivots, MA200, POC, Fibo .5/.618/.786 of the current leg (levels within '+CLEAN_LVL_MERGE
+    +' ATR merged); AT-S/AT-R = close within '+CLEAN_LOC_ATR+' ATR, MID otherwise; EXT = |MOMz 15m| >= '+CLEAN_EXT_ATR
+    +'. Descriptive only: no gate and no SCORE vote uses TRND/LOC yet.\n';
   all.filter(r=>r.grade!=='WAIT').forEach(r=>{o+=cleanDigestLine(r)+'\n';});
   all.filter(r=>r.grade==='WAIT'&&inView.has(r.coin)).forEach(r=>{o+=cleanDigestLine(r)+'\n';});
   return o;
@@ -4694,6 +4833,7 @@ function helpSections(){
   ]},
   {h:'🏷 ОЗНАКИ НА КАРТИЧКА',items:[
     {tag:'✅A▲ / ✅B▼',col:g,what:'CLEAN15 чист влез: оценка A или B, ▲ лонг / ▼ шорт. Испрекината рамка = B. Секогаш прва ознака.',action:'Клик → детали со сите 10 гејта.'},
+    {tag:'📐▼DN·@R',col:a,what:'TRND (v2.7): 1h JMA/DWMA + затворање спрема SMA200 на 15m + структура од потврдени pivots (HH/HL или LH/LL, BRK = пробиен последен pivot). ▲UP / ▼DN = 2+ гласа во иста насока, ↔RNG = судир. LOC: @S / @R = во 0.5 ATR од зона (pivot, MA200, POC, Фибо .5–.786 на тековниот замав), mid = помеѓу, EXT = |MOMz 15m| ≥ 3.',action:'Само опис — не е гејт и не гласа во SCORE (уште). Се гледа само кај коини проверени во CLEAN15 (shortlist, FAV, пребарување).'},
     {tag:'Лева лента',col:g,what:'Зелена = BULL, црвена = BEAR, портокалова = LIQ HUNT, сива = неутрално.'},
     {tag:'$цена · TV',col:'#2962ff',what:'Последна цена. TV отвора TradingView layout на тој TF.'},
     {tag:'±% · N M',col:g,what:'Промена на цената и 24h волумен во USDT (M = милиони).'},
