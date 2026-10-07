@@ -822,6 +822,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  now decomposed into price revaluation vs real position
 //  flow, instead of being faked from quote volume.
 //
+//  v2.6 CLEAN15 · build 2026-10-07-b
+//   - FIX: LIQ HUNT price and OI windows were not aligned in -a (price over 20 bars,
+//     OI over 3 periods). MOVR 07.10 14:00: a long flush (OI -2.5%, price -2 ATR)
+//     printed SHORT SQ because price was still up over 20 bars. Now price must move
+//     in the tag's direction over the same 3 OI periods (closed bars).
+//
 //  v2.6 CLEAN15 · build 2026-10-07-a
 //   - FIX: ⚡SHORT SQ / ⚡LONG DMP fired without any OI check (24h price sign vs
 //     TF CVD sign; one path even used the live bar and the kline CVD before the taker
@@ -957,7 +963,7 @@ const APP_VER='2.6';
 const APP_CODENAME='CLEAN15';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-07-a';
+const APP_BUILD='2026-10-07-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2200,7 +2206,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   let oiShape='',oiFromPeak=null,oiDrawdown=null;
   let oiTs=null,oiBaseChg=null,oiBaseUsdtChg=null,oiBaseTs=null,oiBasePts=0;
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
-  let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null;
+  let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null,liqPx3=null;
 
   // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
   try{
@@ -2290,6 +2296,16 @@ async function analyzeOneTF(coin,ticker,fr,tf){
         fibo=calcFibo(klFull,150,tf);
         poc=calcPOC(klFull,150);
       }
+      // 2026-10-07-b: price change over the same 3 OI periods the OI-closing test uses
+      // (closed bars). A squeeze needs price moving WITH the tag while OI falls.
+      if(klFull&&klFull.length>5){
+        const kcp=(+klFull[klFull.length-1][6]>Date.now())?klFull.slice(0,-1):klFull;
+        const k3=Math.max(1,Math.round(3*TF_MIN[OI_TF[tf]||'15m']/TF_MIN[tf]));
+        if(kcp.length>k3){
+          const a=parseFloat(kcp[kcp.length-1-k3][4]),b=parseFloat(kcp[kcp.length-1][4]);
+          if(a>0)liqPx3=((b-a)/a)*100;
+        }
+      }
       // LIQ HUNT wick test: last 3 CLOSED bars only (was: included the live bar).
       // The decision itself is made after the taker CVD fetch, with the OI condition.
       {const kcw=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl;
@@ -2327,7 +2343,11 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       //    A "squeeze" with OI rising is new positioning, not liquidation.
       liqPx=td.pxChg;
       const oiClosing=oiReal&&oiCoinsChg3<=-LIQ_OI_MIN;
-      if(oiClosing&&liqPx!=null&&cvdDelta!==0&&(liqPx>0)!==(cvdDelta>0)&&(Math.abs(liqPx)>1.5||liqWick)){
+      // 2026-10-07-b: OI must fall WHILE price moves in the tag's direction. In -a the
+      // price window (20 bars) and the OI window (3 periods) were not aligned, so a long
+      // flush (OI down, price down) printed SHORT SQ because price was up over 20 bars.
+      const dirOk=liqPx3!=null&&liqPx!=null&&((liqPx>0&&liqPx3>0)||(liqPx<0&&liqPx3<0));
+      if(oiClosing&&dirOk&&liqPx!=null&&cvdDelta!==0&&(liqPx>0)!==(cvdDelta>0)&&(Math.abs(liqPx)>1.5||liqWick)){
         liqHunt=true;liqType=liqPx>0?'bull':'bear';
       }
       // Net inflow/outflow detection
@@ -2503,7 +2523,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   const dir=confDir!=='none'?confDir:(bulls>bears?'bull':bears>bulls?'bear':'neutral');
   return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
-    oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,
+    oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
     volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
@@ -3348,8 +3368,9 @@ function buildDigest(){
    o+='LOOKBACK: dOI$%/dOI◆%/DOM = last OI point vs '+OI_LOOKBACK+' periods earlier ('+OI_LOOKBACK+'×'+pO+' = '+lb+'). '
      +'LIQ test = last 3 OI periods. SHAPE/oiPK = last 30 periods. BASE◆% = OI coins vs the FIRST point of the window '
      +'(same window as fHI/fLO; per-row start in BASE@). OI@ = stamp of the last openInterestHist point -- it LAGS the live PX by up to one period.\n';
-   o+='⚡SHORT SQ / ⚡LONG DMP (2026-10-07-a) = price and CVD opposite over the same bars + (|px|>1.5% or long wick) '
-     +'+ OI coins <= -'+LIQ_OI_MIN+'% over 3 periods. No real OI -> no tag. No longer votes in CONFL.\n';}
+   o+='⚡SHORT SQ / ⚡LONG DMP (2026-10-07-b) = price and CVD opposite over the same bars + (|px|>1.5% or long wick) '
+     +'+ OI coins <= -'+LIQ_OI_MIN+'% over 3 periods WHILE price moves in the tag direction over those same 3 periods (build -b). '
+     +'No real OI -> no tag. No longer votes in CONFL.\n';}
   o+='SHAPE = OI curve over ~30 periods: RISING (at highs, building) / PEAK (at highs, stalled) / '
     +'REBUILD (collapsed, now recovering -- NOT fresh accumulation) / FADED (unwinding) / FLAT.\n';
   o+='fHI/fLO = % from the high and low of the scanned window (bars column). A coin can be flat '
@@ -4638,7 +4659,7 @@ function helpSections(){
     {tag:'📋 СИТЕ',col:a,what:'Ги чисти сите филтри.'},
     {tag:'⭐ FAV',col:y,what:'Само фаворити. Ако е единствен филтер, скенот оди САМО низ фаворитите (побрзо).',action:'Фаворит се додава со ☆ во деталниот приказ. +1 score.'},
     {tag:'🅐 ALPHA',col:y,what:'Токени од Binance Alpha листата. +1 score.'},
-    {tag:'⚡ LIQ HUNT',col:o,what:'Цена и CVD во спротивни насоки ПРЕКУ ИСТИТЕ свеќи (|цена|>1.5% или долг фитил на затворена свеќа во последните 3) + ЗАДОЛЖИТЕЛНО реален OI◆ паѓа ≥'+LIQ_OI_MIN+'% за 3 периоди. Без пад на OI нема таг — тоа е ново позиционирање, не ликвидација.',when:'⚡SHORT SQ = цена↑ CVD↓ (шортови ликвидирани). ⚡LONG DMP = цена↓ CVD↑.',action:'По лов честопати следи reversal. +2 score.'},
+    {tag:'⚡ LIQ HUNT',col:o,what:'Цена и CVD во спротивни насоки ПРЕКУ ИСТИТЕ свеќи (|цена|>1.5% или долг фитил на затворена свеќа во последните 3) + ЗАДОЛЖИТЕЛНО реален OI◆ паѓа ≥'+LIQ_OI_MIN+'% за 3 периоди ДОДЕКА цената оди во насоката на тагот во истите 3 периоди (SHORT SQ: цена↑, LONG DMP: цена↓). Без пад на OI нема таг — тоа е ново позиционирање, не ликвидација.',when:'⚡SHORT SQ = цена↑ CVD↓ (шортови ликвидирани). ⚡LONG DMP = цена↓ CVD↑.',action:'По лов честопати следи reversal. +2 score.'},
     {tag:'🔥 SQ ACT',col:pk,what:'Squeeze Activation (само затворени свеќи): цена расте + реален OI◆ паѓа >3% за ~3 периоди + (CVD spike ИЛИ FR < −0.03%).',when:'Шортовите се принудно затвораат. Без пад на OI нема squeeze.',action:'Continuation LONG, SL под swing low.'},
     {tag:'💎 TIGHT SQ',col:'#ff32cc',what:'SMA25/50/99 spread < 0.5% од цената — екстремна компресија.',action:'Чекај пробив со волумен.'},
     {tag:'🚀 MA SQ',col:'#ff9500',what:'SMA25/50/99 spread < 1.5%. 🚀 = SMA25>SMA99 (bull), 📉 = SMA25<SMA99 (bear).',action:'Потврди со CVD или DI крос.'},
