@@ -503,6 +503,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 <div class="hdr">
   <div class="logo">α<b>SCOUT</b><span class="ver-badge" id="verBadge" onclick="openDigest()">—</span></div>
   <div class="alpha-count" id="alphaCount">🅐 —</div>
+  <div class="alpha-count" id="regimeBadge" onclick="regimeInfo()" style="cursor:pointer" title="Ширина на пазарот (% над 1d SMA20) — клик за објаснување">🌡 —</div>
   <div class="search-wrap">
     <input class="search" id="srch" placeholder="Коин или листа: RESOLV,DYDX" oninput="onSrch(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
     <span class="search-x" id="srchX" onclick="clrSrch()">✕</span>
@@ -626,6 +627,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
     · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
     · палење ≥<input id="labIgn" class="thresh-input" type="number" value="10" min="3" max="50" step="1" style="width:44px">%
+    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v4" selected>v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
     <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
     <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
   </div>
@@ -1000,6 +1002,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    (B) continuation after a fresh +10% ignition, entry at the close,
 //    TP+20/SL-10 in R, split by HOT/volume/close location/taker/size/FR/
 //    breadth/OI; live list of today's ignitions.
+//  2026-10-08-d  CHASE + REGIME guards from LAB v3: ⚠CHASE tag on coins
+//    +20%/+40% over 24h (row, detail, digest), 🌡 breadth badge in the header
+//    (% of universe above 1d SMA20, hourly, cached) + REGIME line in digest.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1008,7 +1013,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-08-c';
+const APP_BUILD='2026-10-08-d';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2668,6 +2673,8 @@ function rowHTML(s){
   // DELIST GUARD outranks everything
   const blk=blockReason(s.coin);
   if(blk)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.22);color:var(--red);border:1px solid var(--red);font-weight:700">⛔${blk}</span>`);
+  // CHASE (LAB v3): big up-day = negative expectancy for a new long
+  if(!blk&&typeof chaseTagHTML==='function'){const ch=chaseTagHTML(s);if(ch)tags.push(ch);}
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
@@ -2797,7 +2804,7 @@ function populateDetail(s){
   const coin=s.coin;
   document.getElementById('dpSym').textContent=coin;
   const blk=blockReason(coin);
-  document.getElementById('dpAlphaBadge').innerHTML=(blk?`<div class="dp-alpha-badge" style="background:rgba(255,34,68,.18);color:var(--red);border-color:var(--red)">⛔ НЕ ВЛЕГУВАЈ · ${blk}</div>`:'')+(s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'');
+  document.getElementById('dpAlphaBadge').innerHTML=(blk?`<div class="dp-alpha-badge" style="background:rgba(255,34,68,.18);color:var(--red);border-color:var(--red)">⛔ НЕ ВЛЕГУВАЈ · ${blk}</div>`:'')+((typeof chaseInfo==='function'&&chaseInfo(s.priceChg))?`<div class="dp-alpha-badge" style="background:rgba(255,102,0,.14);color:var(--orange);border-color:var(--orange)">⚠ ${chaseInfo(s.priceChg).tag} · ${chaseInfo(s.priceChg).txt}</div>`:'')+(s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'');
   document.getElementById('dpSub').textContent=`${coin}USDT PERP . Најдобар TF: ${s.tf} . ${s.ts}`;
   const fb=document.getElementById('dpFavBtn');fb.textContent=s.isFav?'★':'☆';fb.className='dp-fav-btn'+(s.isFav?' on':'');
   const pc=s.priceChg>=0;
@@ -3394,6 +3401,8 @@ function buildDigest(){
   o+='VIEW: '+(S.srch?'search='+S.srch:(S.filters.size?'filters='+[...S.filters].join(','):'no filters'))
     +(thr.length?' | '+thr.join(' '):'')+' | sort='+S.sort
     +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
+  if(typeof regimeLine==='function')o+=regimeLine();
+  o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
   if(S.srch&&S.srchList.length>1){
@@ -3484,6 +3493,7 @@ function buildDigest(){
     const cr=_clean[s.coin],stR=cr&&cr.st?cr.st:null;
     const oiStale=s.oiTs&&((s.tsMs||Date.now())-s.oiTs)>2*TF_MIN[OI_TF[s.tf]||'15m']*60000;   // vs the row's scan time, not copy time
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
+    if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
     const tags=tl.join(';');
     o+=[
       s.coin,
@@ -5536,8 +5546,8 @@ const lbPct=v=>v==null||!isFinite(v)?'—':(v*100).toFixed(1)+'%';
 const lbDate=d=>{const x=new Date(d*864e5);return x.toISOString().slice(0,10);};
 
 function labSeries(kl,spotKl){
-  const n=kl.length,T=kl.map(k=>k[0]),h=kl.map(k=>+k[2]),l=kl.map(k=>+k[3]),c=kl.map(k=>+k[4]),v=kl.map(k=>+k[5]),tb=kl.map(k=>+k[9]),qv=kl.map(k=>+k[7]);
-  const S={n,T,D:T.map(lbDay),h,l,c,v,tb,qv};
+  const n=kl.length,T=kl.map(k=>k[0]),o_=kl.map(k=>+k[1]),h=kl.map(k=>+k[2]),l=kl.map(k=>+k[3]),c=kl.map(k=>+k[4]),v=kl.map(k=>+k[5]),tb=kl.map(k=>+k[9]),qv=kl.map(k=>+k[7]);
+  const S={n,T,D:T.map(lbDay),o:o_,h,l,c,v,tb,qv};
   S.ma={};[14,20,21,35,50,200].forEach(p=>S.ma[p]=lbSMA(c,p));
   const tr=c.map((x,i)=>i?Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1])):h[i]-l[i]);
   S.atr14=lbSMA(tr,14);S.atr20=lbSMA(tr,20);S.atr100=lbSMA(tr,100);
@@ -5651,8 +5661,7 @@ function labAUC(a,b){
 function labSetProg(t){LAB.prog=t;if(LAB.view&&LAB.running)document.getElementById('dgTa').value=LAB.prog+'\n\n'+LAB.log.slice(-8).join('\n');}
 const LAB_TP=0.20, LAB_SL=0.10;
 
-async function runPumpLab(){
-  if(LAB.running)return;
+async function runLabV3(){
   const P={pump:(parseFloat(document.getElementById('labPump').value)||50)/100,days:parseInt(document.getElementById('labDays').value)||7,
     quiet:(parseFloat(document.getElementById('labQuiet').value)||20)/100,ign:(parseFloat(document.getElementById('labIgn')?.value)||10)/100};
   P.dump=1-1/(1+P.pump);   // log-symmetric: +50% <-> -33.3%
@@ -5769,6 +5778,7 @@ async function runPumpLab(){
   }
 }
 
+function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v4';return m==='v3'?runLabV3():runLabV4();}
 function labIgnRow(name,arr){
   const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
   const p=f=>arr.filter(f).length/n;
@@ -5852,9 +5862,15 @@ function labBtns(){const s=document.getElementById('labStart'),x=document.getEle
 function labBar(on){const b=document.getElementById('labBar');if(b)b.style.display=on?'flex':'none';LAB.view=!!on;}
 function openLab(){
   document.getElementById('dgOv').classList.add('open');labBar(true);labBtns();
-  document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB v3 · v'+APP_VER+' '+APP_CODENAME;
+  document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB · v'+APP_VER+' '+APP_CODENAME;
   document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
-`🧪 PUMP LAB v3 — насока + продолжување по палење
+`🧪 PUMP LAB — избери студија во редот горе:
+
+ v4 ПОВЛЕКУВАЊЕ (стандардно): по палење +10%, дали чекањето на повлекување
+    (−5%, −10%, 50% retrace, целосен retrace) во следните 3 дена
+    дава подобар трејд од купување на затворањето? + LIVE нивоа.
+
+ v3 НАСОКА + ПАЛЕЊЕ:
 
  A) Дали „живите“ коини само се волатилни, или имаат насока?
     P(+50%) наспроти P(-33%) за 7 дена, по правило и по волатилност.
@@ -5867,6 +5883,231 @@ function openLab(){
 Кога ќе заврши: КОПИРАЈ и прати.`;
 }
 function stopLab(){LAB.abort=true;toast('⏹ PUMP LAB — запирам по тековниот чекор...');}
+
+
+// ══════════════════════════════════════════════════════════════
+// PUMP LAB v4 (2026-10-08-d) — PULLBACK ENTRY after a fresh ignition.
+// v3: buying the ignition-day CLOSE = -0.15R (n 4 902). v4 asks whether WAITING for a
+// pullback during the next 3 days changes that. Limit levels:
+//   A  -5% from the ignition close          B  -10% from the ignition close
+//   C  50% retrace of the ignition day move  D  full retrace to the pre-ignition close (base retest)
+//   Cs = C with a STRUCTURAL stop (ignition-day low -1%) and TP = 2R
+// Fill = first day in g+1..g+3 whose low reaches the level (gap below -> fill at the open).
+// Trade: TP +20% / SL -10% (A-D) from the fill price over 7 days. On the fill day only the
+// stop is checked (order inside the bar is unknown) = conservative. Timeout scored in R, capped [-1,+2].
+// Splits: HOT, MA200, regime (breadth), ignition size, volume, OI on the ignition day (30d only).
+// Unfilled ignitions are reported too (what you missed by waiting).
+// ══════════════════════════════════════════════════════════════
+const LAB4_WAIT=3;
+function lab4Levels(S,g){
+  const c0=S.c[g-1],cg=S.c[g];
+  return{A:cg*0.95,B:cg*0.90,C:c0+0.5*(cg-c0),D:c0,Cs:c0+0.5*(cg-c0)};
+}
+function lab4Trade(S,g,key,lvl,days){
+  const n=S.n;let f=-1,E=null;
+  for(let j=g+1;j<=Math.min(n-1,g+LAB4_WAIT);j++){if(S.l[j]<=lvl){f=j;E=S.o[j]<lvl?S.o[j]:lvl;break;}}
+  if(f<0)return{fill:false};
+  if(f+days-1>n-1)return{fill:true,incomplete:true};
+  let SL,TP;
+  if(key==='Cs'){SL=S.l[g]*0.99;if(SL>=E)SL=E*0.9;TP=E+2*(E-SL);}else{SL=E*(1-LAB_SL);TP=E*(1+LAB_TP);}
+  const risk=E-SL;let res=null,R=0,mxH=0,mnL=Infinity;
+  for(let j=f;j<=f+days-1;j++){
+    if(S.l[j]<mnL)mnL=S.l[j];if(j>f&&S.h[j]>mxH)mxH=S.h[j];
+    if(res)continue;
+    if(S.l[j]<=SL){res='L';R=-1;continue;}
+    if(j>f&&S.h[j]>=TP){res='W';R=2;}
+  }
+  const ret=S.c[f+days-1]/E-1;
+  if(!res){res='T';R=Math.max(-1,Math.min(2,(S.c[f+days-1]-E)/risk));}
+  return{fill:true,res,R,ret,up20:mxH/E-1>=0.2,dn20:mnL/E-1<=-0.2,riskPct:risk/E};
+}
+function lab4Row(name,arr,key){
+  const n=arr.length;if(!n)return `${key}|${name}|0|—|—|—|—|—|—|—|—\n`;
+  const fl=arr.filter(e=>e.t[key].fill&&!e.t[key].incomplete),nf=fl.length;
+  const fillPct=arr.filter(e=>e.t[key].fill).length/n;
+  if(!nf)return `${key}|${name}|${n}|${lbPct(fillPct)}|0|—|—|—|—|—|—\n`;
+  const T=fl.map(e=>e.t[key]),p=f=>T.filter(f).length/nf;
+  const avg=T.reduce((s,t)=>s+t.R,0)/nf,se=Math.sqrt(T.reduce((s,t)=>s+(t.R-avg)**2,0)/nf/nf);
+  const med=T.map(t=>t.ret).sort((a,b)=>a-b)[Math.floor(nf/2)];
+  const rk=key==='Cs'?' risk~'+lbPct(T.map(t=>t.riskPct).sort((a,b)=>a-b)[Math.floor(nf/2)]):'';
+  return `${key}|${name}|${n}|${lbPct(fillPct)}|${nf}|${lbPct(p(t=>t.res==='W'))}|${lbPct(p(t=>t.res==='L'))}|${lbPct(p(t=>t.res==='T'))}|${(avg>=0?'+':'')+avg.toFixed(2)} ±${se.toFixed(2)}|${lbPct(p(t=>t.up20))} / ${lbPct(p(t=>t.dn20))}|${lbPct(med)}${rk}\n`;
+}
+
+async function runLabV4(){
+  const P={days:parseInt(document.getElementById('labDays').value)||7,quiet:(parseFloat(document.getElementById('labQuiet').value)||20)/100,
+    ign:(parseFloat(document.getElementById('labIgn')?.value)||10)/100};
+  LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
+  const t0=Date.now();
+  try{
+    labSetProg('🧪 PUMP LAB v4 (повлекување) · exchangeInfo + BTC...');
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(ei)buildClassMaps(ei);
+    const uni=[],skip={tradfi:0,blocked:0,status:0};
+    (ei?.symbols||[]).forEach(s=>{
+      if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
+      const coin=s.symbol.replace(/USDT$/,'');
+      if((s.status||'TRADING')!=='TRADING'){skip.status++;return;}
+      if(LAB_STABLE.has(coin))return;
+      if(isTradFi(coin)){skip.tradfi++;return;}
+      if(blockReason(coin)){skip.blocked++;return;}
+      uni.push(coin);
+    });
+    if(!uni.length){labSetProg('⚠️ Нема универзум');return;}
+    const btcKl=await labFetch(`${FAPI}/klines?symbol=BTCUSDT&interval=1d&limit=${LAB_KL}`);
+    const data={};let fail=0,short=0;
+    for(let i=0;i<uni.length;i+=5){
+      if(LAB.abort)break;
+      const chunk=uni.slice(i,i+5);
+      const res=await Promise.all(chunk.map(c=>labFetch(`${FAPI}/klines?symbol=${c}USDT&interval=1d&limit=${LAB_KL}`)));
+      res.forEach((kl,k)=>{if(!kl){fail++;return;}if(kl.length&&kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);
+        if(kl.length<LAB_WARM+P.days+15){short++;return;}const S=labSeries(kl,null);S.o=kl.map(x=>+x[1]);data[chunk[k]]=S;});
+      labSetProg(`🧪 ФАЗА 1/2 · 1d свеќи · ${Math.min(i+5,uni.length)}/${uni.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(350);
+    }
+    const M=labMarket(data,btcKl);
+    // ignitions
+    const igns=[];
+    Object.entries(data).forEach(([coin,S])=>{
+      let last=-1e9;
+      for(let g=LAB_WARM+10;g<=S.n-1;g++){
+        if(g-last<=P.days)continue;
+        const r=S.c[g]/S.c[g-1]-1;if(r<P.ign)continue;
+        const r7=labRet(S,g-1,7);if(r7==null||r7>=P.quiet)continue;
+        last=g;igns.push({coin,g,r,volx:S.vma20[g-1]?S.v[g]/S.vma20[g-1]:null});
+      }
+    });
+    // OI on the ignition day (30 days only)
+    const lastDay=Math.max(...Object.values(data).map(S=>S.D[S.n-1]));
+    const oiCoins=[...new Set(igns.filter(e=>data[e.coin].D[e.g]>=lastDay-28).map(e=>e.coin))];const ext={};
+    for(let i=0;i<oiCoins.length;i+=3){
+      if(LAB.abort)break;
+      await Promise.all(oiCoins.slice(i,i+3).map(async coin=>{
+        const oi=await labFetch(`${FDAPI}/openInterestHist?symbol=${coin}USDT&period=1d&limit=30`);
+        if(oi&&oi.length){ext[coin]={oi:{}};oi.forEach(x=>{ext[coin].oi[lbDay(x.timestamp)]=parseFloat(x.sumOpenInterest);});}
+      }));
+      labSetProg(`🧪 ФАЗА 2/2 · OI (30д) · ${Math.min(i+3,oiCoins.length)}/${oiCoins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(500);
+    }
+    labSetProg('🧪 Симулирам влезови...');
+    igns.forEach(e=>{const S=data[e.coin];e.F=labFeatures(S,e.g-1,ext[e.coin],M);
+      const o=ext[e.coin]?.oi;e.oi1=o&&o[S.D[e.g]]&&o[S.D[e.g-1]]?o[S.D[e.g]]/o[S.D[e.g-1]]-1:null;
+      e.lv=lab4Levels(S,e.g);e.t={};['A','B','C','D','Cs'].forEach(k=>{e.t[k]=lab4Trade(S,e.g,k,e.lv[k],P.days);});
+      // reference: entry at the ignition close (v3)
+      e.t.CLOSE=(()=>{const g=e.g;if(g+P.days>S.n-1)return{fill:true,incomplete:true};const E=S.c[g];let res=null,R=0,mx=0,mn=Infinity;
+        for(let j=g+1;j<=g+P.days;j++){if(S.h[j]>mx)mx=S.h[j];if(S.l[j]<mn)mn=S.l[j];if(res)continue;if(S.l[j]<=E*0.9){res='L';R=-1;}else if(S.h[j]>=E*1.2){res='W';R=2;}}
+        const ret=S.c[g+P.days]/E-1;if(!res){res='T';R=Math.max(-1,Math.min(2,ret/0.1));}return{fill:true,res,R,ret,up20:mx/E-1>=0.2,dn20:mn/E-1<=-0.2};})();
+      // missed: unfilled at C — how far did it run from the ignition close
+      const g=e.g;if(g+P.days<=S.n-1){let mx=0;for(let j=g+1;j<=g+P.days;j++)if(S.h[j]>mx)mx=S.h[j];e.runUp=mx/S.c[g]-1;}
+    });
+    LAB.out=lab4Report(P,{uni,skip,data,M,igns,ext,fail,short,t0,lastDay,aborted:LAB.abort});
+  }catch(err){LAB.out='⚠️ PUMP LAB v4 грешка: '+(err&&err.stack||err)+'\n'+LAB.log.join('\n');}
+  finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 PUMP LAB v4 готов — КОПИРАЈ':'🧪 прекинат');}
+}
+
+function lab4Report(P,R){
+  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const G=R.igns,M=R.M,hotR=LAB_RULES.find(r=>r.k==='HOT');
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v4 PULLBACK | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ':''}\n`;
+  o+=`UNIVERSE: ${R.uni.length} perps | analysed ${Object.keys(R.data).length} | short ${R.short} | fail ${R.fail} | TradFi ${R.skip.tradfi}, blocked ${R.skip.blocked}, status ${R.skip.status} | OI 30d ${Object.keys(R.ext).length} coins | to ${lbDate(R.lastDay)}\n`;
+  o+=`IGNITION = daily close >= +${Math.round(P.ign*100)}% after ret7 < +${Math.round(P.quiet*100)}% (one per coin per ${P.days}d). ${G.length} ignitions.\n`;
+  o+=`LEVELS (limit, wait ${LAB4_WAIT} days): A = close -5% | B = close -10% | C = 50% retrace of the ignition move | D = pre-ignition close (full retrace) | Cs = C with stop at ignition-day low -1%, TP 2R | CLOSE = v3 reference (buy the ignition close).\n`;
+  o+=`TRADE: TP +20% / SL -10% from the fill (2R:1R), 7 days; fill day = stop only; timeout in R capped [-1,+2].\n`;
+  o+=`LVL | GROUP | n ign | FILL% | n fill | WIN | LOSS | TIMEOUT | avg R ±se | P(+20%) / P(-20%) | median 7d\n`;
+  const hot=e=>hotR.f(e.F)===true;
+  const groups=[
+    ['ALL',G],['HOT',G.filter(hot)],['not HOT',G.filter(e=>hotR.f(e.F)===false)],
+    ['ABOVE MA200',G.filter(e=>e.F.above_ma200===1)],['BELOW MA200',G.filter(e=>e.F.above_ma200===0)],
+    ['REGIME ON (>=0.60)',G.filter(e=>e.F.breadth20!=null&&e.F.breadth20>=0.6)],['REGIME OFF (<=0.30)',G.filter(e=>e.F.breadth20!=null&&e.F.breadth20<=0.3)],
+    ['SIZE +10-20%',G.filter(e=>e.r<0.2)],['SIZE +20-40%',G.filter(e=>e.r>=0.2&&e.r<0.4)],['SIZE >=+40%',G.filter(e=>e.r>=0.4)],
+    ['VOL >=3x',G.filter(e=>e.volx!=null&&e.volx>=3)],
+    ['OI day <0 (30d)',G.filter(e=>e.oi1!=null&&e.oi1<0)],['OI day >=0 (30d)',G.filter(e=>e.oi1!=null&&e.oi1>=0)],
+    ['ABOVE MA200 & REGIME>=0.5',G.filter(e=>e.F.above_ma200===1&&e.F.breadth20>=0.5)],
+  ];
+  ['CLOSE','A','B','C','Cs','D'].forEach(key=>{groups.forEach(([n,a])=>{o+=lab4Row(n,a,key);});o+='\n';});
+  // missed opportunity at C
+  const miss=G.filter(e=>!e.t.C.fill&&e.runUp!=null),runs=miss.map(e=>e.runUp).sort((a,b)=>a-b);
+  if(runs.length)o+=`MISSED at C (never pulled back 50% in ${LAB4_WAIT}d): ${runs.length} ignitions | median run-up from the ignition close ${lbPct(runs[Math.floor(runs.length/2)])} | P(run-up >= +50%) ${lbPct(runs.filter(x=>x>=0.5).length/runs.length)}\n`;
+  o+=`READ: compare each level's avg R with CLOSE. A level is a real improvement only if avg R > 0 by > 2x its ±se, in ALL and in most subgroups.\n`;
+  // live: ignitions in the last 3 closed days, levels still pending
+  const live=G.filter(e=>R.data[e.coin].D[e.g]>=R.lastDay-2).sort((a,b)=>R.data[b.coin].D[b.g]-R.data[a.coin].D[a.g]||b.r-a.r);
+  o+=`\nLIVE — ignitions in the last 3 closed days | COIN | IGN date | +day% | HOT | MA200 | close | A -5% | B -10% | C 50% | D base | stop Cs | filled so far\n`;
+  live.slice(0,30).forEach(e=>{const S=R.data[e.coin],lv=e.lv,f=['A','B','C','D'].filter(k=>e.t[k].fill).join(',')||'-';
+    o+=`${e.coin}|${lbDate(S.D[e.g])}|+${(e.r*100).toFixed(1)}|${hot(e)?'Y':'n'}|${e.F.above_ma200===1?'above':e.F.above_ma200===0?'below':'—'}|${fmt(S.c[e.g])}|${fmt(lv.A)}|${fmt(lv.B)}|${fmt(lv.C)}|${fmt(lv.D)}|${fmt(S.l[e.g]*0.99)}|${f}\n`;});
+  o+=`\nNOTES: daily bars only (intrabar order unknown -> fill day checks the stop only). Survivorship: delisted coins missing (would make longs look better than reality). OI split = last 30 days only.\n`;
+  return o;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHASE + REGIME (2026-10-08-d) — two guards taken straight from PUMP LAB v3
+// (4 902 fresh +10% daily ignitions, 517 coins, ~16 months, entry at the close):
+//  CHASE: buying after a big up-day is negative expectancy, and worse the bigger the day.
+//    +20-40% day: median 7d -8.9%, P(-20%) 41%, P(+20%) 43%, TP20/SL10 avg -0.14R (n 772)
+//    >= +40% day: median 7d -19.3%, P(-20%) 74%, P(+20%) 56%, avg -0.34R (n 229)
+//    The scanner uses the rolling 24h change, an approximation of the LAB's daily close.
+//  REGIME: breadth20 = % of the universe above its 1d SMA20 (same metric as the LAB).
+//    breadth >= 0.60: P(+50%/7d) 2.7% vs P(-33%) 1.1%  (UP/DN 1.79)
+//    breadth <= 0.30: UP/DN 0.74 — dumps relatively more likely
+//    It changes the DIRECTION of big moves, not how often they happen.
+// Neither votes in SCORE. They are warnings.
+// ══════════════════════════════════════════════════════════════
+const CHASE_T1=20, CHASE_T2=40;
+function chaseInfo(chg){
+  if(chg==null||!isFinite(chg)||chg<CHASE_T1)return null;
+  if(chg>=CHASE_T2)return{lvl:2,tag:'CHASE!! +'+chg.toFixed(0)+'%',txt:'После ден ≥+40%: медијана 7д −19%, P(−20%) 74%, P(+20%) 56%, просек −0.34R (LAB v3, n 229)'};
+  return{lvl:1,tag:'CHASE +'+chg.toFixed(0)+'%',txt:'После ден +20–40%: медијана 7д −9%, P(−20%) 41%, P(+20%) 43%, просек −0.14R (LAB v3, n 772)'};
+}
+function chaseTagHTML(s){
+  const c=chaseInfo(s.priceChg);if(!c)return '';
+  const col=c.lvl===2?'var(--red)':'var(--orange)',bg=c.lvl===2?'rgba(255,34,68,.18)':'rgba(255,102,0,.16)';
+  return `<span class="ctag" title="${c.txt}" style="background:${bg};color:${col};border:1px solid ${col};font-weight:700">⚠${c.tag}</span>`;
+}
+
+const REG={breadth:null,mkt7:null,n:0,ts:0,busy:false};
+try{const r=JSON.parse(localStorage.getItem('regime')||'null');if(r&&Date.now()-r.ts<90*60000)Object.assign(REG,r);}catch(e){}
+function regimeState(){if(REG.breadth==null)return null;return REG.breadth>=0.6?'ON':REG.breadth<=0.3?'OFF':'MID';}
+function renderRegime(){
+  const el=document.getElementById('regimeBadge');if(!el)return;
+  const st=regimeState();
+  if(!st){el.textContent=REG.busy?'🌡 …':'🌡 —';return;}
+  const col=st==='ON'?'var(--green)':st==='OFF'?'var(--red)':'var(--yellow)';
+  el.textContent=`🌡 ${Math.round(REG.breadth*100)}% ${st}`;
+  el.style.color=col;el.style.borderColor=col;el.style.background='transparent';
+}
+function regimeLine(){
+  const st=regimeState();if(!st)return '';
+  const t=new Date(REG.ts),p=x=>String(x).padStart(2,'0');
+  return `REGIME: breadth20 ${REG.breadth.toFixed(2)} (${st}; ON>=0.60 / OFF<=0.30) · mkt7 ${(REG.mkt7*100).toFixed(1)}% · n ${REG.n} · ${p(t.getHours())}:${p(t.getMinutes())}\n`;
+}
+function regimeInfo(){
+  const st=regimeState();
+  alert(st?`ШИРИНА НА ПАЗАРОТ: ${Math.round(REG.breadth*100)}% од коините се над дневната SMA20 (${REG.n} коини)\nПазар 7 дена (медијана): ${(REG.mkt7*100).toFixed(1)}%\nРежим: ${st}\n\nPUMP LAB v3 (16 месеци):\n• ≥60% (ON): големите движења почесто се нагоре — P(+50%) 2.7% наспроти P(−33%) 1.1%\n• ≤30% (OFF): односот се врти — dump-ови релативно почести\n• Режимот ја менува НАСОКАТА, не колку често има пумпи.\n\nОсвежува на 60 мин.`:'Ширината уште се пресметува (~1 мин по вчитување).');
+}
+async function computeRegime(){
+  if(REG.busy)return;
+  if((typeof LAB!=='undefined'&&LAB.running)||(typeof S!=='undefined'&&S.scanning)){setTimeout(computeRegime,5*60000);return;}
+  REG.busy=true;renderRegime();
+  try{
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(!ei)throw 0;
+    buildClassMaps(ei);
+    const uni=[];
+    ei.symbols.forEach(s=>{if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
+      const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c))return;uni.push(c);});
+    let above=0,tot=0;const r7=[];
+    for(let i=0;i<uni.length;i+=5){
+      if(typeof S!=='undefined'&&S.scanning)break;   // never compete with a scan; keep what we have
+      const res=await Promise.all(uni.slice(i,i+5).map(c=>labFetch(`${FAPI}/klines?symbol=${c}USDT&interval=1d&limit=22`,6000)));
+      res.forEach(kl=>{if(!kl||kl.length<21)return;if(kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);if(kl.length<20)return;
+        const c=kl.map(k=>+k[4]),last=c[c.length-1],sma=c.slice(-20).reduce((a,b)=>a+b,0)/20;tot++;if(last>sma)above++;
+        if(c.length>=8)r7.push(last/c[c.length-8]-1);});
+      await sleep(500);
+    }
+    if(tot>=100){r7.sort((a,b)=>a-b);Object.assign(REG,{breadth:above/tot,mkt7:r7[Math.floor(r7.length/2)],n:tot,ts:Date.now()});
+      try{localStorage.setItem('regime',JSON.stringify({breadth:REG.breadth,mkt7:REG.mkt7,n:REG.n,ts:REG.ts}));}catch(e){}}
+  }catch(e){}
+  REG.busy=false;renderRegime();
+}
+renderRegime();
+setTimeout(()=>{if(Date.now()-REG.ts>60*60000)computeRegime();},8000);
+setInterval(()=>{if(Date.now()-REG.ts>60*60000)computeRegime();},10*60000);
 
 </script>
 </body>
