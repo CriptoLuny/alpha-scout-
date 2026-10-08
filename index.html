@@ -995,6 +995,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    on the ignition day (+10% close), measures T-1/3/5/10, splits IDIO vs
 //    MARKET pumps, uses 20-bar flows, forward-tests rules P(pump|rule), and
 //    adds market regime (breadth above SMA20) with pump rate per quintile.
+//  2026-10-08-c  PUMP LAB v3: (A) direction test — every rule and volatility
+//    quintile scored for +50% AND -33% within 7d (is HOT just volatility?);
+//    (B) continuation after a fresh +10% ignition, entry at the close,
+//    TP+20/SL-10 in R, split by HOT/volume/close location/taker/size/FR/
+//    breadth/OI; live list of today's ignitions.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1003,7 +1008,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-08-b';
+const APP_BUILD='2026-10-08-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -5492,22 +5497,18 @@ window.addEventListener('resize',()=>{if(HM.loaded&&document.getElementById('hmV
 </div>
 <script>
 // ══════════════════════════════════════════════════════════════
-// PUMP LAB v2 (2026-10-08-b) — event study: what did coins look like BEFORE they pumped?
-// v1 lesson: T0 = lowest close of the cluster put price at a local low BY CONSTRUCTION,
-// so every "price low in range" feature (and every divergence built on price position)
-// looked predictive at T0 and died at T-5. v2 fixes the design:
-//  1) anchor = IGNITION day g: first daily close >= +IGN% that starts a move of >= PUMP%
-//     within DAYS bars (measured from the close before g), after a quiet week.
-//     Features are measured at g-1, g-3, g-5, g-10 (T-1 / T-3 / T-5 / T-10).
-//  2) every pump is split into IDIO (beats the equal-weight market median index by
-//     >= PUMP%) vs MARKET (the whole market moved); ignition dates histogram.
-//  3) divergences are 20-bar FLOWS (net OBV / taker / spot delta as share of volume),
-//     not positions in a range.
-//  4) rules are scored on random quiet coin-days by the question that matters:
-//     P(pump >= PUMP% within DAYS | rule on) vs off  (any pump, and IDIO pump).
-//  5) market regime: breadth (% of universe above SMA20), market 7d return, BTC vs MA50,
-//     with the pump rate per regime quintile.
-// Nothing here votes in SCORE. It is a measuring instrument, not a signal.
+// PUMP LAB v3 (2026-10-08-c) — two questions left open by v2:
+//  A) DIRECTION: v2 found only "hot / volatile" coins pump more (HOT lift 2.8). Volatile
+//     coins also DUMP more, so a fixed +50% threshold may only be selecting volatility.
+//     v3 labels every random quiet coin-day with BOTH +UP% and -DN% within DAYS
+//     (default +50 / -33, log-symmetric) and reports lift up vs lift down per rule
+//     and per volatility quintile. UP/DN ratio ~1 = no directional edge.
+//  B) CONTINUATION: the tradable question. Given a fresh ignition (daily close >= +IGN%
+//     after a quiet week), entering at that close: how often +20% / +50% / -20% within
+//     DAYS, and how does a fixed TP +20% / SL -10% trade do (SL checked first on a bar
+//     that touches both = conservative)? Split by HOT, volume, close location, taker
+//     share, ignition size, FR, breadth, and combinations.
+// v1/v2 feature machinery is reused. Nothing here votes in SCORE.
 // ══════════════════════════════════════════════════════════════
 const LAB={running:false,abort:false,out:'',view:false,rateHit:0,log:[]};
 const LAB_KL=499, LAB_WARM=60, LAB_BASE_PER_COIN=12, LAB_OFFS=[1,3,5,10];
@@ -5648,15 +5649,17 @@ function labAUC(a,b){
 }
 
 function labSetProg(t){LAB.prog=t;if(LAB.view&&LAB.running)document.getElementById('dgTa').value=LAB.prog+'\n\n'+LAB.log.slice(-8).join('\n');}
+const LAB_TP=0.20, LAB_SL=0.10;
 
 async function runPumpLab(){
   if(LAB.running)return;
   const P={pump:(parseFloat(document.getElementById('labPump').value)||50)/100,days:parseInt(document.getElementById('labDays').value)||7,
-    quiet:(parseFloat(document.getElementById('labQuiet').value)||20)/100,ign:(parseFloat(document.getElementById('labIgn')?.value)||10)/100,cool:30};
+    quiet:(parseFloat(document.getElementById('labQuiet').value)||20)/100,ign:(parseFloat(document.getElementById('labIgn')?.value)||10)/100};
+  P.dump=1-1/(1+P.pump);   // log-symmetric: +50% <-> -33.3%
   LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
   const t0=Date.now();
   try{
-    labSetProg('🧪 PUMP LAB v2 · вчитувам exchangeInfo + BTC + spot листа...');
+    labSetProg('🧪 PUMP LAB v3 · вчитувам exchangeInfo + BTC + spot листа...');
     const ei=await labFetch(FAPI+'/exchangeInfo',15000);
     if(ei)buildClassMaps(ei);
     const uni=[],skip={tradfi:0,blocked:0,stable:0,status:0};
@@ -5697,35 +5700,39 @@ async function runPumpLab(){
     }
     const M=labMarket(data,btcKl);
 
-    // ── events (ignition-anchored) + baseline with forward labels ──
-    const events=[],base=[],eligByDay={},ignByDay={};
+    // ── baseline (random quiet days) with UP and DN labels ──
+    const base=[],igns=[];
     Object.entries(data).forEach(([coin,S])=>{
-      const n=S.n;let last=-1e9;
-      for(let i=LAB_WARM;i<=n-1-P.days;i++){const r7=labRet(S,i,7);if(r7!=null&&r7<P.quiet)eligByDay[S.D[i]]=(eligByDay[S.D[i]]||0)+1;}
-      for(let g=LAB_WARM+10;g+P.days-1<=n-1;g++){
-        if(g-last<P.cool)continue;
-        if(S.c[g]/S.c[g-1]-1<P.ign)continue;
-        const r7=labRet(S,g-1,7);if(r7==null||r7>=P.quiet)continue;
-        let mx=0,mi=g;for(let j=g;j<=g+P.days-1;j++)if(S.c[j]>mx){mx=S.c[j];mi=j;}
-        const gain=mx/S.c[g-1]-1;if(gain<P.pump)continue;
-        const m0=M.idx[S.D[g-1]],m1=M.idx[S.D[mi]],mk=m0&&m1?m1/m0-1:0,exc=(1+gain)/(1+mk)-1;
-        events.push({coin,g,gain,dmax:mi-g+1,mk,exc,idio:exc>=P.pump});last=g;
-        ignByDay[S.D[g]]=(ignByDay[S.D[g]]||0)+1;
-      }
-      const lo=LAB_WARM+10,hi=n-1-P.days;
+      const n=S.n,lo=LAB_WARM+10,hi=n-1-P.days;
       for(let k=0;k<LAB_BASE_PER_COIN&&hi>lo;k++){
         const i=lo+Math.floor(Math.random()*(hi-lo));const r7=labRet(S,i,7);if(r7==null||r7>=P.quiet)continue;
-        let mx=0,mi=i+1;for(let j=i+1;j<=i+P.days;j++)if(S.c[j]>mx){mx=S.c[j];mi=j;}
-        const fwd=mx/S.c[i]-1,a=M.idx[S.D[i]],b=M.idx[S.D[mi]],mk=a&&b?b/a-1:0;
-        base.push({coin,i,hit:fwd>=P.pump,hitI:(1+fwd)/(1+mk)-1>=P.pump});
+        let mx=0,mn=Infinity;for(let j=i+1;j<=i+P.days;j++){if(S.c[j]>mx)mx=S.c[j];if(S.c[j]<mn)mn=S.c[j];}
+        base.push({coin,i,up:mx/S.c[i]-1>=P.pump,dn:mn/S.c[i]-1<=-P.dump});
+      }
+      // fresh ignitions (cooldown = DAYS on the same coin so one run is counted once)
+      let last=-1e9;
+      for(let g=LAB_WARM+10;g<=n-1-P.days;g++){
+        if(g-last<=P.days)continue;
+        const r=S.c[g]/S.c[g-1]-1;if(r<P.ign)continue;
+        const r7=labRet(S,g-1,7);if(r7==null||r7>=P.quiet)continue;
+        last=g;
+        const E=S.c[g];let mxH=0,mnL=Infinity,res=null,R=0;
+        for(let j=g+1;j<=g+P.days;j++){
+          if(S.h[j]>mxH)mxH=S.h[j];if(S.l[j]<mnL)mnL=S.l[j];
+          if(res==null){if(S.l[j]<=E*(1-LAB_SL)){res='L';R=-1;}else if(S.h[j]>=E*(1+LAB_TP)){res='W';R=LAB_TP/LAB_SL;}}
+        }
+        const ret7=S.c[g+P.days]/E-1;if(res==null){res='T';R=Math.max(-1,Math.min(LAB_TP/LAB_SL,ret7/LAB_SL));}
+        const range=S.h[g]-S.l[g];
+        igns.push({coin,g,r,ret7,res,R,up20:mxH/E-1>=0.2,up50:mxH/E-1>=0.5,dn20:mnL/E-1<=-0.2,
+          volx:S.vma20[g-1]?S.v[g]/S.vma20[g-1]:null,clv:range>0?(S.c[g]-S.l[g])/range:null,
+          taker:S.v[g]>0?S.tb[g]/S.v[g]:null,ignAtr:S.atr14[g-1]?(S.c[g]-S.c[g-1])/S.atr14[g-1]:null});
       }
     });
-    LAB.log.push(`events ${events.length} (IDIO ${events.filter(e=>e.idio).length}) · baseline ${base.length}`);
+    LAB.log.push(`baseline ${base.length} · ignitions ${igns.length}`);
 
-    // ── PHASE 2: funding history (event coins + control) ──
-    const evCoins=[...new Set(events.map(e=>e.coin))];
-    const others=Object.keys(data).filter(c=>!evCoins.includes(c)).sort(()=>Math.random()-0.5).slice(0,80);
-    const frCoins=[...evCoins.sort(()=>Math.random()-0.5).slice(0,240),...others];const ext={};
+    // ── PHASE 2: funding history (ignition coins, random 320) ──
+    const igCoins=[...new Set(igns.map(e=>e.coin))].sort(()=>Math.random()-0.5);
+    const frCoins=igCoins.slice(0,320);const ext={};
     for(let i=0;i<frCoins.length;i++){
       if(LAB.abort)break;
       const coin=frCoins[i],fr=await labFetch(`${FAPI}/fundingRate?symbol=${coin}USDT&limit=1000`);
@@ -5734,32 +5741,26 @@ async function runPumpLab(){
       await sleep(650);
     }
 
-    // ── PHASE 3: OI + L/S (30 days) ──
+    // ── PHASE 3: OI (30 days) for coins with recent ignitions — OI change ON the ignition day ──
     const lastDay=Math.max(...Object.values(data).map(S=>S.D[S.n-1]));
-    const recentEv=[...new Set(events.filter(e=>data[e.coin].D[e.g]>=lastDay-22).map(e=>e.coin))];
-    const ctrl=Object.keys(data).filter(c=>!recentEv.includes(c)).sort(()=>Math.random()-0.5).slice(0,80);
-    const oiCoins=[...recentEv,...ctrl];
+    const recent=[...new Set(igns.filter(e=>data[e.coin].D[e.g]>=lastDay-28).map(e=>e.coin))];
+    const todayIgn=Object.entries(data).filter(([c,S])=>S.c[S.n-1]/S.c[S.n-2]-1>=P.ign).map(([c])=>c);
+    const oiCoins=[...new Set([...recent,...todayIgn])];
     for(let i=0;i<oiCoins.length;i+=3){
       if(LAB.abort)break;
       await Promise.all(oiCoins.slice(i,i+3).map(async coin=>{
-        const [oi,top,glb]=await Promise.all([
-          labFetch(`${FDAPI}/openInterestHist?symbol=${coin}USDT&period=1d&limit=30`),
-          labFetch(`${FDAPI}/topLongShortPositionRatio?symbol=${coin}USDT&period=1d&limit=30`),
-          labFetch(`${FDAPI}/globalLongShortAccountRatio?symbol=${coin}USDT&period=1d&limit=30`)]);
-        const e=ext[coin]=ext[coin]||{};
-        if(oi&&oi.length){e.oi={};oi.forEach(x=>{e.oi[lbDay(x.timestamp)]=parseFloat(x.sumOpenInterest);});}
-        if(top&&top.length){e.top={};top.forEach(x=>{e.top[lbDay(x.timestamp)]=parseFloat(x.longShortRatio);});}
-        if(glb&&glb.length){e.glb={};glb.forEach(x=>{e.glb[lbDay(x.timestamp)]=parseFloat(x.longShortRatio);});}
+        const oi=await labFetch(`${FDAPI}/openInterestHist?symbol=${coin}USDT&period=1d&limit=30`);
+        if(oi&&oi.length){const e=ext[coin]=ext[coin]||{};e.oi={};oi.forEach(x=>{e.oi[lbDay(x.timestamp)]=parseFloat(x.sumOpenInterest);});}
       }));
-      labSetProg(`🧪 ФАЗА 3/3 · OI + L/S (30д) · ${Math.min(i+3,oiCoins.length)}/${oiCoins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
-      await sleep(700);
+      labSetProg(`🧪 ФАЗА 3/3 · OI (30д) · ${Math.min(i+3,oiCoins.length)}/${oiCoins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(500);
     }
 
-    labSetProg('🧪 Пресметувам показатели...');
-    const fEv={};LAB_OFFS.forEach(o=>{fEv[o]=events.map(e=>e.g-o>=LAB_WARM?labFeatures(data[e.coin],e.g-o,ext[e.coin],M):null);});
-    events.forEach((e,k)=>{e.F1=fEv[1][k];e.F5=fEv[5][k];});
+    labSetProg('🧪 Пресметувам...');
     base.forEach(b=>{b.F=labFeatures(data[b.coin],b.i,ext[b.coin],M);});
-    LAB.out=labReport(P,{uni,skip,data,M,spotOk,fail,short,events,base,eligByDay,ignByDay,fEv,ext,t0,aborted:LAB.abort});
+    igns.forEach(e=>{const S=data[e.coin];e.F=labFeatures(S,e.g-1,ext[e.coin],M);
+      const o=ext[e.coin]?.oi;if(o){const a=o[S.D[e.g]],b=o[S.D[e.g-1]];e.oi1=a&&b?a/b-1:null;}else e.oi1=null;});
+    LAB.out=labReport(P,{uni,skip,data,M,spotOk,fail,short,base,igns,ext,t0,aborted:LAB.abort});
   }catch(err){LAB.out='⚠️ PUMP LAB грешка: '+(err&&err.stack||err)+'\n'+LAB.log.join('\n');}
   finally{
     LAB.running=false;labBtns();
@@ -5768,103 +5769,98 @@ async function runPumpLab(){
   }
 }
 
-function labReport(P,R){
-  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const M=R.M,anyS=Object.values(R.data)[0];
-  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v2 | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
-  o+=`PARAM: ignition = first daily close >= +${Math.round(P.ign*100)}% | pump = max close within ${P.days} bars from ignition >= +${Math.round(P.pump*100)}% vs close before ignition | quiet: ret7 before ignition < +${Math.round(P.quiet*100)}% | cooldown ${P.cool}d | features at T-1/T-3/T-5/T-10 = 1/3/5/10 bars before ignition | 1d perp x${LAB_KL}${anyS?' (to '+lbDate(anyS.D[anyS.n-1])+')':''}\n`;
-  o+=`IDIO = pump beats the equal-weight market median index by >= +${Math.round(P.pump*100)}% over the same bars; MARKET = the rest.\n`;
-  o+=`UNIVERSE: ${R.uni.length} perps | analysed ${Object.keys(R.data).length} | short history ${R.short} | fetch fail ${R.fail} | skipped: TradFi ${R.skip.tradfi}, delist/blocked ${R.skip.blocked}, stable ${R.skip.stable}, status ${R.skip.status}\n`;
-  const nFR=Object.values(R.ext).filter(e=>e.fr).length,nOI=Object.values(R.ext).filter(e=>e.oi).length;
-  o+=`DATA: spot ${R.spotOk} coins | FR history ${nFR} coins | OI/L-S 30d ${nOI} coins | rate-limit hits ${LAB.rateHit}\n`;
-  const ev=R.events,evI=ev.filter(e=>e.idio),nb=R.base.length;
-  const pHit=R.base.filter(b=>b.hit).length/(nb||1),pHitI=R.base.filter(b=>b.hitI).length/(nb||1);
-  o+=`EVENTS: ${ev.length} ignitions | IDIO ${evI.length} | MARKET ${ev.length-evI.length} | baseline ${nb} random quiet coin-days | P(pump>=${Math.round(P.pump*100)}% in next ${P.days}d) on a random quiet day: ANY ${lbPct(pHit)} · IDIO ${lbPct(pHitI)}\n`;
-
-  // ── dates ──
-  const dates=Object.entries(R.ignByDay).sort((a,b)=>b[1]-a[1]);
-  const clusterDays=new Set(dates.filter(x=>x[1]>=5).map(x=>+x[0]));
-  const inCl=ev.filter(e=>clusterDays.has(R.data[e.coin].D[e.g])).length;
-  o+=`\nIGNITION DATES (top 12) | ${clusterDays.size} days with >=5 ignitions hold ${inCl}/${ev.length} (${lbPct(inCl/(ev.length||1))}) of all events\n`;
-  o+=dates.slice(0,12).map(([dd,k])=>{const di=+dd;return `${lbDate(di)}:${k} (breadth ${lbF(M.breadth[di])}, mkt7 ${lbPct(labMktRet(M,di,7))})`;}).join(' | ')+'\n';
-
-  // ── regime table: pump rate per coin-day by breadth quintile (breadth of the day BEFORE ignition) ──
-  const dayList=M.days.filter(x=>R.eligByDay[x]&&M.breadth[x-1]!=null);
-  const bv=dayList.map(x=>M.breadth[x-1]).sort((a,b)=>a-b),q=p=>bv[Math.min(bv.length-1,Math.floor(p*bv.length))];
-  const cuts=[q(0.2),q(0.4),q(0.6),q(0.8)];
-  const bin=v=>v<cuts[0]?0:v<cuts[1]?1:v<cuts[2]?2:v<cuts[3]?3:4;
-  const agg=[0,1,2,3,4].map(()=>({days:0,ign:0,ignI:0,elig:0}));
-  const ignIByDay={};evI.forEach(e=>{const x=R.data[e.coin].D[e.g];ignIByDay[x]=(ignIByDay[x]||0)+1;});
-  dayList.forEach(x=>{const a=agg[bin(M.breadth[x-1])];a.days++;a.elig+=R.eligByDay[x]||0;a.ign+=R.ignByDay[x]||0;a.ignI+=ignIByDay[x]||0;});
-  const avgRate=agg.reduce((s,a)=>s+a.ign,0)/(agg.reduce((s,a)=>s+a.elig,0)||1);
-  o+=`\nREGIME (breadth20 = % of universe above SMA20, on the day before) | quintile | range | days | ignitions | IDIO | rate per coin-day | x avg\n`;
-  agg.forEach((a,k)=>{const lo=k?cuts[k-1]:bv[0],hi=k<4?cuts[k]:bv[bv.length-1];const r=a.elig?a.ign/a.elig:0;
-    o+=`Q${k+1}|${lbF(lo)}–${lbF(hi)}|${a.days}|${a.ign}|${a.ignI}|${(r*100).toFixed(3)}%|${lbF(avgRate?r/avgRate:null)}\n`;});
-
-  // ── features ──
-  o+=`\nFEATURES (AUC vs random quiet days; 0.50 none, >=0.60 useful, <=0.40 inverse) | ALL T-1 | T-3 | T-5 | T-10 | IDIO T-1 | IDIO T-5 | med ALL T-5 | med RANDOM | n T-5 | n rand\n`;
-  const rnd=R.base.map(b=>b.F);
-  const rows=LAB_FEATS.map(k=>{
-    const A={};LAB_OFFS.forEach(of=>{A[of]=labAUC(R.fEv[of].filter(Boolean).map(F=>F[k]),rnd.map(F=>F[k]));});
-    const idI=ev.map((e,i)=>e.idio?i:-1).filter(i=>i>=0);
-    const I1=labAUC(idI.map(i=>R.fEv[1][i]).filter(Boolean).map(F=>F[k]),rnd.map(F=>F[k]));
-    const I5=labAUC(idI.map(i=>R.fEv[5][i]).filter(Boolean).map(F=>F[k]),rnd.map(F=>F[k]));
-    const lead=Math.max(...[3,5,10].map(of=>A[of].auc==null?0:Math.abs(A[of].auc-0.5)));
-    return{k,A,I1,I5,lead};
-  }).sort((a,b)=>b.lead-a.lead);
-  rows.forEach(r=>{o+=`${r.k}|${lbF(r.A[1].auc)}|${lbF(r.A[3].auc)}|${lbF(r.A[5].auc)}|${lbF(r.A[10].auc)}|${lbF(r.I1.auc)}|${lbF(r.I5.auc)}|${lbF(r.A[5].medA,3)}|${lbF(r.A[5].medB,3)}|${r.A[5].na}|${r.A[5].nb}\n`;});
-
-  // ── rules: forward hit rate on random quiet coin-days ──
-  o+=`\nRULES — forward test on random quiet coin-days: P(pump>=${Math.round(P.pump*100)}% within ${P.days}d | rule ON) vs OFF\n`;
-  o+=`RULE [def] | ON share | P(hit|ON) | P(hit|OFF) | LIFT | P(IDIO|ON) | LIFT IDIO | P(rule|ev T-1) | P(rule|ev T-5) | n ON\n`;
-  const valid=[];
-  LAB_RULES.forEach(rule=>{
-    const on=R.base.filter(b=>rule.f(b.F)===true),off=R.base.filter(b=>rule.f(b.F)===false);
-    const ph=a=>a.length?a.filter(b=>b.hit).length/a.length:null,phI=a=>a.length?a.filter(b=>b.hitI).length/a.length:null;
-    const pOn=ph(on),pOff=ph(off),lift=pOn!=null&&pOff?pOn/pOff:null,pIOn=phI(on),pIOff=phI(off),liftI=pIOn!=null&&pIOff?pIOn/pIOff:null;
-    const e1=R.fEv[1].filter(Boolean).map(rule.f).filter(x=>x!=null),e5=R.fEv[5].filter(Boolean).map(rule.f).filter(x=>x!=null);
-    const r1=e1.length?e1.filter(Boolean).length/e1.length:null,r5=e5.length?e5.filter(Boolean).length/e5.length:null;
-    const hitsOn=on.filter(b=>b.hit).length;if(lift!=null&&lift>=1.5&&on.length>=40&&hitsOn>=8)valid.push(rule);
-    o+=`${rule.k} [${rule.d}]|${lbPct(on.length/((on.length+off.length)||1))}|${lbPct(pOn)}|${lbPct(pOff)}|${lbF(lift)}|${lbPct(pIOn)}|${lbF(liftI)}|${lbPct(r1)}|${lbPct(r5)}|${on.length}\n`;
-  });
-
-  // ── events ──
-  const evs=ev.slice().sort((a,b)=>R.data[b.coin].D[b.g]-R.data[a.coin].D[a.g]).slice(0,40);
-  o+=`\nEVENTS (newest 40 of ${ev.length}) | COIN | IGN | +MAX% | mkt% | excess% | type | T-5: impulse30 | flo120 | atrp | breadth | obv_flow20 | spot-perp20 | rs_mkt20 | fr7 | rules@T-1\n`;
-  evs.forEach(e=>{const F=e.F5||{},F1=e.F1||{};const fired=LAB_RULES.filter(r=>r.f(F1)===true).map(r=>r.k).join(',')||'-';
-    o+=`${e.coin}|${lbDate(R.data[e.coin].D[e.g])}|+${(e.gain*100).toFixed(0)}|${(e.mk*100).toFixed(0)}|${(e.exc*100).toFixed(0)}|${e.idio?'IDIO':'MKT'}|${lbF(F.impulse30)}|${lbF(F.flo120)}|${lbF(F.atrp,3)}|${lbF(F.breadth20)}|${lbF(F.obv_flow20)}|${lbF(F.spot_minus_perp20)}|${lbF(F.rs_mkt20)}|${lbF(F.fr7,4)}|${fired}\n`;});
-
-  // ── live ──
-  const lastD=Math.max(...Object.values(R.data).map(S=>S.D[S.n-1]));
-  const bNow=M.breadth[lastD],qNow=bNow==null?null:bin(bNow);
-  o+=`\nLIVE | last closed bar ${lbDate(lastD)} | breadth20 ${lbF(bNow)} -> regime Q${qNow==null?'?':qNow+1}${qNow!=null&&avgRate?' (historical pump rate x'+lbF((agg[qNow].elig?agg[qNow].ign/agg[qNow].elig:0)/avgRate)+' avg)':''} | mkt7 ${lbPct(labMktRet(M,lastD,7))}\n`;
-  if(!valid.length){o+=`No rule passed the forward test (LIFT >= 1.5, n ON >= 40, >= 8 hits ON) -> no live list. That is the answer, not a bug.\n`;}
-  else{
-    o+=`Rules that passed (LIFT >= 1.5, n ON >= 40, >= 8 hits ON): ${valid.map(r=>r.k).join(', ')}\n`;
-    const live=[];
-    Object.entries(R.data).forEach(([coin,S])=>{const F=labFeatures(S,S.n-1,R.ext[coin],M);const f=valid.filter(r=>r.f(F)===true).map(r=>r.k);if(f.length)live.push({coin,F,f});});
-    live.sort((a,b)=>b.f.length-a.f.length||(b.F.impulse30??0)-(a.F.impulse30??0));
-    o+=`${live.length} coins fire >=1 passed rule, top 30 | COIN | rules | impulse30 | flo120 | atrp | ret7 | rs_mkt20 | obv_flow20\n`;
-    live.slice(0,30).forEach(x=>{const F=x.F;o+=`${x.coin}|${x.f.join(',')}|${lbF(F.impulse30)}|${lbF(F.flo120)}|${lbF(F.atrp,3)}|${lbF(F.ret7)}|${lbF(F.rs_mkt20)}|${lbF(F.obv_flow20)}\n`;});
-  }
-  o+=`\nNOTES: survivorship (delisted pumps missing). FR only on event coins + 80 control coins; OI and L/S only the last 30 days (small n). Pumps without a single +${Math.round(P.ign*100)}% day (slow grinds) are not counted. Baseline days are random quiet days; their forward label is any >= +${Math.round(P.pump*100)}% close within ${P.days} days.\n`;
-  return o;
+function labIgnRow(name,arr){
+  const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
+  const p=f=>arr.filter(f).length/n;
+  const avgR=arr.reduce((s,e)=>s+e.R,0)/n,se=Math.sqrt(arr.reduce((s,e)=>s+(e.R-avgR)**2,0)/n/n);
+  const r7=arr.map(e=>e.ret7).sort((a,b)=>a-b)[Math.floor(n/2)];
+  return `${name}|${n}|${lbPct(p(e=>e.up20))}|${lbPct(p(e=>e.up50))}|${lbPct(p(e=>e.dn20))}|${lbPct(p(e=>e.res==='W'))}|${lbPct(p(e=>e.res==='L'))}|${lbPct(p(e=>e.res==='T'))}|${(avgR>=0?'+':'')+avgR.toFixed(2)} ±${se.toFixed(2)}|${lbPct(r7)}\n`;
 }
 
+function labReport(P,R){
+  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const M=R.M,anyS=Object.values(R.data)[0],up=Math.round(P.pump*100),dn=Math.round(P.dump*100);
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v3 | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
+  o+=`UNIVERSE: ${R.uni.length} perps | analysed ${Object.keys(R.data).length} | short ${R.short} | fail ${R.fail} | skipped TradFi ${R.skip.tradfi}, blocked ${R.skip.blocked}, status ${R.skip.status} | 1d x${LAB_KL}${anyS?' to '+lbDate(anyS.D[anyS.n-1]):''}\n`;
+  const nFR=Object.values(R.ext).filter(e=>e.fr).length,nOI=Object.values(R.ext).filter(e=>e.oi).length;
+  o+=`DATA: spot ${R.spotOk} | FR history ${nFR} coins | OI 30d ${nOI} coins | rate-limit hits ${LAB.rateHit}\n`;
+
+  // ── A) DIRECTION ──
+  const B=R.base,nb=B.length,pu=B.filter(b=>b.up).length/(nb||1),pd=B.filter(b=>b.dn).length/(nb||1);
+  o+=`\nA) DIRECTION TEST — ${nb} random quiet coin-days, labels within ${P.days}d: UP = close >= +${up}% | DN = close <= -${dn}% (log-symmetric)\n`;
+  o+=`BASE: P(UP) ${lbPct(pu)} | P(DN) ${lbPct(pd)}\n`;
+  o+=`RULE | ON share | P(UP|ON) | P(UP|OFF) | LIFT UP | P(DN|ON) | P(DN|OFF) | LIFT DN | UP/DN (lift ratio; ~1 = volatility only, >1.3 = long edge, <0.77 = short edge) | n ON\n`;
+  LAB_RULES.forEach(rule=>{
+    const on=B.filter(b=>rule.f(b.F)===true),off=B.filter(b=>rule.f(b.F)===false);
+    const p=(a,k)=>a.length?a.filter(b=>b[k]).length/a.length:null;
+    const uOn=p(on,'up'),uOff=p(off,'up'),dOn=p(on,'dn'),dOff=p(off,'dn');
+    const lu=uOn!=null&&uOff?uOn/uOff:null,ld=dOn!=null&&dOff?dOn/dOff:null;
+    o+=`${rule.k}|${lbPct(on.length/((on.length+off.length)||1))}|${lbPct(uOn)}|${lbPct(uOff)}|${lbF(lu)}|${lbPct(dOn)}|${lbPct(dOff)}|${lbF(ld)}|${lbF(lu!=null&&ld?lu/ld:null)}|${on.length}\n`;
+  });
+  // volatility quintiles
+  const av=B.filter(b=>b.F.atrp!=null).map(b=>b.F.atrp).sort((a,b)=>a-b),q=p=>av[Math.min(av.length-1,Math.floor(p*av.length))];
+  const cuts=[q(0.2),q(0.4),q(0.6),q(0.8)],bin=v=>v<cuts[0]?0:v<cuts[1]?1:v<cuts[2]?2:v<cuts[3]?3:4;
+  o+=`ATRP QUINTILE (ATR14/price) | range | n | P(UP) | P(DN) | UP/DN\n`;
+  [0,1,2,3,4].forEach(k=>{const a=B.filter(b=>b.F.atrp!=null&&bin(b.F.atrp)===k);const u=a.filter(b=>b.up).length/(a.length||1),dd=a.filter(b=>b.dn).length/(a.length||1);
+    o+=`Q${k+1}|${lbF(k?cuts[k-1]:av[0],3)}–${lbF(k<4?cuts[k]:av[av.length-1],3)}|${a.length}|${lbPct(u)}|${lbPct(dd)}|${lbF(dd?u/dd:null)}\n`;});
+  // HOT inside high-volatility only (does "hot" add anything beyond volatility?)
+  const hv=B.filter(b=>b.F.atrp!=null&&bin(b.F.atrp)>=3);
+  const hotR=LAB_RULES.find(r=>r.k==='HOT');
+  const hvOn=hv.filter(b=>hotR.f(b.F)===true),hvOff=hv.filter(b=>hotR.f(b.F)===false);
+  const pp=(a,k)=>a.length?a.filter(b=>b[k]).length/a.length:null;
+  o+=`HOT within ATRP Q4-Q5 only (volatility held ~constant): ON n=${hvOn.length} UP ${lbPct(pp(hvOn,'up'))} DN ${lbPct(pp(hvOn,'dn'))} | OFF n=${hvOff.length} UP ${lbPct(pp(hvOff,'up'))} DN ${lbPct(pp(hvOff,'dn'))}\n`;
+
+  // ── B) CONTINUATION ──
+  const G=R.igns;
+  o+=`\nB) CONTINUATION AFTER IGNITION — ${G.length} fresh ignitions (daily close >= +${Math.round(P.ign*100)}% after ret7 < +${Math.round(P.quiet*100)}%; one per coin per ${P.days}d). ENTRY = ignition-day CLOSE. Window ${P.days}d using daily highs/lows.\n`;
+  o+=`Trade = TP +${LAB_TP*100}% / SL -${LAB_SL*100}% (2R:1R; bar touching both = SL first); timeout exits at day-${P.days} close, scored in R and capped to [-1,+2].\n`;
+  o+=`GROUP | n | P(+20%) | P(+50%) | P(-20%) | WIN | LOSS | TIMEOUT | avg R ±se | median ${P.days}d return\n`;
+  const hot=e=>hotR.f(e.F)===true;
+  const rows=[
+    ['ALL',G],
+    ['HOT@T-1',G.filter(hot)],['not HOT',G.filter(e=>hotR.f(e.F)===false)],
+    ['VOL >=3x avg20',G.filter(e=>e.volx!=null&&e.volx>=3)],['VOL <3x',G.filter(e=>e.volx!=null&&e.volx<3)],
+    ['CLOSE near high (clv>=0.8)',G.filter(e=>e.clv!=null&&e.clv>=0.8)],['CLOSE faded (clv<0.5)',G.filter(e=>e.clv!=null&&e.clv<0.5)],
+    ['TAKER >=55%',G.filter(e=>e.taker!=null&&e.taker>=0.55)],['TAKER <50%',G.filter(e=>e.taker!=null&&e.taker<0.5)],
+    ['SIZE +10-20%',G.filter(e=>e.r<0.2)],['SIZE +20-40%',G.filter(e=>e.r>=0.2&&e.r<0.4)],['SIZE >=+40%',G.filter(e=>e.r>=0.4)],
+    ['IGN >=3 ATR',G.filter(e=>e.ignAtr!=null&&e.ignAtr>=3)],['IGN <2 ATR',G.filter(e=>e.ignAtr!=null&&e.ignAtr<2)],
+    ['FR7 <0 (subset)',G.filter(e=>e.F.fr7!=null&&e.F.fr7<0)],['FR7 >=0.01% (subset)',G.filter(e=>e.F.fr7!=null&&e.F.fr7>=0.01)],
+    ['BREADTH >=0.5',G.filter(e=>e.F.breadth20!=null&&e.F.breadth20>=0.5)],['BREADTH <0.3',G.filter(e=>e.F.breadth20!=null&&e.F.breadth20<0.3)],
+    ['ABOVE MA200',G.filter(e=>e.F.above_ma200===1)],['BELOW MA200',G.filter(e=>e.F.above_ma200===0)],
+    ['OI day +10% (30d subset)',G.filter(e=>e.oi1!=null&&e.oi1>=0.1)],['OI day <0 (30d subset)',G.filter(e=>e.oi1!=null&&e.oi1<0)],
+    ['HOT & VOL>=3x & clv>=0.8',G.filter(e=>hot(e)&&e.volx>=3&&e.clv>=0.8)],
+    ['HOT & TAKER>=55%',G.filter(e=>hot(e)&&e.taker>=0.55)],
+    ['not HOT & VOL>=3x & clv>=0.8',G.filter(e=>hotR.f(e.F)===false&&e.volx>=3&&e.clv>=0.8)],
+  ];
+  rows.forEach(([n,a])=>{o+=labIgnRow(n,a);});
+  o+=`READ: avg R > 0 by more than ~2x its ±se = a real edge for that entry. With 2R:1R the break-even win rate is 33% if there were no timeouts.\n`;
+
+  // ── live: ignitions on the last closed bar ──
+  const lastD=Math.max(...Object.values(R.data).map(S=>S.D[S.n-1]));
+  const live=[];
+  Object.entries(R.data).forEach(([coin,S])=>{const g=S.n-1;if(S.D[g]!==lastD)return;const r=S.c[g]/S.c[g-1]-1;if(r<P.ign)return;
+    const r7=labRet(S,g-1,7),F=labFeatures(S,g-1,R.ext[coin],M),range=S.h[g]-S.l[g];
+    const o1=R.ext[coin]?.oi;const oi1=o1&&o1[S.D[g]]&&o1[S.D[g-1]]?o1[S.D[g]]/o1[S.D[g-1]]-1:null;
+    live.push({coin,r,fresh:r7!=null&&r7<P.quiet,hot:hotR.f(F)===true,volx:S.vma20[g-1]?S.v[g]/S.vma20[g-1]:null,clv:range>0?(S.c[g]-S.l[g])/range:null,taker:S.v[g]>0?S.tb[g]/S.v[g]:null,oi1});});
+  live.sort((a,b)=>b.r-a.r);
+  o+=`\nLIVE IGNITIONS on ${lbDate(lastD)} (closed bar, >= +${Math.round(P.ign*100)}%) | ${live.length} coins | COIN | +day% | fresh | HOT | VOLx | clv | taker | OI day\n`;
+  live.slice(0,30).forEach(x=>{o+=`${x.coin}|+${(x.r*100).toFixed(1)}|${x.fresh?'Y':'n'}|${x.hot?'Y':'n'}|${lbF(x.volx,1)}|${lbF(x.clv)}|${lbF(x.taker)}|${x.oi1==null?'—':lbPct(x.oi1)}\n`;});
+  o+=`\nNOTES: entry at the daily close is a simplification (intraday entry at the +${Math.round(P.ign*100)}% cross is earlier and different). Survivorship: delisted coins missing. FR on a random 320 ignition coins; OI only last 30 days.\n`;
+  return o;
+}
 function labBtns(){const s=document.getElementById('labStart'),x=document.getElementById('labStop');if(!s)return;s.style.display=LAB.running?'none':'inline-block';x.style.display=LAB.running?'inline-block':'none';}
 function labBar(on){const b=document.getElementById('labBar');if(b)b.style.display=on?'flex':'none';LAB.view=!!on;}
 function openLab(){
   document.getElementById('dgOv').classList.add('open');labBar(true);labBtns();
-  document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB v2 · v'+APP_VER+' '+APP_CODENAME;
+  document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB v3 · v'+APP_VER+' '+APP_CODENAME;
   document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
-`🧪 PUMP LAB v2 — студија на пумпи
+`🧪 PUMP LAB v3 — насока + продолжување по палење
 
-Што е ново во v2:
- 1. Мери пред ДЕНОТ НА ПАЛЕЊЕ (прва дневна свеќа >= +10%), на T-1/T-3/T-5/T-10.
- 2. Ги дели пумпите на IDIO (самостојни) и MARKET (цел пазар), со датуми.
- 3. Дивергенциите се ПРОТОК за 20 дена, не позиција во опсег.
- 4. Правилата се тестираат напред: P(пумпа во 7 дена | правило) наспроти без.
- 5. Режим на пазарот: ширина (% над SMA20), пазар 7д, BTC над MA50.
+ A) Дали „живите“ коини само се волатилни, или имаат насока?
+    P(+50%) наспроти P(-33%) за 7 дена, по правило и по волатилност.
+ B) Ако коин затвори +10% по мирна недела и влезеш на затворањето:
+    колку често +20% / +50% / -20%, и како поминува трејд TP +20% / SL -10%?
+    Поделено по HOT, волумен, затворање близу врвот, taker, големина, FR, ширина.
 
 Трае ~8-10 минути. Може да го затвориш прозорецот, само не ја затворај страницата.
 Не скенирај истовремено (Binance rate limit).
