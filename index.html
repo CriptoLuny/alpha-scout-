@@ -518,6 +518,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-clear" onclick="clearAll()">🗑</button>
   <button class="btn btn-clear" onclick="openDigest()" title="Извештај за анализа">📋</button>
   <button class="btn btn-clear" onclick="openFavShare()" title="Пренеси ⭐ FAV на друг уред (линк / QR)">⭐🔗</button>
+  <button class="btn btn-clear" onclick="openLab()" title="PUMP LAB — што покажувале коините пред пумпа">🧪</button>
   <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
     <div class="tf active" id="tf-1m"  onclick="setTF('1m',this)">1m</div>
@@ -617,7 +618,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="dg-btn prim" onclick="copyDigest()">📋 КОПИРАЈ</div>
     <div class="dg-btn" onclick="showProbe()">🔬 КЛАСИ</div>
     <div class="dg-btn" onclick="showDigest()">📊 DIGEST</div>
+    <div class="dg-btn" onclick="openLab()">🧪 LAB</div>
     <div class="dg-btn" onclick="closeDigest()">✕</div>
+  </div>
+  <div id="labBar" style="display:none;padding:8px 14px;border-bottom:1px solid var(--border);gap:8px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--text2)">
+    ПУМПА ≥<input id="labPump" class="thresh-input" type="number" value="50" min="20" max="300" step="5" style="width:56px">%
+    за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
+    · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
+    <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
+    <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
   </div>
   <div class="dg-body"><textarea class="dg-ta" id="dgTa" readonly spellcheck="false"></textarea></div>
 </div>
@@ -974,6 +983,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //     return empty.
 //   - Digest export + exchangeInfo class probe.
 //
+//  2026-10-08-a  PUMP LAB (🧪): event study over ~16 months of 1d data.
+//    Finds every pump (>= +50% in 7d after a quiet week), measures ~40
+//    features before it vs random quiet days (AUC / lift), tests the
+//    pre-pump hypotheses (COIL, RESET_FLAG, SPOT_LED, SHORT_LOADED, ...)
+//    and lists coins firing them today. Output = text report for analysis.
+//    Separate <script> block at the end; does not touch SCORE or scanning.
+//
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
 // ==========================================================
@@ -981,7 +997,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-07-c';
+const APP_BUILD='2026-10-08-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3536,9 +3552,9 @@ function buildProbe(){
 }
 
 function openDigest(){document.getElementById('dgOv').classList.add('open');showDigest();}
-function closeDigest(){document.getElementById('dgOv').classList.remove('open');}
-function showDigest(){document.getElementById('dgTtl').textContent='// DIGEST ЗА АНАЛИЗА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildDigest();}
-function showProbe(){document.getElementById('dgTtl').textContent='// EXCHANGEINFO ПРОБА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildProbe();}
+function closeDigest(){if(typeof labBar==='function')labBar(false);document.getElementById('dgOv').classList.remove('open');}
+function showDigest(){if(typeof labBar==='function')labBar(false);document.getElementById('dgTtl').textContent='// DIGEST ЗА АНАЛИЗА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildDigest();}
+function showProbe(){if(typeof labBar==='function')labBar(false);document.getElementById('dgTtl').textContent='// EXCHANGEINFO ПРОБА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildProbe();}
 function copyDigest(){
   const ta=document.getElementById('dgTa');
   const txt=ta.value;
@@ -5468,5 +5484,344 @@ window.addEventListener('resize',()=>{if(HM.loaded&&document.getElementById('hmV
     <div id="helpContent"></div>
   </div>
 </div>
+<script>
+// ══════════════════════════════════════════════════════════════
+// PUMP LAB (2026-10-08-a) — event study: what did coins look like BEFORE they pumped?
+// 1) 1d perp klines (499 bars) for the whole universe + spot klines where a spot pair exists
+// 2) finds every pump: close rises >= PUMP% within DAYS bars, with a quiet week before
+//    (ret7 < QUIET%). T0 = the lowest close of a qualifying cluster (= the launch day)
+// 3) computes ~35 features at T0 and at T0-5, and on random "quiet" coin-days (baseline)
+// 4) reports AUC (0.5 = no edge), quintile lift, rule lift + precision, recent events,
+//    and coins firing the hypothesis rules on the last closed day.
+// FR history is fetched for event coins + a random control set; OI / top-trader L/S only
+// exist for the last 30 days on Binance, so those features have small n and are marked.
+// Nothing here votes in SCORE. It is a measuring instrument, not a signal.
+// ══════════════════════════════════════════════════════════════
+const LAB={running:false,abort:false,out:'',view:false,rateHit:0,log:[]};
+const LAB_KL=499, LAB_WARM=60, LAB_BASE_PER_COIN=6;
+const LAB_STABLE=new Set(['USDC','FDUSD','TUSD','USDE','USD1','BUSD','DAI','USDP','PYUSD','XUSD','RLUSD']);
+
+async function labFetch(url,timeout){
+  try{
+    const r=await fetch(url,{signal:AbortSignal.timeout(timeout||8000)});
+    if(r.ok)return await r.json();
+    if(r.status===429||r.status===418){LAB.rateHit++;await sleep(8000);return null;}
+    if(r.status>=400&&r.status<500)return null;     // symbol does not exist -> no proxy retry
+  }catch(e){}
+  try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(12000)});if(r.ok)return await r.json();}catch(e){}
+  return null;
+}
+
+// ── series helpers (null until enough bars) ──
+function lbSMA(a,n){const o=new Array(a.length).fill(null);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n;}return o;}
+function lbSTD(a,n,ma){const o=new Array(a.length).fill(null);for(let i=n-1;i<a.length;i++){let q=0;for(let j=i-n+1;j<=i;j++){const d=a[j]-ma[i];q+=d*d;}o[i]=Math.sqrt(q/n);}return o;}
+function lbWMA(a,n){const o=new Array(a.length).fill(null),w=n*(n+1)/2;for(let i=n-1;i<a.length;i++){let t=0,ok=true;for(let j=0;j<n;j++){const v=a[i-n+1+j];if(v==null){ok=false;break;}t+=v*(j+1);}if(ok)o[i]=t/w;}return o;}
+function lbRank(arr,i,win){if(i-win+1<0||arr[i]==null)return null;let below=0,cnt=0;for(let j=i-win+1;j<=i;j++){if(arr[j]==null)continue;cnt++;if(arr[j]<arr[i])below++;}return cnt>=win*0.8&&cnt>1?below/(cnt-1):null;}
+function lbPos(arr,i,win){if(i-win+1<0)return null;let mn=Infinity,mx=-Infinity;for(let j=i-win+1;j<=i;j++){const v=arr[j];if(v==null)return null;if(v<mn)mn=v;if(v>mx)mx=v;}return mx>mn?(arr[i]-mn)/(mx-mn):0.5;}
+const lbDay=t=>Math.floor(t/864e5);
+const lbF=(v,d)=>v==null||!isFinite(v)?'—':(+v).toFixed(d==null?2:d);
+
+function labSeries(kl,spotKl,btcByDay){
+  const n=kl.length,T=kl.map(k=>k[0]),o=kl.map(k=>+k[1]),h=kl.map(k=>+k[2]),l=kl.map(k=>+k[3]),c=kl.map(k=>+k[4]),v=kl.map(k=>+k[5]),tb=kl.map(k=>+k[9]);
+  const S={n,T,o,h,l,c,v,tb};
+  S.ma={};[14,20,21,35,50,100,200].forEach(p=>S.ma[p]=lbSMA(c,p));
+  const tr=c.map((x,i)=>i?Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1])):h[i]-l[i]);
+  S.atr14=lbSMA(tr,14);S.atr20=lbSMA(tr,20);S.atr100=lbSMA(tr,100);
+  const sd=lbSTD(c,20,S.ma[20]);
+  S.bbw=c.map((x,i)=>S.ma[20][i]?4*sd[i]/S.ma[20][i]:null);
+  S.sqz=c.map((x,i)=>S.ma[20][i]&&S.atr20[i]?(2*sd[i]<1.5*S.atr20[i]?1:0):null);
+  S.nr7=c.map((x,i)=>{if(i<6)return null;const r=h[i]-l[i];for(let j=i-6;j<i;j++)if(h[j]-l[j]<=r)return 0;return 1;});
+  S.ribS=c.map((x,i)=>{const m=[14,21,35,50].map(p=>S.ma[p][i]);return m.includes(null)?null:(Math.max(...m)-Math.min(...m))/x;});
+  S.ribL=c.map((x,i)=>{const m=[14,21,35,50,100,200].map(p=>S.ma[p][i]);return m.includes(null)?null:(Math.max(...m)-Math.min(...m))/x;});
+  let ob=0,cv=0;S.obv=[];S.cvd=[];
+  for(let i=0;i<n;i++){if(i)ob+=c[i]>c[i-1]?v[i]:c[i]<c[i-1]?-v[i]:0;S.obv.push(ob);cv+=2*tb[i]-v[i];S.cvd.push(cv);}
+  const mfv=c.map((x,i)=>h[i]>l[i]?((x-l[i])-(h[i]-x))/(h[i]-l[i])*v[i]:0);
+  S.cmf=c.map((x,i)=>{if(i<19)return null;let a=0,b=0;for(let j=i-19;j<=i;j++){a+=mfv[j];b+=v[j];}return b>0?a/b:0;});
+  S.vma5=lbSMA(v,5);S.vma20=lbSMA(v,20);S.vma30=lbSMA(v,30);
+  const jr=n>20?calcJMAseries(c,8,50,2,n-1):[];S.jma=[c[0],...jr];
+  S.dwma=lbWMA(lbWMA(c,10),10);
+  // spot (aligned by day; CVD only accumulates on days with spot data)
+  S.spot=null;
+  if(spotKl&&spotKl.length>60){
+    const m={};spotKl.forEach(k=>{m[lbDay(k[0])]=k;});
+    let sc=0,hits=0;const scv=[],sv=[];
+    for(let i=0;i<n;i++){const k=m[lbDay(T[i])];if(k){hits++;sc+=2*(+k[9])-(+k[5]);sv.push(+k[7]);}else sv.push(null);scv.push(k?sc:null);}
+    if(hits>60)S.spot={cvd:scv,qv:sv};
+  }
+  S.qv=kl.map(k=>+k[7]);
+  S.btc=T.map(t=>btcByDay?btcByDay[lbDay(t)]??null:null);
+  S.rs=c.map((x,i)=>S.btc[i]?x/S.btc[i]:null);
+  return S;
+}
+
+function labRet(S,i,k){return i-k>=0&&S.c[i-k]>0?S.c[i]/S.c[i-k]-1:null;}
+
+function labFeatures(S,i,ext){
+  const c=S.c,x=c[i],F={};
+  const atr=S.atr14[i],atrp=atr&&x?atr/x:null;
+  F.bbw_pct120=lbRank(S.bbw,i,120);
+  F.atr_ratio=S.atr14[i]&&S.atr100[i]?S.atr14[i]/S.atr100[i]:null;
+  F.sqz_on=S.sqz[i];
+  F.sqz_days10=i>=10&&S.sqz[i-9]!=null?S.sqz.slice(i-9,i+1).reduce((a,b)=>a+(b||0),0):null;
+  F.nr7_cnt10=i>=16?S.nr7.slice(i-9,i+1).reduce((a,b)=>a+(b||0),0):null;
+  F.ribS_pct120=lbRank(S.ribS,i,120);
+  F.ribL=S.ribL[i];
+  const st=[14,21,35,50].map(p=>S.ma[p][i]);
+  if(!st.includes(null)){let k=0;for(let a=0;a<4;a++)for(let b=a+1;b<4;b++)if(st[a]>st[b])k++;F.ma_stack=k/6;}else F.ma_stack=null;
+  F.ma50_slope5=S.ma[50][i]&&S.ma[50][i-5]?S.ma[50][i]/S.ma[50][i-5]-1:null;
+  F.above_ma200=S.ma[200][i]?(x>S.ma[200][i]?1:0):null;
+  F.jma_above=S.dwma[i]!=null?(S.jma[i]>S.dwma[i]?1:0):null;
+  if(S.dwma[i-5]!=null){let up=0;for(let j=i-4;j<=i;j++)if(S.jma[j]>S.dwma[j]&&S.jma[j-1]<=S.dwma[j-1])up=1;F.jma_xup5=up;}else F.jma_xup5=null;
+  F.mom_z=atr&&i>=14?(x-c[i-14])/atr:null;
+  F.ret7=labRet(S,i,7);F.ret30=labRet(S,i,30);
+  if(i>=119){let mx=0,mn=Infinity;for(let j=i-119;j<=i;j++){if(S.h[j]>mx)mx=S.h[j];if(S.l[j]<mn)mn=S.l[j];}F.fhi120=x/mx-1;F.flo120=x/mn-1;}else{F.fhi120=null;F.flo120=null;}
+  if(i>=30){let mx=0;for(let j=i-29;j<=i;j++)if(c[j]>mx)mx=c[j];F.pull30=x/mx-1;
+    let best=0,mn=Infinity;for(let j=i-29;j<=i;j++){if(c[j]<mn)mn=c[j];best=Math.max(best,c[j]/mn-1);}F.impulse30=best;}else{F.pull30=null;F.impulse30=null;}
+  F.price_pos30=lbPos(c,i,30);
+  F.obv_pos30=lbPos(S.obv,i,30);F.obv_div30=F.obv_pos30!=null&&F.price_pos30!=null?F.obv_pos30-F.price_pos30:null;
+  F.cvd_pos30=lbPos(S.cvd,i,30);F.cvd_div30=F.cvd_pos30!=null&&F.price_pos30!=null?F.cvd_pos30-F.price_pos30:null;
+  if(S.spot){
+    F.spot_pos30=lbPos(S.spot.cvd,i,30);
+    F.spot_div30=F.spot_pos30!=null&&F.price_pos30!=null?F.spot_pos30-F.price_pos30:null;
+    F.spot_vs_perp=F.spot_pos30!=null&&F.cvd_pos30!=null?F.spot_pos30-F.cvd_pos30:null;
+    const sh=(a,b)=>{let s=0,p=0;for(let j=i-a+1;j<=i;j++){if(S.spot.qv[j]==null)return null;s+=S.spot.qv[j];p+=S.qv[j];}return p>0?s/p:null;};
+    const s7=i>=30?sh(7):null,s30=i>=30?sh(30):null;F.spot_share_chg=s7!=null&&s30?s7/s30-1:null;
+  }else{F.spot_pos30=F.spot_div30=F.spot_vs_perp=F.spot_share_chg=null;}
+  F.vol_dry=S.vma5[i]&&S.vma30[i]?S.vma5[i]/S.vma30[i]:null;
+  if(i>=20&&atrp){let k=0;for(let j=i-9;j<=i;j++){const r=Math.abs(c[j]/c[j-1]-1);if(S.vma20[j]&&S.v[j]>2*S.vma20[j]&&r<0.5*atrp)k++;}F.ewr10=k;}else F.ewr10=null;
+  F.cmf20=S.cmf[i];
+  const tk=(a)=>{let b=0,t=0;for(let j=i-a+1;j<=i;j++){b+=S.tb[j];t+=S.v[j];}return t>0?b/t:null;};
+  F.taker7=i>=30?tk(7):null;F.taker_chg=i>=30?tk(7)-tk(30):null;
+  F.rs_pos30=lbPos(S.rs,i,30);F.rs_div30=F.rs_pos30!=null&&F.price_pos30!=null?F.rs_pos30-F.price_pos30:null;
+  if(i>=21&&S.btc[i-20]){let d=0,g=0;for(let j=i-19;j<=i;j++){if(S.btc[j]&&S.btc[j-1]&&S.btc[j]<S.btc[j-1]){d++;if(c[j]>c[j-1])g++;}}F.resil20=d>=4?g/d:null;}else F.resil20=null;
+  // FR (daily average of 8h prints, in %)
+  if(ext&&ext.fr){const d=lbDay(S.T[i]);const avg=(a,b)=>{let s=0,k=0;for(let q=d-a+1;q<=d-b;q++){const r=ext.fr[q];if(r!=null){s+=r;k++;}}return k?s/k:null;};
+    F.fr7=avg(7,0);const f30=avg(30,0);F.fr_trend=F.fr7!=null&&f30!=null?F.fr7-f30:null;}else{F.fr7=F.fr_trend=null;}
+  // OI + L/S (Binance keeps 30 days only)
+  if(ext&&ext.oi){const d=lbDay(S.T[i]),a=ext.oi[d],b=ext.oi[d-7];
+    F.oi_chg7=a&&b?a/b-1:null;F.oi_vs_px7=F.oi_chg7!=null&&F.ret7!=null?F.oi_chg7-F.ret7:null;
+    const ta=ext.top?.[d],tb_=ext.top?.[d-7],ga=ext.glb?.[d],gb=ext.glb?.[d-7];
+    F.top_ls_chg7=ta&&tb_?ta/tb_-1:null;F.acct_ls_chg7=ga&&gb?ga/gb-1:null;
+    F.smart_div=F.top_ls_chg7!=null&&F.acct_ls_chg7!=null?F.top_ls_chg7-F.acct_ls_chg7:null;
+  }else{F.oi_chg7=F.oi_vs_px7=F.top_ls_chg7=F.acct_ls_chg7=F.smart_div=null;}
+  return F;
+}
+
+// Hypothesis rules (from the design discussion) — null = inputs missing, not "false"
+const LAB_RULES=[
+  {k:'COIL',d:'bbw_pct120<=0.20 & obv_div30>=0.20',f:F=>F.bbw_pct120==null||F.obv_div30==null?null:F.bbw_pct120<=0.2&&F.obv_div30>=0.2},
+  {k:'SQZ_HIGH',d:'sqz_on & price_pos30>=0.60',f:F=>F.sqz_on==null||F.price_pos30==null?null:F.sqz_on===1&&F.price_pos30>=0.6},
+  {k:'RIBBON_TIGHT',d:'ribS_pct120<=0.20 & ma_stack>=0.5',f:F=>F.ribS_pct120==null||F.ma_stack==null?null:F.ribS_pct120<=0.2&&F.ma_stack>=0.5},
+  {k:'RESET_FLAG',d:'impulse30>=0.40 & pull30 in [-0.35,-0.12] & obv_pos30>=0.60 & ma_stack>=0.5',f:F=>F.impulse30==null||F.pull30==null||F.obv_pos30==null||F.ma_stack==null?null:F.impulse30>=0.4&&F.pull30<=-0.12&&F.pull30>=-0.35&&F.obv_pos30>=0.6&&F.ma_stack>=0.5},
+  {k:'SPOT_LED',d:'spot_div30>=0.20 & spot_vs_perp>=0.20',f:F=>F.spot_div30==null||F.spot_vs_perp==null?null:F.spot_div30>=0.2&&F.spot_vs_perp>=0.2},
+  {k:'DRYUP_EWR',d:'vol_dry<=0.70 & ewr10>=1',f:F=>F.vol_dry==null||F.ewr10==null?null:F.vol_dry<=0.7&&F.ewr10>=1},
+  {k:'RS_LEAD',d:'rs_div30>=0.25 & resil20>=0.50',f:F=>F.rs_div30==null||F.resil20==null?null:F.rs_div30>=0.25&&F.resil20>=0.5},
+  {k:'TREND_TURN',d:'jma_xup5 & ma50_slope5>-0.005 & above_ma200',f:F=>F.jma_xup5==null||F.ma50_slope5==null||F.above_ma200==null?null:F.jma_xup5===1&&F.ma50_slope5>-0.005&&F.above_ma200===1},
+  {k:'FR_NEG_HOLD',d:'fr7<0 & ret7>-0.05',f:F=>F.fr7==null||F.ret7==null?null:F.fr7<0&&F.ret7>-0.05},
+  {k:'SHORT_LOADED',d:'fr7<0 & oi_chg7>=0.05 & ret7>-0.05   [30d OI]',f:F=>F.fr7==null||F.oi_chg7==null||F.ret7==null?null:F.fr7<0&&F.oi_chg7>=0.05&&F.ret7>-0.05},
+  {k:'SMART_DIV',d:'top_ls_chg7 - acct_ls_chg7 >= 0.10   [30d L/S]',f:F=>F.smart_div==null?null:F.smart_div>=0.1},
+];
+const LAB_FEATS=['bbw_pct120','atr_ratio','sqz_on','sqz_days10','nr7_cnt10','ribS_pct120','ribL','ma_stack','ma50_slope5','above_ma200','jma_above','jma_xup5','mom_z','ret7','ret30','fhi120','flo120','pull30','impulse30','price_pos30','obv_pos30','obv_div30','cvd_pos30','cvd_div30','spot_pos30','spot_div30','spot_vs_perp','spot_share_chg','vol_dry','ewr10','cmf20','taker7','taker_chg','rs_pos30','rs_div30','resil20','fr7','fr_trend','oi_chg7','oi_vs_px7','top_ls_chg7','acct_ls_chg7','smart_div'];
+
+function labAUC(a,b){
+  a=a.filter(x=>x!=null&&isFinite(x));b=b.filter(x=>x!=null&&isFinite(x));
+  if(a.length<5||b.length<20)return{auc:null,na:a.length,nb:b.length};
+  const all=a.map(v=>[v,1]).concat(b.map(v=>[v,0])).sort((x,y)=>x[0]-y[0]);
+  let i=0,sr=0;const N=all.length;
+  while(i<N){let j=i;while(j+1<N&&all[j+1][0]===all[i][0])j++;const r=(i+j)/2+1;for(let k=i;k<=j;k++)if(all[k][1])sr+=r;i=j+1;}
+  const auc=(sr-a.length*(a.length+1)/2)/(a.length*b.length);
+  const sb=b.slice().sort((x,y)=>x-y),q=p=>sb[Math.min(sb.length-1,Math.floor(p*sb.length))];
+  const p20=q(0.2),p80=q(0.8),med=arr=>{const s=arr.slice().sort((x,y)=>x-y);return s[Math.floor(s.length/2)];};
+  const fr=(arr,f)=>arr.filter(f).length/arr.length;
+  const bh=fr(b,x=>x>=p80),bl=fr(b,x=>x<=p20);
+  return{auc,na:a.length,nb:b.length,medA:med(a),medB:med(b),
+    liftHi:bh>0?fr(a,x=>x>=p80)/bh:null,liftLo:bl>0?fr(a,x=>x<=p20)/bl:null};
+}
+
+function labSetProg(t){LAB.prog=t;if(LAB.view&&LAB.running)document.getElementById('dgTa').value=LAB.prog+'\n\n'+LAB.log.slice(-8).join('\n');}
+
+async function runPumpLab(){
+  if(LAB.running)return;
+  const P={pump:(parseFloat(document.getElementById('labPump').value)||50)/100,days:parseInt(document.getElementById('labDays').value)||7,
+    quiet:(parseFloat(document.getElementById('labQuiet').value)||20)/100,cool:30};
+  LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
+  const t0=Date.now();
+  try{
+    labSetProg('🧪 PUMP LAB · вчитувам exchangeInfo + BTC...');
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);
+    if(ei)buildClassMaps(ei);
+    let uni=[];const skip={tradfi:0,blocked:0,stable:0,status:0};
+    (ei?.symbols||[]).forEach(s=>{
+      if(!s.symbol.endsWith('USDT')||s.symbol.includes('_'))return;
+      if(!(s.contractType||'').includes('PERPETUAL'))return;
+      const coin=s.symbol.replace(/USDT$/,'');
+      if((s.status||'TRADING')!=='TRADING'){skip.status++;return;}
+      if(LAB_STABLE.has(coin)){skip.stable++;return;}
+      if(isTradFi(coin)){skip.tradfi++;return;}
+      if(typeof blockReason==='function'&&blockReason(coin)){skip.blocked++;return;}
+      uni.push(coin);
+    });
+    if(!uni.length){labSetProg('⚠️ Нема универзум (exchangeInfo недостапен)');return;}
+    const btcKl=await labFetch(`${FAPI}/klines?symbol=BTCUSDT&interval=1d&limit=${LAB_KL}`);
+    // spot pairs that actually exist (avoids hundreds of failing requests for Alpha-only coins)
+    const sp=await labFetch(`${SAPI}/ticker/price`,15000);
+    const spotSet=new Set((sp||[]).map(x=>x.symbol));LAB.spotList=spotSet.size;
+    const btcByDay={};(btcKl||[]).forEach(k=>{btcByDay[lbDay(k[0])]=+k[4];});
+
+    // ── PHASE 1: klines ──
+    const data={};let spotOk=0,fail=0,short=0;
+    for(let i=0;i<uni.length;i+=4){
+      if(LAB.abort)break;
+      const chunk=uni.slice(i,i+4);
+      const res=await Promise.all(chunk.map(async coin=>{
+        const kl=await labFetch(`${FAPI}/klines?symbol=${coin}USDT&interval=1d&limit=${LAB_KL}`);
+        const spotSym=coin.replace(/^1000+/,'');
+        const sk=spotSet.has(spotSym+'USDT')?await labFetch(`${SAPI}/klines?symbol=${spotSym}USDT&interval=1d&limit=${LAB_KL}`,6000):null;
+        return[coin,kl,sk];
+      }));
+      res.forEach(([coin,kl,sk])=>{
+        if(!kl){fail++;return;}
+        if(kl.length&&kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);   // drop the open bar
+        if(kl.length<LAB_WARM+P.days+10){short++;return;}
+        const S=labSeries(kl,sk,btcByDay);if(S.spot)spotOk++;
+        data[coin]=S;
+      });
+      labSetProg(`🧪 ФАЗА 1/3 · 1d свеќи · ${Math.min(i+4,uni.length)}/${uni.length} · spot ${spotOk} · грешки ${fail} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(400);
+    }
+
+    // ── events + baseline ──
+    const events=[],base=[];let elig=0;
+    Object.entries(data).forEach(([coin,S])=>{
+      const n=S.n;let cl=null;const clusters=[];
+      for(let i=LAB_WARM;i<=n-1-P.days;i++){
+        const r7=labRet(S,i,7);if(r7==null||r7>=P.quiet){if(cl){clusters.push(cl);cl=null;}continue;}
+        elig++;
+        let mx=0,mi=i;for(let j=i+1;j<=i+P.days;j++)if(S.c[j]>mx){mx=S.c[j];mi=j;}
+        const g=mx/S.c[i]-1;
+        if(g>=P.pump){if(!cl)cl=[];cl.push({i,g,mi});}else if(cl){clusters.push(cl);cl=null;}
+      }
+      if(cl)clusters.push(cl);
+      let last=-1e9;
+      clusters.forEach(cs=>{const b=cs.reduce((a,x)=>S.c[x.i]<S.c[a.i]?x:a,cs[0]);if(b.i-last<P.cool)return;last=b.i;events.push({coin,i:b.i,g:b.g,dmax:b.mi-b.i});});
+      const lo=LAB_WARM,hi=n-1-P.days;
+      for(let k=0;k<LAB_BASE_PER_COIN&&hi>lo;k++){const i=lo+Math.floor(Math.random()*(hi-lo));const r7=labRet(S,i,7);if(r7!=null&&r7<P.quiet)base.push({coin,i});}
+    });
+    LAB.log.push(`events ${events.length} · baseline ${base.length} · eligible coin-days ${elig}`);
+
+    // ── PHASE 2: funding history (event coins + control set) ──
+    const evCoins=[...new Set(events.map(e=>e.coin))];
+    const others=Object.keys(data).filter(c=>!evCoins.includes(c)).sort(()=>Math.random()-0.5).slice(0,80);
+    const frCoins=[...evCoins.slice(0,240),...others];const ext={};
+    for(let i=0;i<frCoins.length;i++){
+      if(LAB.abort)break;
+      const coin=frCoins[i],fr=await labFetch(`${FAPI}/fundingRate?symbol=${coin}USDT&limit=1000`);
+      if(fr&&fr.length){const m={},k={};fr.forEach(x=>{const d=lbDay(x.fundingTime);m[d]=(m[d]||0)+parseFloat(x.fundingRate)*100;k[d]=(k[d]||0)+1;});Object.keys(m).forEach(d=>m[d]/=k[d]);(ext[coin]=ext[coin]||{}).fr=m;}
+      if(i%5===0)labSetProg(`🧪 ФАЗА 2/3 · funding историја · ${i+1}/${frCoins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(650);
+    }
+
+    // ── PHASE 3: OI + L/S (30 days) for coins with recent events + control ──
+    const lastDay=Math.max(...Object.values(data).map(S=>lbDay(S.T[S.n-1])));
+    const recentEv=[...new Set(events.filter(e=>lbDay(data[e.coin].T[e.i])>=lastDay-22).map(e=>e.coin))];
+    const ctrl=Object.keys(data).filter(c=>!recentEv.includes(c)).sort(()=>Math.random()-0.5).slice(0,80);
+    const oiCoins=[...recentEv,...ctrl];
+    for(let i=0;i<oiCoins.length;i+=3){
+      if(LAB.abort)break;
+      await Promise.all(oiCoins.slice(i,i+3).map(async coin=>{
+        const [oi,top,glb]=await Promise.all([
+          labFetch(`${FDAPI}/openInterestHist?symbol=${coin}USDT&period=1d&limit=30`),
+          labFetch(`${FDAPI}/topLongShortPositionRatio?symbol=${coin}USDT&period=1d&limit=30`),
+          labFetch(`${FDAPI}/globalLongShortAccountRatio?symbol=${coin}USDT&period=1d&limit=30`)]);
+        const e=ext[coin]=ext[coin]||{};
+        if(oi&&oi.length){e.oi={};oi.forEach(x=>{e.oi[lbDay(x.timestamp)]=parseFloat(x.sumOpenInterest);});}
+        if(top&&top.length){e.top={};top.forEach(x=>{e.top[lbDay(x.timestamp)]=parseFloat(x.longShortRatio);});}
+        if(glb&&glb.length){e.glb={};glb.forEach(x=>{e.glb[lbDay(x.timestamp)]=parseFloat(x.longShortRatio);});}
+      }));
+      labSetProg(`🧪 ФАЗА 3/3 · OI + L/S (30д) · ${Math.min(i+3,oiCoins.length)}/${oiCoins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(700);
+    }
+
+    // ── features ──
+    labSetProg('🧪 Пресметувам показатели...');
+    const fE1=events.map(e=>labFeatures(data[e.coin],e.i,ext[e.coin]));
+    const fE5=events.map(e=>e.i-5>=LAB_WARM?labFeatures(data[e.coin],e.i-5,ext[e.coin]):null).filter(Boolean);
+    const fB=base.map(b=>labFeatures(data[b.coin],b.i,ext[b.coin]));
+    events.forEach((e,k)=>{e.F=fE1[k];});
+    LAB.out=labReport(P,{uni,skip,data,spotOk,fail,short,events,base,elig,fE1,fE5,fB,ext,frCoins,oiCoins,t0,aborted:LAB.abort});
+  }catch(err){LAB.out='⚠️ PUMP LAB грешка: '+(err&&err.message||err)+'\n'+LAB.log.join('\n');}
+  finally{
+    LAB.running=false;labBtns();
+    if(LAB.view)document.getElementById('dgTa').value=LAB.out;
+    toast(LAB.out?'🧪 PUMP LAB готов — КОПИРАЈ':'🧪 PUMP LAB прекинат');
+  }
+}
+
+function labReport(P,R){
+  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const anyS=Object.values(R.data)[0];
+  const dfmt=t=>{const x=new Date(t);return `${x.getUTCFullYear()}-${pad(x.getUTCMonth()+1)}-${pad(x.getUTCDate())}`;};
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
+  o+=`PARAM: pump = max close within ${P.days}d after T0 >= +${Math.round(P.pump*100)}% | quiet: ret7(T0) < +${Math.round(P.quiet*100)}% | T0 = lowest close of the qualifying cluster | cooldown ${P.cool}d | warmup ${LAB_WARM} bars | 1d perp klines x${LAB_KL}${anyS?' (to '+dfmt(anyS.T[anyS.n-1])+')':''}\n`;
+  o+=`UNIVERSE: ${R.uni.length} perps | analysed ${Object.keys(R.data).length} | short history ${R.short} | fetch fail ${R.fail} | skipped: TradFi ${R.skip.tradfi}, delist/blocked ${R.skip.blocked}, stable ${R.skip.stable}, status ${R.skip.status}\n`;
+  const nFR=Object.values(R.ext).filter(e=>e.fr).length,nOI=Object.values(R.ext).filter(e=>e.oi).length;
+  o+=`DATA: spot klines ${R.spotOk} coins (spot pair list ${LAB.spotList||0}) | FR history ${nFR} coins (event coins + control) | OI/L-S 30d ${nOI} coins | rate-limit hits ${LAB.rateHit}\n`;
+  const br=R.elig?R.events.length/R.elig:0;
+  o+=`EVENTS: ${R.events.length} | eligible quiet coin-days ${R.elig} | BASE RATE ${(br*100).toFixed(3)}% per coin-day | baseline sample ${R.base.length} random quiet coin-days\n`;
+  o+=`READ: AUC = P(feature on event-day > on random day). 0.50 = no edge, >=0.60 useful, <=0.40 inverse (low values precede pumps). LIFT_HI/LO = how much more often events sit in the baseline's top/bottom quintile (1.0 = no edge). n = events with data.\n\n`;
+  o+=`FEATURES | AUC@T0 | AUC@T-5 | med EVENT | med RANDOM | LIFT_HI | LIFT_LO | n_ev | n_rand\n`;
+  const rows=LAB_FEATS.map(k=>{
+    const a=labAUC(R.fE1.map(F=>F[k]),R.fB.map(F=>F[k])),b=labAUC(R.fE5.map(F=>F[k]),R.fB.map(F=>F[k]));
+    return{k,a,b,edge:a.auc==null?-1:Math.abs(a.auc-0.5)};
+  }).sort((x,y)=>y.edge-x.edge);
+  rows.forEach(r=>{o+=`${r.k}|${lbF(r.a.auc)}|${lbF(r.b.auc)}|${lbF(r.a.medA,3)}|${lbF(r.a.medB,3)}|${lbF(r.a.liftHi)}|${lbF(r.a.liftLo)}|${r.a.na}|${r.a.nb}\n`;});
+  o+=`\nRULES (hypotheses) | P(rule|event) | P(rule|random) | LIFT | ~PRECISION per coin-day | n_ev | n_rand\n`;
+  LAB_RULES.forEach(rule=>{
+    const ev=R.fE1.map(rule.f).filter(x=>x!=null),bl=R.fB.map(rule.f).filter(x=>x!=null);
+    const pe=ev.length?ev.filter(Boolean).length/ev.length:null,pb=bl.length?bl.filter(Boolean).length/bl.length:null;
+    const lift=pe!=null&&pb?pe/pb:null;
+    o+=`${rule.k} [${rule.d}]|${lbF(pe)}|${lbF(pb)}|${lbF(lift)}|${lift!=null?(br*lift*100).toFixed(3)+'%':'—'}|${ev.length}|${bl.length}\n`;
+  });
+  // recent events
+  const ev=R.events.slice().sort((a,b)=>R.data[b.coin].T[b.i]-R.data[a.coin].T[a.i]).slice(0,50);
+  o+=`\nEVENTS (newest 50 of ${R.events.length}) | COIN | T0 | +MAX% | days→max | ret7 | bbw_pct | ribS_pct | obv_div | cvd_div | spot_div | rs_div | ma_stack | pull30 | impulse30 | fr7 | oi_chg7 | rules\n`;
+  ev.forEach(e=>{const F=e.F,S=R.data[e.coin];const fired=LAB_RULES.filter(r=>r.f(F)===true).map(r=>r.k).join(',')||'-';
+    o+=`${e.coin}|${dfmt(S.T[e.i])}|+${(e.g*100).toFixed(0)}|${e.dmax}|${lbF(F.ret7)}|${lbF(F.bbw_pct120)}|${lbF(F.ribS_pct120)}|${lbF(F.obv_div30)}|${lbF(F.cvd_div30)}|${lbF(F.spot_div30)}|${lbF(F.rs_div30)}|${lbF(F.ma_stack)}|${lbF(F.pull30)}|${lbF(F.impulse30)}|${lbF(F.fr7,4)}|${lbF(F.oi_chg7)}|${fired}\n`;});
+  // live candidates on the last closed day (FR/OI only where fetched)
+  const live=[];
+  Object.entries(R.data).forEach(([coin,S])=>{const i=S.n-1;if(i<LAB_WARM)return;const F=labFeatures(S,i,R.ext[coin]);
+    const fired=LAB_RULES.filter(r=>r.f(F)===true).map(r=>r.k);if(fired.length>=2)live.push({coin,F,fired});});
+  live.sort((a,b)=>b.fired.length-a.fired.length||(a.F.bbw_pct120??1)-(b.F.bbw_pct120??1));
+  o+=`\nLIVE (last closed 1d bar, >=2 rules fire, UNVALIDATED — rules have not passed this test yet) | ${live.length} coins, top 30\n`;
+  o+=`COIN | rules | ret7 | bbw_pct | obv_div | spot_div | rs_div | ma_stack | pull30 | fhi120\n`;
+  live.slice(0,30).forEach(x=>{const F=x.F;o+=`${x.coin}|${x.fired.join(',')}|${lbF(F.ret7)}|${lbF(F.bbw_pct120)}|${lbF(F.obv_div30)}|${lbF(F.spot_div30)}|${lbF(F.rs_div30)}|${lbF(F.ma_stack)}|${lbF(F.pull30)}|${lbF(F.fhi120)}\n`;});
+  o+=`\nNOTES: survivorship — only coins still listed today are in the sample (delisted pumps are missing). FR/OI/L-S features are computed only on coins where that history was fetched; OI and L/S exist for the last 30 days only, so their n is small. Overlapping pumps on one coin are merged (cooldown). Baseline days are random quiet days and may rarely include event days.\n`;
+  return o;
+}
+
+// ── UI ──
+function labBtns(){const s=document.getElementById('labStart'),x=document.getElementById('labStop');if(!s)return;s.style.display=LAB.running?'none':'inline-block';x.style.display=LAB.running?'inline-block':'none';}
+function labBar(on){const b=document.getElementById('labBar');if(b)b.style.display=on?'flex':'none';LAB.view=!!on;}
+function openLab(){
+  document.getElementById('dgOv').classList.add('open');labBar(true);labBtns();
+  document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB · v'+APP_VER+' '+APP_CODENAME;
+  document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
+`🧪 PUMP LAB — студија на пумпи
+
+Што прави:
+ 1. Ги зема дневните свеќи (~16 месеци) за сите perpetual коини (+ spot каде постои).
+ 2. Ги наоѓа сите пумпи: раст >= PUMP% во рок од DAYS дена, по мирна недела.
+ 3. Ги мери ~40 показатели на денот пред пумпата и 5 дена пред неа,
+    и ги споредува со случајни мирни денови (AUC, lift).
+ 4. Ги тестира хипотезите (COIL, RESET FLAG, SPOT LED, SHORT LOADED...).
+
+Трае ~8-10 минути. Може да го затвориш прозорецот — работи во позадина,
+само не ја затворај страницата.
+Не скенирај истовремено (Binance rate limit).
+Кога ќе заврши: КОПИРАЈ и прати.`;
+}
+function stopLab(){LAB.abort=true;toast('⏹ PUMP LAB — запирам по тековниот чекор...');}
+
+</script>
 </body>
 </html>
