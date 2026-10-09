@@ -627,7 +627,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
     · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
     · палење ≥<input id="labIgn" class="thresh-input" type="number" value="10" min="3" max="50" step="1" style="width:44px">%
-    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v4" selected>v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
+    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v5" selected>v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
+    · случај <input id="labCase" class="thresh-input" type="text" value="US,OGN" style="width:110px;text-transform:uppercase">
     <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
     <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
   </div>
@@ -1005,6 +1006,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  2026-10-08-d  CHASE + REGIME guards from LAB v3: ⚠CHASE tag on coins
 //    +20%/+40% over 24h (row, detail, digest), 🌡 breadth badge in the header
 //    (% of universe above 1d SMA20, hourly, cached) + REGIME line in digest.
+//  2026-10-09-a  PUMP LAB v5: the US.P sequence on 1h bars (~83 days) —
+//    OBV + A/D joint rise, A/D up while price sideways and perp CVD down
+//    (absorption), at a 7d low, then OI coins up. Forward test, event view
+//    with lead time, uncapped exit models (trailing), case timeline, live.
+//  2026-10-09-b  v5 + OBV_DIV: OGN.P (Oct 7-8) had OBV rising ~22h before the
+//    pump while A/D FELL — the joint rule would miss it. OBV_DIV = OBV flow
+//    > +5%, OBV near its 48h high, price -5%..+15%, any A/D. Case default US,OGN.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1013,7 +1021,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-08-d';
+const APP_BUILD='2026-10-09-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -5778,7 +5786,7 @@ async function runLabV3(){
   }
 }
 
-function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v4';return m==='v3'?runLabV3():runLabV4();}
+function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v5';return m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
 function labIgnRow(name,arr){
   const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
   const p=f=>arr.filter(f).length/n;
@@ -5866,7 +5874,12 @@ function openLab(){
   document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
 `🧪 PUMP LAB — избери студија во редот горе:
 
- v4 ПОВЛЕКУВАЊЕ (стандардно): по палење +10%, дали чекањето на повлекување
+ v5 1h OBV + A/D (стандардно): шемата од US — OBV и A/D растат заедно,
+    A/D расте додека цената стои и CVD паѓа (апсорпција), на 7д дно, па OI.
+    Тест нанапред, пред пумпа (време на предност), излези без горна граница,
+    временска линија за коините во полето „случај“ (US). ~10 мин.
+
+ v4 ПОВЛЕКУВАЊЕ: по палење +10%, дали чекањето на повлекување
     (−5%, −10%, 50% retrace, целосен retrace) во следните 3 дена
     дава подобар трејд од купување на затворањето? + LIVE нивоа.
 
@@ -6033,6 +6046,211 @@ function lab4Report(P,R){
   live.slice(0,30).forEach(e=>{const S=R.data[e.coin],lv=e.lv,f=['A','B','C','D'].filter(k=>e.t[k].fill).join(',')||'-';
     o+=`${e.coin}|${lbDate(S.D[e.g])}|+${(e.r*100).toFixed(1)}|${hot(e)?'Y':'n'}|${e.F.above_ma200===1?'above':e.F.above_ma200===0?'below':'—'}|${fmt(S.c[e.g])}|${fmt(lv.A)}|${fmt(lv.B)}|${fmt(lv.C)}|${fmt(lv.D)}|${fmt(S.l[e.g]*0.99)}|${f}\n`;});
   o+=`\nNOTES: daily bars only (intrabar order unknown -> fill day checks the stop only). Survivorship: delisted coins missing (would make longs look better than reality). OI split = last 30 days only.\n`;
+  return o;
+}
+
+// ══════════════════════════════════════════════════════════════
+// PUMP LAB v5 (2026-10-09-a) — 1h ACCUMULATION SEQUENCE (the US.P pattern).
+// User's read of US (2026-10-06..09, 1h): OBV + A/D turned up together at the low
+// (Oct 6 04:00) and A/D kept making higher highs while price went sideways and the
+// perp CVD kept falling (passive buyers absorbing market sells); OI in coins turned
+// up ~14h before the spike (Oct 8 19:00); CVD only turned during the pump.
+// v5 tests that sequence on ~83 days of 1h bars for the whole universe:
+//  rules (window W=48h): JOINT  = OBV flow & A/D flow both > +5% of volume
+//                        DIV    = JOINT & A/D near its 48h high & price -5%..+15% (sideways)
+//                        ABSORB = DIV & perp CVD flow <= 0 (market sells absorbed)
+//                        BOTTOM = DIV & price <= +25% above its 7d low & >= 20% under its 7d high
+//                        USPAT  = ABSORB & BOTTOM
+//                        OI_ARM = DIV within 24h & OI coins +5% in 6h & price |6h| <= 5%  (~20 days of OI only)
+//  1) forward test on every 4th hour: P(+30% / +50% / -20% within 96h | rule ON) vs OFF
+//  2) event view: pumps (+50% within 96h after a quiet 48h) — did the rule fire in the
+//     72h..6h before the move started, vs the same window before random hours? lead time.
+//  3) exits on rule ONSETS (first ON after 24h off), entry at the 1h close, risk = 10%:
+//     TP20/SL10 (old), TIME96 (SL10), TRAIL15 (SL10 + 15% trailing from the peak),
+//     RUN20 (SL10, after +20% trail 20%). Uncapped R: does letting winners run pay?
+//  4) CASE: the timeline of every rule onset for the coins you type (default US).
+// Nothing here votes in SCORE.
+// ══════════════════════════════════════════════════════════════
+const L5={W:48,H:96,X:240,BARS:2000,RULES:['JOINT','DIV','ABSORB','BOTTOM','USPAT','OI_ARM','AD_ONLY','OBV_ONLY','PX_UP','OBV_DIV']};
+function l5Series(kl){
+  const n=kl.length,T=new Float64Array(n),o=new Float32Array(n),h=new Float32Array(n),l=new Float32Array(n),c=new Float32Array(n),v=new Float32Array(n),tb=new Float32Array(n);
+  for(let i=0;i<n;i++){const k=kl[i];T[i]=k[0];o[i]=+k[1];h[i]=+k[2];l[i]=+k[3];c[i]=+k[4];v[i]=+k[5];tb[i]=+k[9];}
+  const AD=new Float64Array(n),OBV=new Float64Array(n),CVD=new Float64Array(n);let ad=0,ob=0,cv=0;
+  for(let i=0;i<n;i++){const r=h[i]-l[i];if(r>0)ad+=((c[i]-l[i])-(h[i]-c[i]))/r*v[i];if(i)ob+=c[i]>c[i-1]?v[i]:c[i]<c[i-1]?-v[i]:0;cv+=2*tb[i]-v[i];AD[i]=ad;OBV[i]=ob;CVD[i]=cv;}
+  return{n,T,o,h,l,c,v,tb,AD,OBV,CVD,oi:null};
+}
+function l5Pos(a,i,w){let mn=Infinity,mx=-Infinity;for(let j=i-w+1;j<=i;j++){const x=a[j];if(x<mn)mn=x;if(x>mx)mx=x;}return mx>mn?(a[i]-mn)/(mx-mn):0.5;}
+function l5Feat(X,i){
+  const W=L5.W;if(i<168)return null;
+  let sv=0;for(let j=i-W+1;j<=i;j++)sv+=X.v[j];if(!(sv>0))return null;
+  const F={};
+  F.ad_flow=(X.AD[i]-X.AD[i-W])/sv;F.obv_flow=(X.OBV[i]-X.OBV[i-W])/sv;F.cvd_flow=(X.CVD[i]-X.CVD[i-W])/sv;
+  F.px_ret=X.c[i]/X.c[i-W]-1;F.ad_pos=l5Pos(X.AD,i,W);F.obv_pos=l5Pos(X.OBV,i,W);F.px_pos=l5Pos(X.c,i,W);
+  let lo=Infinity,hi=0;for(let j=i-167;j<=i;j++){if(X.l[j]<lo)lo=X.l[j];if(X.h[j]>hi)hi=X.h[j];}
+  F.from_low=X.c[i]/lo-1;F.from_hi=X.c[i]/hi-1;F.ret6=X.c[i]/X.c[i-6]-1;
+  if(X.oi){const a=X.oi.get(X.T[i]),b=X.oi.get(X.T[i]-6*3600e3);F.oi6=a&&b?a/b-1:null;}else F.oi6=null;
+  return F;
+}
+function l5Bits(F,divRecent){
+  if(!F)return 0;
+  const joint=F.obv_flow>0.05&&F.ad_flow>0.05;
+  const div=joint&&F.ad_pos>=0.8&&F.px_ret>=-0.05&&F.px_ret<=0.15;
+  const absorb=div&&F.cvd_flow<=0;
+  const bottom=div&&F.from_low<=0.25&&F.from_hi<=-0.20;
+  let b=0;
+  if(joint)b|=1;if(div)b|=2;if(absorb)b|=4;if(bottom)b|=8;if(absorb&&bottom)b|=16;
+  if(F.oi6!=null&&divRecent&&F.oi6>=0.05&&Math.abs(F.ret6)<=0.05)b|=32;
+  if(F.ad_flow>0.05&&!(F.obv_flow>0.05))b|=64;
+  if(F.obv_flow>0.05&&!(F.ad_flow>0.05))b|=128;
+  if(F.px_ret>0.15)b|=256;
+  if(F.obv_flow>0.05&&F.obv_pos>=0.8&&F.px_ret>=-0.05&&F.px_ret<=0.15)b|=512;   // OGN type: OBV leads, A/D free
+  return b;
+}
+function l5Exit(X,i,model){
+  const E=X.c[i],SL=E*0.9,last=Math.min(X.n-1,i+L5.X);let peak=E;
+  for(let j=i+1;j<=last;j++){
+    let stop=SL;
+    if(model==='TRAIL15')stop=Math.max(SL,peak*0.85);
+    if(model==='RUN20'&&peak>=E*1.2)stop=Math.max(SL,peak*0.8);
+    if(X.l[j]<=stop){const px=X.o[j]<stop?X.o[j]:stop;return (px-E)/(E*0.1);}
+    if(model==='TP20'&&X.h[j]>=E*1.2)return 2;
+    if(X.h[j]>peak)peak=X.h[j];
+    if(model==='TIME96'&&j-i>=96)return (X.c[j]-E)/(E*0.1);
+  }
+  return (X.c[last]-E)/(E*0.1);
+}
+function l5Stats(arr){
+  const n=arr.length;if(!n)return '0|—|—|—|—|—';
+  const avg=arr.reduce((a,b)=>a+b,0)/n,se=Math.sqrt(arr.reduce((a,b)=>a+(b-avg)**2,0)/n/n),s=arr.slice().sort((a,b)=>a-b);
+  return `${n}|${(avg>=0?'+':'')+avg.toFixed(2)} ±${se.toFixed(2)}|${s[Math.floor(n/2)].toFixed(2)}|${lbPct(arr.filter(x=>x>0).length/n)}|${lbPct(arr.filter(x=>x>=3).length/n)}|${s[n-1].toFixed(1)}`;
+}
+
+async function runLabV5(){
+  LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
+  const t0=Date.now(),caseList=(document.getElementById('labCase')?.value||'US').toUpperCase().split(/[\s,;]+/).map(x=>x.replace(/USDT$/,'')).filter(Boolean);
+  try{
+    labSetProg('🧪 PUMP LAB v5 (1h OBV + A/D) · exchangeInfo...');
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(ei)buildClassMaps(ei);
+    const uni=[];let skipped=0;
+    (ei?.symbols||[]).forEach(s=>{if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
+      const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c)){skipped++;return;}uni.push(c);});
+    if(!uni.length){labSetProg('⚠️ Нема универзум');return;}
+    // ── PHASE 1: 2 x 1000 1h bars per coin ──
+    const data={};let fail=0;
+    for(let i=0;i<uni.length;i+=4){
+      if(LAB.abort)break;
+      const chunk=uni.slice(i,i+4);
+      await Promise.all(chunk.map(async coin=>{
+        const a=await labFetch(`${FAPI}/klines?symbol=${coin}USDT&interval=1h&limit=1000`);
+        if(!a||a.length<300){fail++;return;}
+        const b=a.length===1000?await labFetch(`${FAPI}/klines?symbol=${coin}USDT&interval=1h&limit=1000&endTime=${a[0][0]-1}`):[];
+        let kl=(b||[]).concat(a);if(kl.length&&kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);
+        if(kl.length<400){fail++;return;}
+        data[coin]=l5Series(kl);
+      }));
+      labSetProg(`🧪 ФАЗА 1/3 · 1h свеќи (2000) · ${Math.min(i+4,uni.length)}/${uni.length} · грешки ${fail} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(800);
+    }
+    // ── PHASE 2: OI in coins, 1h, last ~20 days ──
+    const coins=Object.keys(data);let oiOk=0;
+    for(let i=0;i<coins.length;i+=2){
+      if(LAB.abort)break;
+      await Promise.all(coins.slice(i,i+2).map(async coin=>{
+        const oi=await labFetch(`${FDAPI}/openInterestHist?symbol=${coin}USDT&period=1h&limit=500`);
+        if(oi&&oi.length){const m=new Map();oi.forEach(x=>m.set(+x.timestamp,parseFloat(x.sumOpenInterest)));data[coin].oi=m;oiOk++;}
+      }));
+      if(i%10===0)labSetProg(`🧪 ФАЗА 2/3 · OI 1h (~20 дена) · ${Math.min(i+2,coins.length)}/${coins.length} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(600);
+    }
+    // ── PHASE 3: per-hour rule bits ──
+    for(let k=0;k<coins.length;k++){
+      const X=data[coins[k]];const bits=new Uint16Array(X.n);let lastDiv=-1e9;
+      for(let i=168;i<X.n;i++){const F=l5Feat(X,i);let b=l5Bits(F,i-lastDiv<=24);if(b&2)lastDiv=i;
+        if(!(b&32)&&F&&F.oi6!=null&&i-lastDiv<=24&&F.oi6>=0.05&&Math.abs(F.ret6)<=0.05)b|=32;bits[i]=b;}
+      X.bits=bits;
+      if(k%20===0){labSetProg(`🧪 ФАЗА 3/3 · пресметувам правила · ${k+1}/${coins.length}`);await sleep(0);}
+    }
+    LAB.out=l5Report({uni,skipped,data,fail,oiOk,caseList,t0,aborted:LAB.abort});
+  }catch(err){LAB.out='⚠️ PUMP LAB v5 грешка: '+(err&&err.stack||err);}
+  finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 PUMP LAB v5 готов — КОПИРАЈ':'🧪 прекинат');}
+}
+
+function l5Report(R){
+  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const H=L5.H,coins=Object.keys(R.data),RN=L5.RULES;
+  const loc=t=>{const x=new Date(t);return `${pad(x.getMonth()+1)}-${pad(x.getDate())} ${pad(x.getHours())}:00`;};
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v5 · 1h OBV + A/D | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ':''}\n`;
+  const any=R.data[coins[0]];
+  o+=`DATA: ${coins.length} coins x up to ${L5.BARS} 1h bars${any?' ('+loc(any.T[0])+' .. '+loc(any.T[any.n-1])+' local)':''} | fail ${R.fail} | skipped ${R.skipped} | OI 1h ${R.oiOk} coins (~20 days) | rate-limit hits ${LAB.rateHit}\n`;
+  o+=`RULES (W=${L5.W}h): JOINT = OBV & A/D flow > +5% of volume | DIV = JOINT & A/D pos >= 0.8 & price -5%..+15% | ABSORB = DIV & perp CVD flow <= 0 | BOTTOM = DIV & <= +25% above 7d low & <= -20% under 7d high | USPAT = ABSORB & BOTTOM | OI_ARM = DIV in last 24h & OI coins +5%/6h & |price 6h| <= 5% | OBV_DIV = OBV flow > +5% & OBV pos >= 0.8 & price -5%..+15% (any A/D; OGN type) | controls: AD_ONLY, OBV_ONLY, PX_UP (price +15%/48h)\n`;
+
+  // ── 1) forward test, every 4th hour ──
+  const acc={};RN.forEach(k=>acc[k]={on:0,off:0,u30on:0,u30off:0,u50on:0,u50off:0,d20on:0,d20off:0});
+  let base=0,bu30=0,bu50=0,bd20=0;
+  coins.forEach(c=>{const X=R.data[c];for(let i=168;i<=X.n-1-H;i+=4){
+    let mx=0,mn=Infinity;for(let j=i+1;j<=i+H;j++){if(X.h[j]>mx)mx=X.h[j];if(X.l[j]<mn)mn=X.l[j];}
+    const u30=mx/X.c[i]-1>=0.3,u50=mx/X.c[i]-1>=0.5,d20=mn/X.c[i]-1<=-0.2;base++;bu30+=u30;bu50+=u50;bd20+=d20;
+    RN.forEach((k,b)=>{const a=acc[k];if(k==='OI_ARM'&&!X.oi)return;
+      if(k==='OI_ARM'&&!X.oi.get(X.T[i]))return;
+      if(X.bits[i]&(1<<b)){a.on++;a.u30on+=u30;a.u50on+=u50;a.d20on+=d20;}else{a.off++;a.u30off+=u30;a.u50off+=u50;a.d20off+=d20;}});
+  }});
+  o+=`\n1) FORWARD TEST — every 4th hour, labels within ${H}h | BASE: n ${base} | P(+30%) ${lbPct(bu30/base)} | P(+50%) ${lbPct(bu50/base)} | P(-20%) ${lbPct(bd20/base)}\n`;
+  o+=`RULE | ON share | P(+30|ON) | P(+30|OFF) | LIFT+30 | P(+50|ON) | LIFT+50 | P(-20|ON) | P(-20|OFF) | LIFT-20 | UP/DN (LIFT+30 / LIFT-20) | n ON\n`;
+  RN.forEach(k=>{const a=acc[k];if(!a.on){o+=`${k}|0|—|—|—|—|—|—|—|—|—|0\n`;return;}
+    const p=(x,n)=>n?x/n:null,u=p(a.u30on,a.on),uo=p(a.u30off,a.off),u5=p(a.u50on,a.on),u5o=p(a.u50off,a.off),dd=p(a.d20on,a.on),ddo=p(a.d20off,a.off);
+    const l30=uo?u/uo:null,l50=u5o?u5/u5o:null,ld=ddo?dd/ddo:null;
+    o+=`${k}|${lbPct(a.on/(a.on+a.off))}|${lbPct(u)}|${lbPct(uo)}|${lbF(l30)}|${lbPct(u5)}|${lbF(l50)}|${lbPct(dd)}|${lbPct(ddo)}|${lbF(ld)}|${lbF(l30!=null&&ld?l30/ld:null)}|${a.on}\n`;});
+
+  // ── 2) event view ──
+  const ev=[];
+  coins.forEach(c=>{const X=R.data[c];let last=-1e9;
+    for(let i=168+72;i<=X.n-1-H;i++){
+      if(i-last<168)continue;if(X.c[i]/X.c[i-48]-1>=0.15)continue;
+      let mx=0;for(let j=i+1;j<=i+H;j++)if(X.h[j]>mx)mx=X.h[j];if(mx/X.c[i]-1<0.5)continue;
+      let A=-1;for(let j=i+1;j<=i+H;j++)if(X.h[j]>=X.c[i]*1.15){A=j;break;}if(A<0||A-72<168)continue;
+      ev.push({c,X,A});last=i;}});
+  const look=(X,A,b)=>{let first=-1;for(let j=A-72;j<=A-6;j++)if(X.bits[j]&(1<<b)){first=j;break;}return first;};
+  const rnd=[];coins.forEach(c=>{const X=R.data[c];for(let k=0;k<8;k++){const A=168+72+Math.floor(Math.random()*(X.n-1-H-168-72));if(A>240)rnd.push({X,A});}});
+  o+=`\n2) EVENT VIEW — ${ev.length} pumps (+50% within ${H}h after a quiet 48h; anchor = first hour +15% above the start). Did the rule fire in the window [anchor-72h, anchor-6h]? vs ${rnd.length} random anchors\n`;
+  o+=`RULE | P(fired | pump) | P(fired | random) | ENRICH | median lead h (pump)\n`;
+  RN.forEach((k,b)=>{
+    const evs=k==='OI_ARM'?ev.filter(e=>e.X.oi&&e.X.oi.get(e.X.T[e.A-72])):ev,rs=k==='OI_ARM'?rnd.filter(e=>e.X.oi&&e.X.oi.get(e.X.T[e.A-72])):rnd;
+    if(!evs.length||!rs.length){o+=`${k}|—|—|—|— (n ${evs.length})\n`;return;}
+    const leads=[];let fe=0;evs.forEach(e=>{const f=look(e.X,e.A,b);if(f>=0){fe++;leads.push(e.A-f);}});
+    const fr=rs.filter(e=>look(e.X,e.A,b)>=0).length;
+    leads.sort((a,b)=>a-b);
+    o+=`${k}|${lbPct(fe/evs.length)}|${lbPct(fr/rs.length)}|${lbF(fr?(fe/evs.length)/(fr/rs.length):null)}|${leads.length?leads[Math.floor(leads.length/2)]:'—'} (n ${evs.length})\n`;});
+
+  // ── 3) exits on onsets ──
+  const models=['TP20','TIME96','TRAIL15','RUN20'];
+  o+=`\n3) EXITS on rule ONSETS (first ON after >= 24h off), entry = 1h close, risk 10% (SL -10%), up to ${L5.X}h. R uncapped.\n`;
+  o+=`SET | MODEL | n | avg R ±se | median R | P(R>0) | P(R>=3) | max R\n`;
+  const sets={RANDOM:[]};['JOINT','DIV','ABSORB','USPAT','OI_ARM','OBV_DIV'].forEach(k=>sets[k]=[]);
+  coins.forEach(c=>{const X=R.data[c];const lastOn={};
+    for(let i=168;i<=X.n-1-L5.X;i++){
+      ['JOINT','DIV','ABSORB','USPAT','OI_ARM','OBV_DIV'].forEach(k=>{const b=1<<RN.indexOf(k);if(X.bits[i]&b){if(i-(lastOn[k]??-1e9)>24)sets[k].push({X,i});lastOn[k]=i;}});
+    }
+    for(let k=0;k<6;k++){const i=168+Math.floor(Math.random()*(X.n-1-L5.X-168));if(i>168)sets.RANDOM.push({X,i});}
+  });
+  Object.entries(sets).forEach(([name,arr])=>{models.forEach(m=>{o+=`${name}|${m}|${l5Stats(arr.map(e=>l5Exit(e.X,e.i,m)))}\n`;});});
+  o+=`READ: a rule is tradable only if some exit model gives avg R > 0 by > 2x ±se AND beats RANDOM with the same model.\n`;
+
+  // ── 4) case timeline ──
+  R.caseList.forEach(cn=>{const X=R.data[cn];if(!X){o+=`\nCASE ${cn}: нема податоци\n`;return;}
+    o+=`\n4) CASE ${cn} — rule onsets in the last 10 days (local time) | time | rules switching ON | price | A/D flow | OBV flow | CVD flow | px 48h | OI 6h\n`;
+    const from=Math.max(168,X.n-240);let prev=X.bits[from-1]||0,lines=0;
+    for(let i=from;i<X.n;i++){const b=X.bits[i],on=b&~prev;prev=b;if(!on)continue;if(++lines>60){o+='... (cut at 60 lines)\n';break;}
+      const names=RN.filter((k,j)=>on&(1<<j));const F=l5Feat(X,i);
+      o+=`${loc(X.T[i])}|${names.join(',')}|${fmt(X.c[i])}|${lbF(F?.ad_flow)}|${lbF(F?.obv_flow)}|${lbF(F?.cvd_flow)}|${lbPct(F?.px_ret)}|${F?.oi6==null?'—':lbPct(F.oi6)}\n`;}
+    const F=l5Feat(X,X.n-1);o+=`now ${loc(X.T[X.n-1])} | price ${fmt(X.c[X.n-1])} | A/D ${lbF(F?.ad_flow)} | OBV ${lbF(F?.obv_flow)} | CVD ${lbF(F?.cvd_flow)} | px48 ${lbPct(F?.px_ret)}\n`;
+  });
+
+  // ── 5) live ──
+  const live=[];coins.forEach(c=>{const X=R.data[c],b=X.bits[X.n-1];if(b&(2|4|16|32|512)){const F=l5Feat(X,X.n-1);let since=X.n-1;while(since>168&&(X.bits[since-1]&2))since--;live.push({c,b,F,since,X});}});
+  live.sort((a,b)=>((b.b&16)-(a.b&16))||((b.b&32)-(a.b&32))||((b.b&4)-(a.b&4))||(b.F.ad_flow-a.F.ad_flow));
+  o+=`\n5) LIVE — last closed 1h bar, DIV/ABSORB/USPAT/OI_ARM ON (UNVALIDATED until 1-3 say so) | ${live.length} coins, top 30 | COIN | rules | DIV since | A/D | OBV | CVD | px48 | from 7d low | OI 6h\n`;
+  live.slice(0,30).forEach(x=>{const F=x.F;o+=`${x.c}|${RN.filter((k,j)=>x.b&(1<<j)).join(',')}|${loc(x.X.T[x.since])}|${lbF(F.ad_flow)}|${lbF(F.obv_flow)}|${lbF(F.cvd_flow)}|${lbPct(F.px_ret)}|${lbPct(F.from_low)}|${F.oi6==null?'—':lbPct(F.oi6)}\n`;});
+  o+=`\nNOTES: ~83 days only (1h history cost). OI rules only on the last ~20 days. Entries at the 1h close; the stop is checked before the high on every bar (conservative). Survivorship: delisted coins missing.\n`;
   return o;
 }
 
