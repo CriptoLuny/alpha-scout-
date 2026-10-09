@@ -563,6 +563,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
     <div class="ftab"               onclick="setFil('clean',this)" style="border-color:rgba(0,255,136,.45);color:var(--green);font-weight:800">✅ CLEAN15</div>
     <div class="ftab f-btcfree"     onclick="setFil('btcfree',this)">🆓 BTC FREE</div>
+    <div class="ftab"               onclick="setFil('obvdiv',this)" title="OBV расте при рамна цена (1h, 48h) — помал ризик за лонг, не сигнал за пумпа">📈 OBV DIV</div>
     <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
     <div class="ftab f-diup"      onclick="setFil('diup',this)">▲DI</div>
     <div class="ftab f-didn"      onclick="setFil('didn',this)">▼DI</div>
@@ -1013,6 +1014,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  2026-10-09-b  v5 + OBV_DIV: OGN.P (Oct 7-8) had OBV rising ~22h before the
 //    pump while A/D FELL — the joint rule would miss it. OBV_DIV = OBV flow
 //    > +5%, OBV near its 48h high, price -5%..+15%, any A/D. Case default US,OGN.
+//  2026-10-09-c  OBV_DIV in the scanner (row tag 📈OBV↑, filter, detail, digest).
+//    Same definition as LAB v5, on closed 1h bars (48h window), reusing the 1h
+//    fetch already done for BTC correlation. LAB v5 (523 coins, 83 days): it
+//    does NOT predict pumps (fired before 75.9% of pumps vs 72.7% of random
+//    hours) but P(-20% in 96h) is 2.9% when ON vs 4.7% OFF = lower long risk.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1021,7 +1027,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-09-b';
+const APP_BUILD='2026-10-09-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1752,6 +1758,7 @@ async function doScan(){
         if(r.jmaDwma?.crossUp)S._partial[c].jmaDwmaCrossUp=true;
         if((r.confScore||0)>(S._partial[c].confScore||0)){S._partial[c].confScore=r.confScore;S._partial[c].confDir=r.confDir;S._partial[c].confLabel=r.confLabel;S._partial[c].confVotes=r.confVotes;}
         if(r.btcCorr!==null&&r.btcCorr!==undefined)S._partial[c].btcCorr=r.btcCorr;
+        if(r.obvDiv)S._partial[c].obvDiv=r.obvDiv;
         if(r.jmaDwma?.crossDown)S._partial[c].jmaDwmaCrossDown=true;
         if(r.jmaDwma?.jmaAbove)S._partial[c].jmaAbove=true;
         if(r.sqzFired)S._partial[c].sqzFiredAny=true;
@@ -1999,21 +2006,39 @@ async function ensureBtcReference() {
   await _btcFetchPromise;
 }
 
+// 2026-10-09-c: full 1h bars (for OBV_DIV), same request + same per-hour cache as the closes
+let _coin1hBars = {};
+async function getCoin1hBars(coin){
+  const hNow=Math.floor(Date.now()/3600000),hit=_coin1hBars[coin];
+  if(hit&&hit.h===hNow)return hit.k;
+  try{
+    const kl=await apiFetch(`/klines?symbol=${coin}USDT&interval=1h&limit=150`);
+    if(kl&&kl.length>=20){_coin1hBars[coin]={h:hNow,k:kl};_coin1hCache[coin]={h:hNow,c:kl.map(k=>parseFloat(k[4]))};return kl;}
+  }catch(e){}
+  return null;
+}
+// OBV_DIV (LAB v5): on CLOSED 1h bars, W=48 — OBV flow > +5% of volume, OBV in the top 20% of its
+// 48h range, price -5%..+15% over the same 48h. A/D is not required (OGN type).
+function obvDiv1h(kl){
+  if(!kl)return null;
+  const k=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl,n=k.length,W=48;
+  if(n<W+2)return null;
+  const c=k.map(x=>+x[4]),v=k.map(x=>+x[5]),obv=[0];
+  for(let i=1;i<n;i++)obv.push(obv[i-1]+(c[i]>c[i-1]?v[i]:c[i]<c[i-1]?-v[i]:0));
+  const i=n-1;let sv=0,mn=Infinity,mx=-Infinity;
+  for(let j=i-W+1;j<=i;j++){sv+=v[j];if(obv[j]<mn)mn=obv[j];if(obv[j]>mx)mx=obv[j];}
+  if(!(sv>0))return null;
+  const flow=(obv[i]-obv[i-W])/sv,pos=mx>mn?(obv[i]-mn)/(mx-mn):0.5,px=c[i]/c[i-W]-1;
+  return{on:flow>0.05&&pos>=0.8&&px>=-0.05&&px<=0.15,flow,pos,px};
+}
 async function getCoin1hCloses(coin, tfBeingScanned, closesFromCurrentTf) {
   // reuse if we're already scanning 1h (closes already has up to 150 1h candles)
   if (tfBeingScanned === '1h' && closesFromCurrentTf && closesFromCurrentTf.length >= 20) return closesFromCurrentTf;
   const hNow=Math.floor(Date.now()/3600000);
   const hit=_coin1hCache[coin];
   if (hit && hit.h===hNow) return hit.c;   // 2026-10-07-a: valid only inside the same 1h bar
-  try {
-    const kl = await apiFetch(`/klines?symbol=${coin}USDT&interval=1h&limit=150`);
-    if (kl && kl.length >= 20) {
-      const c1h = kl.map(k => parseFloat(k[4]));
-      _coin1hCache[coin] = {h:hNow, c:c1h};
-      return c1h;
-    }
-  } catch (e) {}
-  return null;
+  const kl = await getCoin1hBars(coin);       // 2026-10-09-c: one request feeds closes + OBV_DIV
+  return kl ? kl.map(k => parseFloat(k[4])) : null;
 }
 
 function calcBtcCorrelation(coinCloses, btcCloses) {
@@ -2499,7 +2524,9 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // Coins with score===0 get filtered out a few lines below anyway, so fetching their 1h
   // data would be wasted bandwidth. This naturally limits the extra fetch to the "interesting"
   // subset (~tens, not hundreds, of coins) instead of every single scanned symbol.
+  let obvDiv=null;
   if(coin!=='BTC'&&score>0){
+    try{obvDiv=obvDiv1h(await getCoin1hBars(coin));}catch(e){}
     await ensureBtcReference();
     if(_btcCloses1h&&_btcCloses1h.length>=20){
       const coinCloses1h=await getCoin1hCloses(coin,tf,closes);
@@ -2585,7 +2612,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
     oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
-    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,obvDiv,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -2621,6 +2648,7 @@ const FILTER_MAP={
   conf:   s=>s.confScore>=4,
   clean:  s=>{const r=_clean[s.coin];return !!(r&&r.grade!=='WAIT');},
   btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
+  obvdiv: s=>!!(s.obvDiv&&s.obvDiv.on),
   cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
   cciobv2650:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S2650'),
   tradfi: s=>isTradFi(s.coin),
@@ -2683,6 +2711,7 @@ function rowHTML(s){
   if(blk)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.22);color:var(--red);border:1px solid var(--red);font-weight:700">⛔${blk}</span>`);
   // CHASE (LAB v3): big up-day = negative expectancy for a new long
   if(!blk&&typeof chaseTagHTML==='function'){const ch=chaseTagHTML(s);if(ch)tags.push(ch);}
+  if(!blk&&s.obvDiv&&s.obvDiv.on)tags.push(`<span class="ctag" title="OBV_DIV (1h, 48h): OBV расте при рамна цена. LAB v5: НЕ најавува пумпа, но P(−20% за 4 дена) 2.9% наспроти 4.7% — помал ризик за лонг" style="background:rgba(0,229,255,.10);color:var(--accent);border:1px solid rgba(0,229,255,.45)">📈OBV↑</span>`);
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
@@ -2812,7 +2841,7 @@ function populateDetail(s){
   const coin=s.coin;
   document.getElementById('dpSym').textContent=coin;
   const blk=blockReason(coin);
-  document.getElementById('dpAlphaBadge').innerHTML=(blk?`<div class="dp-alpha-badge" style="background:rgba(255,34,68,.18);color:var(--red);border-color:var(--red)">⛔ НЕ ВЛЕГУВАЈ · ${blk}</div>`:'')+((typeof chaseInfo==='function'&&chaseInfo(s.priceChg))?`<div class="dp-alpha-badge" style="background:rgba(255,102,0,.14);color:var(--orange);border-color:var(--orange)">⚠ ${chaseInfo(s.priceChg).tag} · ${chaseInfo(s.priceChg).txt}</div>`:'')+(s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'');
+  document.getElementById('dpAlphaBadge').innerHTML=(blk?`<div class="dp-alpha-badge" style="background:rgba(255,34,68,.18);color:var(--red);border-color:var(--red)">⛔ НЕ ВЛЕГУВАЈ · ${blk}</div>`:'')+((s.obvDiv&&s.obvDiv.on)?`<div class="dp-alpha-badge" style="background:rgba(0,229,255,.10);color:var(--accent);border-color:rgba(0,229,255,.45)">📈 OBV_DIV 1h · проток +${(s.obvDiv.flow*100).toFixed(0)}% · цена 48h ${(s.obvDiv.px*100).toFixed(1)}% · помал ризик од −20%, не сигнал за пумпа</div>`:'')+((typeof chaseInfo==='function'&&chaseInfo(s.priceChg))?`<div class="dp-alpha-badge" style="background:rgba(255,102,0,.14);color:var(--orange);border-color:var(--orange)">⚠ ${chaseInfo(s.priceChg).tag} · ${chaseInfo(s.priceChg).txt}</div>`:'')+(s.isAlpha?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'');
   document.getElementById('dpSub').textContent=`${coin}USDT PERP . Најдобар TF: ${s.tf} . ${s.ts}`;
   const fb=document.getElementById('dpFavBtn');fb.textContent=s.isFav?'★':'☆';fb.className='dp-fav-btn'+(s.isFav?' on':'');
   const pc=s.priceChg>=0;
@@ -3410,6 +3439,7 @@ function buildDigest(){
     +(thr.length?' | '+thr.join(' '):'')+' | sort='+S.sort
     +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
   if(typeof regimeLine==='function')o+=regimeLine();
+  o+='OBV_DIV[1h] = OBV flow > +5% of 48h volume, OBV in top 20% of its 48h range, price -5%..+15% (LAB v5: no pump edge, lower dump risk: P(-20%/96h) 2.9% vs 4.7%).\n';
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
@@ -3502,6 +3532,7 @@ function buildDigest(){
     const oiStale=s.oiTs&&((s.tsMs||Date.now())-s.oiTs)>2*TF_MIN[OI_TF[s.tf]||'15m']*60000;   // vs the row's scan time, not copy time
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
     if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
+    if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
     const tags=tl.join(';');
     o+=[
       s.coin,
@@ -4853,6 +4884,7 @@ function helpSections(){
     {tag:'📊 POC',col:a,what:'Цена ±2% од Point of Control (ниво со најголем волумен, 150 свеќи). SUP = над POC, RES = под. +1 score.'},
     {tag:'✅ CLEAN15',col:g,what:'Само коини со A или B чист влез на 15m (види секција CLEAN15).'},
     {tag:'⚡ CONFLUENCE',col:y,what:'≥4 индикатори гласаат во иста насока и се повеќе од спротивните. Гласачи: MA SQ, COIL, JMA/DWMA, Fibo, POC, DI крос, CVD, SQZMOM, Liq Hunt, OI тренд (реален), FR, CCIOBV, + бонус за BTC независност.',action:'Најсилен сигнал. +3 score. Моментумот НЕ гласа.'},
+    {tag:'📈 OBV DIV',col:a,what:'OBV_DIV на затворени 1h свеќи (48h): OBV проток > +5% од волуменот, OBV во горните 20% од опсегот, цена −5%..+15%.',action:'LAB v5: НЕ најавува пумпа (се пали пред 76% од пумпите, но и пред 73% од обичните моменти). Корисно како филтер за ризик: P(−20% за 4 дена) 2.9% наспроти 4.7%.'},
     {tag:'🆓 BTC FREE',col:g,what:'|корелација со BTC| < 0.4 (Pearson, фиксно 1h, 150 свеќи, без разлика на TF).',action:'Сигналите се „чисти“, не BTC шум. Дава бонус глас во CONFLUENCE.'},
     {tag:'🎯 SQZMOM',col:'#00c896',what:'SQZMOM_LB_AO: squeeze активен ИЛИ пукнал сигнал (SQZ▲▼, ADX▲▼, DI крос).',when:'SQZ▲ = squeeze + Momentum↑ + AO↑ + ADX>20 + DI+>20.',action:'SQZ▲/▼ +2 score, ADX брејк +1.'},
     {tag:'▲DI / ▼DI',col:g,what:'Свеж крос DI+ над DI− (▲) или обратно (▼).',when:'4h/12h/1d/1w = последната 1 свеќа, 1h и помали = последните 2.',action:'Појак ако ADX>20.'},
