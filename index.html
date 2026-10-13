@@ -1029,6 +1029,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    at n=100 (the first 100 symbols, not a random sample) and that partial value
 //    was saved and shown. Now: saved only if >= 90% of the universe was read;
 //    an interrupted run retries 2 min later; old partial caches are ignored.
+//  2026-10-13-c  REGIME fix 2: S.scanning stays true for the whole LIVE mode
+//    (auto-rescan until STOP), so the badge never computed while the scanner
+//    was left running. New S.passBusy = true only while a scan pass is actually
+//    fetching; REGIME waits for that, not for the live mode.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1037,7 +1041,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-13-b';
+const APP_BUILD='2026-10-13-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1680,7 +1684,9 @@ function stopScan(){
   if(Object.keys(S._partial).length>0){S.signals=assignMomentumRanks(buildSignals(S._partial));renderList();toast(`⏹ ${S.signals.length} сигнали`);}
 }
 
-async function doScan(){
+// 2026-10-13-c: S.passBusy marks an actual scan pass (S.scanning = live mode, stays true between passes)
+async function doScan(){S.passBusy=true;try{return await doScanPass();}finally{S.passBusy=false;}}
+async function doScanPass(){
   document.getElementById('prog').style.display='block';
   setP('Вчитувам Alpha листа + тикери...',3);
   _btcCloses1h=null;_coin1hCache={}; // refresh BTC reference + per-coin 1h cache each new scan
@@ -6372,7 +6378,7 @@ function regimeInfo(){
 }
 async function computeRegime(){
   if(REG.busy)return;
-  if((typeof LAB!=='undefined'&&LAB.running)||(typeof S!=='undefined'&&S.scanning)){setTimeout(computeRegime,5*60000);return;}
+  if((typeof LAB!=='undefined'&&LAB.running)||(typeof S!=='undefined'&&S.passBusy)){setTimeout(computeRegime,2*60000);return;}
   REG.busy=true;renderRegime();
   try{
     const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(!ei)throw 0;
@@ -6382,7 +6388,7 @@ async function computeRegime(){
       const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c))return;uni.push(c);});
     let above=0,tot=0,short=0,interrupted=false;const r7=[];
     for(let i=0;i<uni.length;i+=5){
-      if(typeof S!=='undefined'&&S.scanning){interrupted=true;break;}   // never compete with a scan; partial = discarded
+      if(typeof S!=='undefined'&&S.passBusy){interrupted=true;break;}   // never compete with a scan pass; partial = discarded
       const res=await Promise.all(uni.slice(i,i+5).map(c=>labFetch(`${FAPI}/klines?symbol=${c}USDT&interval=1d&limit=22`,6000)));
       res.forEach(kl=>{if(kl&&kl.length<21){short++;return;}if(!kl)return;if(kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);if(kl.length<20)return;
         const c=kl.map(k=>+k[4]),last=c[c.length-1],sma=c.slice(-20).reduce((a,b)=>a+b,0)/20;tot++;if(last>sma)above++;
