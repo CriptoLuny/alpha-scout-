@@ -1025,6 +1025,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    1h openInterestHist (25 points) for its own rows only (<= ~15 requests,
 //    cached per hour) and prints OI coins change over 24h and 6h, plus a tag
 //    when |24h| >= 25%. Renders '…' first, refreshes itself when loaded.
+//  2026-10-13-b  REGIME fix: a scan that started mid-computation cut the breadth
+//    at n=100 (the first 100 symbols, not a random sample) and that partial value
+//    was saved and shown. Now: saved only if >= 90% of the universe was read;
+//    an interrupted run retries 2 min later; old partial caches are ignored.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1033,7 +1037,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-13-a';
+const APP_BUILD='2026-10-13-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6347,7 +6351,7 @@ function chaseTagHTML(s){
 }
 
 const REG={breadth:null,mkt7:null,n:0,ts:0,busy:false};
-try{const r=JSON.parse(localStorage.getItem('regime')||'null');if(r&&Date.now()-r.ts<90*60000)Object.assign(REG,r);}catch(e){}
+try{const r=JSON.parse(localStorage.getItem('regime')||'null');if(r&&r.full&&Date.now()-r.ts<90*60000)Object.assign(REG,r);}catch(e){}   // partial (pre -b) caches ignored
 function regimeState(){if(REG.breadth==null)return null;return REG.breadth>=0.6?'ON':REG.breadth<=0.3?'OFF':'MID';}
 function renderRegime(){
   const el=document.getElementById('regimeBadge');if(!el)return;
@@ -6376,17 +6380,19 @@ async function computeRegime(){
     const uni=[];
     ei.symbols.forEach(s=>{if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
       const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c))return;uni.push(c);});
-    let above=0,tot=0;const r7=[];
+    let above=0,tot=0,short=0,interrupted=false;const r7=[];
     for(let i=0;i<uni.length;i+=5){
-      if(typeof S!=='undefined'&&S.scanning)break;   // never compete with a scan; keep what we have
+      if(typeof S!=='undefined'&&S.scanning){interrupted=true;break;}   // never compete with a scan; partial = discarded
       const res=await Promise.all(uni.slice(i,i+5).map(c=>labFetch(`${FAPI}/klines?symbol=${c}USDT&interval=1d&limit=22`,6000)));
-      res.forEach(kl=>{if(!kl||kl.length<21)return;if(kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);if(kl.length<20)return;
+      res.forEach(kl=>{if(kl&&kl.length<21){short++;return;}if(!kl)return;if(kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);if(kl.length<20)return;
         const c=kl.map(k=>+k[4]),last=c[c.length-1],sma=c.slice(-20).reduce((a,b)=>a+b,0)/20;tot++;if(last>sma)above++;
         if(c.length>=8)r7.push(last/c[c.length-8]-1);});
       await sleep(500);
     }
-    if(tot>=100){r7.sort((a,b)=>a-b);Object.assign(REG,{breadth:above/tot,mkt7:r7[Math.floor(r7.length/2)],n:tot,ts:Date.now()});
-      try{localStorage.setItem('regime',JSON.stringify({breadth:REG.breadth,mkt7:REG.mkt7,n:REG.n,ts:REG.ts}));}catch(e){}}
+    if(!interrupted&&tot>=0.9*(uni.length-short)){   // new listings (<21 daily bars) don't count against coverage
+      r7.sort((a,b)=>a-b);Object.assign(REG,{breadth:above/tot,mkt7:r7[Math.floor(r7.length/2)],n:tot,ts:Date.now()});
+      try{localStorage.setItem('regime',JSON.stringify({breadth:REG.breadth,mkt7:REG.mkt7,n:REG.n,ts:REG.ts,full:true}));}catch(e){}}
+    else setTimeout(()=>{REG.busy=false;computeRegime();},2*60000);   // interrupted or too many failed fetches -> retry
   }catch(e){}
   REG.busy=false;renderRegime();
 }
