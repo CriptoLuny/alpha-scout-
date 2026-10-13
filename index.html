@@ -1019,6 +1019,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    fetch already done for BTC correlation. LAB v5 (523 coins, 83 days): it
 //    does NOT predict pumps (fired before 75.9% of pumps vs 72.7% of random
 //    hours) but P(-20% in 96h) is 2.9% when ON vs 4.7% OFF = lower long risk.
+//  2026-10-13-a  OI24h◆/6h column in the digest. On 1d/1w scans the OI point
+//    lags up to a full day: RSR.P (Oct 12 14:00) went from 1.0B to 6.2B coins
+//    (+494%) while the 1w digest still showed OI◆ -13%. The digest now pulls
+//    1h openInterestHist (25 points) for its own rows only (<= ~15 requests,
+//    cached per hour) and prints OI coins change over 24h and 6h, plus a tag
+//    when |24h| >= 25%. Renders '…' first, refreshes itself when loaded.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1027,7 +1033,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-09-c';
+const APP_BUILD='2026-10-13-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3425,6 +3431,7 @@ function buildDigest(){
   // Favorites bypass the top-12 cut, but only if they survived the active filters.
   const favs=view.filter(s=>s.isFav&&!top.includes(s));
   const rows=[...top,...favs];
+  _dgRows=rows;
   const CL={CRYPTO:'CRY',STOCK:'ACC',COMMODITY:'COM',PREIPO:'IPO',CINDEX:'IDX',RWA:'RWA'};
   const n=x=>(x===null||x===undefined||isNaN(x))?'—':((x>=0?'+':'')+x.toFixed(1));
 
@@ -3460,6 +3467,7 @@ function buildDigest(){
   o+='OI◆ = real coin flow. DOM = FLOW (real positions) vs REVAL (price revaluation).\n';
   {const pO=OI_TF[S.tf==='all'?'15m':S.tf]||'15m',m=TF_MIN[pO]*OI_LOOKBACK;
    const lb=m>=1440?(m/1440)+'d':m>=60?(m/60)+'h':m+'m';
+   o+='OI24h◆/6h = OI in COINS, change over the last 24h / 6h from 1h openInterestHist (live; the TF OI above can lag up to one TF period — on 1d/1w that is a whole day). "…" = still loading.\n';
    o+='LOOKBACK: dOI$%/dOI◆%/DOM = last OI point vs '+OI_LOOKBACK+' periods earlier ('+OI_LOOKBACK+'×'+pO+' = '+lb+'). '
      +'LIQ test = last 3 OI periods. SHAPE/oiPK = last 30 periods. BASE◆% = OI coins vs the FIRST point of the window '
      +'(same window as fHI/fLO; per-row start in BASE@). OI@ = stamp of the last openInterestHist point -- it LAGS the live PX by up to one period.\n';
@@ -3522,7 +3530,7 @@ function buildDigest(){
 
   o+='TAGS are computed on the row TF (JMA tags carry it: JMA X UP[15m]); TRND15/LOC15 come from CLEAN15 (closed 15m + 1h), '
     +'n/a = coin not in the CLEAN15 shortlist. OI@ "!" = last OI point older than 2 periods (stale).\n';
-  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|OI@|dOI$%|dOI◆%|BASE◆%|BASE@|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
+  o+='COLS: SYM|CLS|A/F|PX|24h%|TF%|bars|fHI%|fLO%|OI$|OI@|dOI$%|dOI◆%|OI24h◆/6h|BASE◆%|BASE@|DOM|SHAPE|oiPK%|MOMz|VALz|MSLP|MDIR|MST|REG|CVD%|CVDt|'
     +'TAKER%B|FR%|L/S|BTC|VOL24|SCORE|DIR|TRND15|LOC15|TAGS\n\n';
 
   rows.forEach(s=>{
@@ -3532,6 +3540,7 @@ function buildDigest(){
     const oiStale=s.oiTs&&((s.tsMs||Date.now())-s.oiTs)>2*TF_MIN[OI_TF[s.tf]||'15m']*60000;   // vs the row's scan time, not copy time
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
     if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
+    {const q=_oi24[s.coin];if(q&&q.h===Math.floor(Date.now()/3600000)&&q.c24!=null&&Math.abs(q.c24)>=0.25)tl.unshift('OI24h◆ '+(q.c24>=0?'+':'')+(q.c24*100).toFixed(0)+'%');}
     if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
     const tags=tl.join(';');
     o+=[
@@ -3548,6 +3557,7 @@ function buildDigest(){
       s.oiTs?clnHM(s.oiTs)+(oiStale?'!':''):'—',
       s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
       s.oiReal?n(s.oiCoinsChg):'n/a',
+      oi24Cell(s.coin),
       (s.oiReal&&s.oiBaseChg!=null)?n(s.oiBaseChg):'n/a',
       s.oiBaseTs?(()=>{const d=new Date(s.oiBaseTs);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+' '+clnHM(s.oiBaseTs);})():'—',
       s.oiDom||'n/a',
@@ -3613,7 +3623,32 @@ function buildProbe(){
 
 function openDigest(){document.getElementById('dgOv').classList.add('open');showDigest();}
 function closeDigest(){if(typeof labBar==='function')labBar(false);document.getElementById('dgOv').classList.remove('open');}
-function showDigest(){if(typeof labBar==='function')labBar(false);document.getElementById('dgTtl').textContent='// DIGEST ЗА АНАЛИЗА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildDigest();}
+// -- OI24h◆ (2026-10-13-a): live 1h OI for the digest rows --
+let _oi24={},_dgRows=[];
+async function fetchOi24(coin){
+  const h=Math.floor(Date.now()/3600000),c=_oi24[coin];if(c&&c.h===h)return c;
+  const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=1h&limit=25`,FDAPI);
+  if(!d||d.length<7){_oi24[coin]={h,none:true};return _oi24[coin];}
+  const p=d.map(x=>({t:+x.timestamp,v:parseFloat(x.sumOpenInterest)})).sort((a,b)=>a.t-b.t),L=p[p.length-1].v;
+  _oi24[coin]={h,c24:p[0].v>0?L/p[0].v-1:null,c6:p[p.length-7].v>0?L/p[p.length-7].v-1:null,ts:p[p.length-1].t,hrs:Math.round((p[p.length-1].t-p[0].t)/3600000)};
+  return _oi24[coin];
+}
+function oi24Cell(coin){
+  const h=Math.floor(Date.now()/3600000),c=_oi24[coin];
+  if(!c||c.h!==h)return '…';if(c.none)return 'n/a';
+  const f=x=>x==null?'—':(x>=0?'+':'')+(x*100).toFixed(1);
+  return f(c.c24)+'/'+f(c.c6);
+}
+async function refreshOi24ForDigest(){
+  const h=Math.floor(Date.now()/3600000),need=_dgRows.map(s=>s.coin).filter(c=>!(_oi24[c]&&_oi24[c].h===h));
+  if(!need.length)return;
+  for(let i=0;i<need.length;i+=4){await Promise.all(need.slice(i,i+4).map(fetchOi24));await sleep(150);}
+  const ov=document.getElementById('dgOv');
+  if(ov&&ov.classList.contains('open')&&!(typeof LAB!=='undefined'&&LAB.view)&&/DIGEST/.test(document.getElementById('dgTtl').textContent)){
+    document.getElementById('dgTa').value=buildDigest();toast('📊 OI24h◆ вчитан во DIGEST');
+  }
+}
+function showDigest(){if(typeof labBar==='function')labBar(false);document.getElementById('dgTtl').textContent='// DIGEST ЗА АНАЛИЗА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildDigest();refreshOi24ForDigest();}
 function showProbe(){if(typeof labBar==='function')labBar(false);document.getElementById('dgTtl').textContent='// EXCHANGEINFO ПРОБА · v'+APP_VER+' '+APP_CODENAME;document.getElementById('dgTa').value=buildProbe();}
 function copyDigest(){
   const ta=document.getElementById('dgTa');
