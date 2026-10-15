@@ -453,6 +453,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 .su-score-fill{height:100%;border-radius:2px;transition:width .5s}
 .su-empty{text-align:center;padding:40px 20px;color:var(--muted);font-family:var(--mono);font-size:12px;line-height:2}
 .su-note{font-size:10px;color:var(--muted);text-align:center;padding:10px 14px;line-height:1.6}
+/* SETUPS v2 (2026-10-15-a): WATCH = 1h+4h direction without a clean 15m entry */
+.su-card.watch{opacity:.8;border-left-style:dashed}
+.su-reason.fail{color:var(--red);background:rgba(255,34,68,.08)}
+.su-reason.loc{color:var(--orange);background:rgba(255,102,0,.1)}
+.su-src{font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:6px;line-height:1.5}
 /* CLEAN15 (v2.6) */
 .ct-clean{font-weight:800;cursor:pointer}
 .ct-clean.l{background:rgba(0,255,136,.18);color:var(--green);border:1px solid rgba(0,255,136,.55)}
@@ -1039,6 +1044,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    BEFORE the last closed one. Now: last diWin CLOSED bars (1d/1w = last closed).
 //    + digest: ADX(DI+/DI-) column (last closed bar), and with an active filter
 //    the digest exports ALL filtered rows (cap 60) instead of the top 12.
+//  2026-10-15-a  SETUPS v2. TRUTH 15.10 12:34: the SHORT card offered 0.01695 / SL 0.01860 /
+//    TP1 0.01421 (R:R 1.7) while CLEAN15 on the same bar said WAIT 3/10 and LOC15 was AT-S.
+//    The card levels were a fixed fraction of the 4h close range (SL 0.18x, TP1 0.30x), so
+//    R:R was 1.67 on EVERY card and the levels just followed the price from scan to scan.
+//    Now: (1) levels from 1h structure (clnStruct zones: zigzag pivots, MA200, POC, Fibo of
+//    the current leg); (2) GO only when CLEAN15 graded the SAME side A/B on the last closed
+//    15m bar, and then CLEAN15's own entry/SL/TP are shown; (3) LOC15 blocks: no short AT-S,
+//    no long AT-R, no chase on EXT in the trade direction; (4) everything else is WATCH:
+//    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
+//    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
+//    Tab button and toast count GO only; WATCH count shown separately.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1047,7 +1063,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-13-d';
+const APP_BUILD='2026-10-15-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3712,7 +3728,7 @@ function startBuildSetups() {
   btn.style.borderColor = 'rgba(255,208,0,.5)';
   // Update setups header if tab is open
   document.getElementById('suTs').textContent = 'Анализирам 1h+4h...';
-  document.getElementById('suBody').innerHTML = '<div class="su-empty">⏳<br>Анализирам сетапи...<br><span style="font-size:10px;color:var(--muted)">Ова трае 20-40 сек</span><br><div style="margin-top:12px;width:60%;max-width:200px;height:3px;background:var(--border);border-radius:2px;margin-left:auto;margin-right:auto"><div id="suProgBar" style="height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .5s"></div></div></div>';
+  document.getElementById('suBody').innerHTML = '<div class="su-empty">⏳<br>Анализирам сетапи...<br><span style="font-size:10px;color:var(--muted)">Ова трае до ~1 мин</span><br><div style="margin-top:12px;width:60%;max-width:200px;height:3px;background:var(--border);border-radius:2px;margin-left:auto;margin-right:auto"><div id="suProgBar" style="height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .5s"></div></div></div>';
 
   buildSetups(function(pct) {
     // Progress callback
@@ -3724,20 +3740,23 @@ function startBuildSetups() {
     _setupsBuilding = false;
     const btn3 = document.getElementById('suTabBtn');
     if (btn3) {
-      const megaCount = S_setups.filter(function(s){return s.isMega;}).length;
-      const longs = S_setups.filter(function(s){return !s.isMega&&s.finalDir==='bull';}).length;
-      const shorts = S_setups.filter(function(s){return !s.isMega&&s.finalDir==='bear';}).length;
+      const goL = S_setups.filter(function(s){return s.status==='GO';});   // SETUPS v2: count GO only
+      const watchN = S_setups.length - goL.length;
+      const megaCount = goL.filter(function(s){return s.isMega;}).length;
+      const longs = goL.filter(function(s){return !s.isMega&&s.finalDir==='bull';}).length;
+      const shorts = goL.filter(function(s){return !s.isMega&&s.finalDir==='bear';}).length;
       const ck = cleanCounts(), cleanAB = ck.A + ck.B;
       btn3.style.borderColor = cleanAB > 0 ? 'rgba(0,255,136,.6)' : megaCount > 0 ? 'rgba(255,50,200,.6)' : 'rgba(0,229,255,.4)';
       if (!btn3.classList.contains('active')) {
-        btn3.textContent = '📊 СЕТАПИ' + (cleanAB > 0 ? ' ✅' + cleanAB : '') + (megaCount > 0 ? ' 🎯' + megaCount : '') + (longs+shorts > 0 ? ' (' + (longs+shorts) + ')' : '');
+        btn3.textContent = '📊 СЕТАПИ' + (cleanAB > 0 ? ' ✅' + cleanAB : '') + (megaCount > 0 ? ' 🎯' + megaCount : '') + (longs+shorts > 0 ? ' (' + (longs+shorts) + ')' : '') + (watchN > 0 ? ' 👁' + watchN : '');
       }
     }
     // If tab is currently open, re-render
     if (document.getElementById('setupsView').classList.contains('active')) {
       renderSetups();
     } else {
-      toast('📊 Сетапи готови · ' + S_setups.length + ' сетапи · Отвори СЕТАПИ');
+      const goN = S_setups.filter(function(s){return s.status==='GO';}).length;
+      toast('📊 Сетапи готови · GO ' + goN + ' · WATCH ' + (S_setups.length - goN) + ' · Отвори СЕТАПИ');
     }
   });
 }
@@ -3792,9 +3811,118 @@ async function buildSetups(onProgress) {
 
   // Sort: MEGA first, then by setupScore
   S_setups = results.sort(function(a, b) {
+    const ga = a.status === 'GO' ? 1 : 0, gb = b.status === 'GO' ? 1 : 0;
+    if (ga !== gb) return gb - ga;   // SETUPS v2: GO before WATCH
     if (b.isMega !== a.isMega) return (b.isMega ? 1 : 0) - (a.isMega ? 1 : 0);
     return b.setupScore - a.setupScore;
   });
+}
+
+// -- SETUPS v2 (2026-10-15-a) ----------------------------------------------
+// The 1h+4h engine gives a DIRECTION. It no longer prints an entry on its own:
+//  1) levels come from 1h STRUCTURE (clnStruct zones on closed 1h bars), not from a
+//     fixed fraction of the 4h range;
+//  2) GO only if CLEAN15 graded the SAME side A/B on the last closed 15m bar;
+//  3) LOC15 blocks: no short AT-S, no long AT-R, no chase on EXT in the trade direction;
+//  4) everything else is WATCH, with the failed gates and the 1h LIMIT plan.
+const SU_TF='1h', SU_KL=260, SU_PIV_K=3, SU_PIV_BARS=120, SU_POC_BARS=120;
+const SU_ENTRY_ATR=0.5;   // MKT if price is within this many 1h ATR of the zone, else LIMIT this far in front of it
+const SU_SL_BUF_ATR=0.5;  // SL this many 1h ATR beyond the far edge of the zone
+const SU_SL_MAX_ATR=1.5;  // same ceiling as CLEAN15 G9, in 1h ATR
+const SU_RR_MIN=2.0;      // same floor as CLEAN15 G9
+const SU_TP_GAP_ATR=0.3;  // a TP zone must clear the entry by this many ATR
+const SU_LVL_MAX_ATR=4.0; // invalidation zone farther than this from price = nothing to lean on, no plan
+
+// 1h structural plan for one direction. Works in real prices; sg = +1 long, -1 short.
+async function suStructPlan(coin, finalDir, price) {
+  const up = finalDir === 'bull', sg = up ? 1 : -1;
+  const out = { ok: false, why: '', flags: [], entry: null };
+  let kl = null;
+  try { kl = await apiFetch(`/klines?symbol=${coin}USDT&interval=${SU_TF}&limit=${SU_KL}`); } catch (e) {}
+  if (!kl || kl.length < 60) { out.why = 'нема 1h klines'; return out; }
+  const kc = (+kl[kl.length-1][6] > Date.now()) ? kl.slice(0, -1) : kl;   // closed bars only
+  const n = kc.length, i = n - 1;
+  const H = kc.map(k => +k[2]), L = kc.map(k => +k[3]), C = kc.map(k => +k[4]);
+  const atr = clnATR(H, L, C, 14)[i];
+  if (!(atr > 0) || !(price > 0)) { out.why = '1h ATR n/a'; return out; }
+  out.atr = atr; out.atrPct = atr / price * 100;
+  const from = Math.max(0, n - SU_PIV_BARS);
+  const pv = clnPivots(H, L, from, i, SU_PIV_K);
+  const pocR = calcPOC(kc.concat([kc[i]]), SU_POC_BARS);   // duplicate last bar: calcPOC drops the final bar
+  const st = clnStruct(H, L, C, atr, i, pv, null, pocR ? pocR.poc : null, null);
+  out.st = st;
+  const zs = (st.zones || []).slice();
+  let hiW = -Infinity, loW = Infinity;
+  for (let j = from; j <= i; j++) { if (H[j] > hiW) hiW = H[j]; if (L[j] < loW) loW = L[j]; }
+
+  // invalidation candidates = zones AGAINST the trade (long: below price, short: above),
+  // nearest first, up to SU_LVL_MAX_ATR. The first one that gives SL <= 1.5 ATR and
+  // R:R >= 2 is the plan; if none does, the nearest one is shown with the reason.
+  const invs = zs.filter(z => sg * (price - z.p) > 0 && Math.abs(price - z.p) / atr <= SU_LVL_MAX_ATR)
+    .sort((a, b) => sg * (b.p - a.p));
+  if (!invs.length) {
+    const any = zs.filter(z => sg * (price - z.p) > 0).sort((a, b) => sg * (b.p - a.p))[0];
+    out.why = any ? ('најблиско 1h ниво ' + fmt(any.p) + ' е ' + (Math.abs(price - any.p) / atr).toFixed(1) + ' ATR далеку')
+                  : ('нема 1h ниво ' + (up ? 'под' : 'над') + ' цената');
+    return out;
+  }
+  const gap = SU_TP_GAP_ATR * atr;
+  const planAt = inv => {
+    const r = { inv, flags: [] };
+    // entry: at market if price already sits on the zone, else a LIMIT just in front of it
+    const lim = inv.p + sg * SU_ENTRY_ATR * atr;
+    if (sg * (price - lim) <= 0) { r.entry = price; r.entryType = 'MKT'; }
+    else { r.entry = lim; r.entryType = 'LIMIT'; }
+    // SL beyond the FAR edge of the zone: the crowd's stops sit at the level itself
+    r.sl = (up ? inv.lo : inv.hi) - sg * SU_SL_BUF_ATR * atr;
+    const risk = sg * (r.entry - r.sl);
+    if (!(risk > 0)) { r.bad = ['SL геометрија n/a']; return r; }
+    // targets: structure beyond the entry in the trade direction + the window extreme
+    const tc = zs.map(z => z.p).concat([up ? hiW : loW])
+      .filter(p => sg * (p - r.entry) > gap).sort((a, b) => sg * (a - b));
+    if (tc.length) {
+      r.tp1 = tc[0];
+      const nx = tc.find(p => sg * (p - r.tp1) > gap);
+      r.tp2 = nx != null ? nx : r.tp1 + (r.tp1 - r.entry);
+    } else {
+      r.tp1 = r.entry + sg * SU_RR_MIN * risk; r.tp2 = r.entry + sg * 3 * risk;
+      r.flags.push('TP1=2R (нема 1h структура)');
+    }
+    r.rr = sg * (r.tp1 - r.entry) / risk; r.slAtr = risk / atr;
+    r.bad = [];
+    if (r.slAtr > SU_SL_MAX_ATR) r.bad.push('SL ' + r.slAtr.toFixed(2) + ' ATR > ' + SU_SL_MAX_ATR);
+    if (r.rr < SU_RR_MIN) r.bad.push('R:R ' + r.rr.toFixed(2) + ' < ' + SU_RR_MIN);
+    return r;
+  };
+  const tried = invs.map(planAt);
+  const pick = tried.find(r => !r.bad.length) || tried[0];
+  out.inv = pick.inv; out.flags = pick.flags;
+  if (pick.entry != null && pick.tp1 != null) {
+    Object.assign(out, { entry: pick.entry, entryType: pick.entryType, sl: pick.sl, tp1: pick.tp1, tp2: pick.tp2, rr: pick.rr, slAtr: pick.slAtr });
+  }
+  out.ok = !pick.bad.length;
+  out.why = pick.bad.join(' · ') + (!out.ok && tried.length > 1 ? ' (проверени ' + tried.length + ' нивоа)' : '');
+  return out;
+}
+
+// Verdict for a 1h+4h direction: GO = CLEAN15 A/B on the same side and no LOC15 block.
+function suGate(c15, finalDir) {
+  const up = finalDir === 'bull', why = [], failed = [];
+  if (!c15) return { status: 'WATCH', why: ['CLEAN15 n/a (нема 15m податоци)'], failed, pass: null, grade: null };
+  const sd = up ? c15.L : c15.S, st = c15.st;
+  const pass = sd.gates.filter(g => g.ok).length;
+  if (st) {
+    if (!up && st.loc === 'AT-S') why.push('шорт во поддршка · LOC15 AT-S' + (st.sup ? ' ' + fmt(st.sup.p) + ' ' + st.sup.lbl : ''));
+    if (up && st.loc === 'AT-R') why.push('лонг во отпор · LOC15 AT-R' + (st.res ? ' ' + fmt(st.res.p) + ' ' + st.res.lbl : ''));
+    if (st.ext && (st.ext > 0) === up) why.push('EXT' + (up ? '↑' : '↓') + ' MOMz ' + clnSgn(st.mz) + ' · не брзај');
+  }
+  const same = c15.grade !== 'WAIT' && c15.best === (up ? 'L' : 'S');
+  if (!same) {
+    why.push(c15.grade === 'WAIT' ? ('CLEAN15 WAIT ' + pass + '/10')
+      : ('CLEAN15 ' + c15.grade + (c15.best === 'L' ? '▲' : '▼') + ' спротивна насока'));
+    sd.gates.filter(g => !g.ok).forEach(g => failed.push(g.id + ' ' + g.note));
+  }
+  return { status: (same && !why.length) ? 'GO' : 'WATCH', why, failed, pass, grade: same ? c15.grade : 'WAIT' };
 }
 
 async function analyzeSetup(s) {
@@ -3893,33 +4021,23 @@ async function analyzeSetup(s) {
     var structCtx = null;
   }
   // -- END STRUCTURAL FILTER --
-  let entry = price, sl = 0, tp1 = 0, tp2 = 0;
 
-  if (closes4h) {
-    const hi = Math.max(...closes4h.slice(-20));
-    const lo = Math.min(...closes4h.slice(-20));
-    const range = hi - lo;
-    if (finalDir === 'bull') {
-      entry = price;
-      sl = price - range * 0.18;   // SL below recent low area
-      tp1 = price + range * 0.3;   // TP1 ~30% of range
-      tp2 = price + range * 0.618; // TP2 Fib 0.618
-    } else {
-      entry = price;
-      sl = price + range * 0.18;
-      tp1 = price - range * 0.3;
-      tp2 = price - range * 0.618;
-    }
-  } else {
-    const atr = Math.abs(parseFloat(ticker.highPrice) - parseFloat(ticker.lowPrice)) * 0.5;
-    if (finalDir === 'bull') { sl = price - atr; tp1 = price + atr * 1.5; tp2 = price + atr * 2.5; }
-    else { sl = price + atr; tp1 = price - atr * 1.5; tp2 = price - atr * 2.5; }
+  // SETUPS v2 (2026-10-15-a): levels from 1h structure, verdict from CLEAN15 + LOC15.
+  const plan = await suStructPlan(coin, finalDir, price);
+  let c15 = null;
+  try { c15 = await evalClean15Cached(coin); } catch (e) { c15 = null; }
+  if (!c15) c15 = _clean[coin] || null;
+  const gate = suGate(c15, finalDir);
+  let entry = null, entryType = null, sl = null, tp1 = null, tp2 = null, rr = null, slAtr = null, levelSrc = null;
+  if (gate.status === 'GO') {
+    // CLEAN15 passed this side on the last closed 15m bar: its levels ARE the entry
+    const sd = finalDir === 'bull' ? c15.L : c15.S;
+    entry = sd.entry; entryType = sd.entryType; sl = sd.sl; tp1 = sd.tp1; tp2 = sd.tp2;
+    rr = sd.rr; slAtr = sd.slAtr; levelSrc = 'CLEAN15 15m';
+  } else if (plan.entry != null) {
+    entry = plan.entry; entryType = plan.entryType; sl = plan.sl; tp1 = plan.tp1; tp2 = plan.tp2;
+    rr = plan.rr; slAtr = plan.slAtr; levelSrc = '1h структура';
   }
-
-  // R:R ratio
-  const risk = Math.abs(price - sl);
-  const reward1 = Math.abs(tp1 - price);
-  const rr = risk > 0 ? (reward1 / risk).toFixed(1) : '?';
 
   // Build reason list
   const reasons = [];
@@ -3959,7 +4077,12 @@ async function analyzeSetup(s) {
 
   return {
     coin, price, finalDir, isMega, isGood, isBasic,
-    entry, sl, tp1, tp2, rr,
+    entry, entryType, sl, tp1, tp2, rr, slAtr, levelSrc,
+    status: gate.status, gate: gate,
+    plan: { ok: plan.ok, why: plan.why, flags: plan.flags || [], atrPct: plan.atrPct || null,
+            inv: plan.inv ? { p: plan.inv.p, lbl: plan.inv.lbl } : null,
+            trend: plan.st ? plan.st.trend : null },
+    c15grade: c15 ? c15.grade : null, loc15: (c15 && c15.st) ? c15.st.loc : null,
     reasons, setupScore,
     fr, vol: s.volume / 1e6,
     score1h: r1.score || 0, score4h: r4.score || 0,
@@ -4006,9 +4129,12 @@ function renderSetups() {
     return s.pctFromHighLow <= maxPct;
   };
 
-  const mega = S_setups.filter(function(s) { return s.isMega && passFilter(s); });
-  const longs = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bull' && passFilter(s); }).slice(0, 6);
-  const shorts = S_setups.filter(function(s) { return !s.isMega && s.finalDir === 'bear' && passFilter(s); }).slice(0, 6);
+  // SETUPS v2: only GO cards in the main sections; WATCH collapsed below
+  const goS = S_setups.filter(function(s) { return s.status === 'GO' && passFilter(s); });
+  const watch = S_setups.filter(function(s) { return s.status !== 'GO' && passFilter(s); });
+  const mega = goS.filter(function(s) { return s.isMega; });
+  const longs = goS.filter(function(s) { return !s.isMega && s.finalDir === 'bull'; }).slice(0, 6);
+  const shorts = goS.filter(function(s) { return !s.isMega && s.finalDir === 'bear'; }).slice(0, 6);
 
   let html = '';
 
@@ -4037,7 +4163,15 @@ function renderSetups() {
   }
 
   if (!mega.length && !longs.length && !shorts.length) {
-    html += '<div class="su-empty">🔍<br>Нема јасни сетапи моментално<br><span style="font-size:10px">Пробај повторно по нов скен</span></div>';
+    if (watch.length) html += '<div class="su-note">Нема 1h+4h сетап со чист 15m влез (CLEAN15 A/B). Насоките без влез се во WATCH подолу.</div>';
+    else html += '<div class="su-empty">🔍<br>Нема јасни сетапи моментално<br><span style="font-size:10px">Пробај повторно по нов скен</span></div>';
+  }
+
+  // WATCH: 1h+4h direction without a clean 15m entry -- plan at a level, not an entry now
+  if (watch.length) {
+    html += '<div class="su-section"><details class="cl-det"><summary>👁 WATCH (' + watch.length + ') · насока без чист влез, план на ниво</summary>';
+    watch.slice(0, 12).forEach(function(s) { html += setupCardHTML(s); });
+    html += '</details></div>';
   }
 
   body.innerHTML = html;
@@ -4064,23 +4198,51 @@ function setupCardHTML(s) {
   const scorePct = Math.min((s.setupScore / scoreMax) * 100, 100);
   const scoreCol = s.isMega ? '#ff32cc' : isLong ? 'var(--green)' : 'var(--red)';
 
-  let levels = '<div class="su-levels">'
-    + '<div class="su-lv"><div class="su-lv-l">ВЛЕЗ</div><div class="su-lv-v" style="color:var(--text)">$' + fmt(s.entry) + '</div></div>'
-    + '<div class="su-lv"><div class="su-lv-l">SL</div><div class="su-lv-v" style="color:var(--red)">$' + fmt(s.sl) + '</div></div>'
-    + '<div class="su-lv"><div class="su-lv-l">TP1</div><div class="su-lv-v" style="color:var(--green)">$' + fmt(s.tp1) + '</div></div>'
-    + '<div class="su-lv"><div class="su-lv-l">R:R</div><div class="su-lv-v" style="color:var(--yellow)">' + s.rr + ':1</div></div>'
-    + '</div>';
+  // SETUPS v2: GO = CLEAN15 levels, WATCH = 1h plan (dimmed) or the reason there is none
+  const isWatch = s.status !== 'GO';
+  const rrOk = s.rr != null && s.rr >= SU_RR_MIN;
+  let levels;
+  if (s.entry != null) {
+    const pre = isWatch ? 'ПЛАН ' : 'ВЛЕЗ ';
+    levels = '<div class="su-levels">'
+      + '<div class="su-lv"><div class="su-lv-l">' + pre + (s.entryType || '') + '</div><div class="su-lv-v" style="color:var(--text)">$' + fmt(s.entry) + '</div></div>'
+      + '<div class="su-lv"><div class="su-lv-l">SL' + (s.slAtr != null ? ' · ' + s.slAtr.toFixed(1) + ' ATR' : '') + '</div><div class="su-lv-v" style="color:var(--red)">$' + fmt(s.sl) + '</div></div>'
+      + '<div class="su-lv"><div class="su-lv-l">TP1</div><div class="su-lv-v" style="color:var(--green)">$' + fmt(s.tp1) + '</div></div>'
+      + '<div class="su-lv"><div class="su-lv-l">R:R</div><div class="su-lv-v" style="color:' + (rrOk ? 'var(--yellow)' : 'var(--red)') + '">' + s.rr.toFixed(1) + ':1</div></div>'
+      + '</div>';
+  } else {
+    levels = '<div class="su-src" style="color:var(--text2)">Нема 1h план: ' + clnEsc(s.plan && s.plan.why ? s.plan.why : 'n/a') + '</div>';
+  }
+  const pl = s.plan || {};
+  const src = s.entry != null
+    ? '<div class="su-src">нивоа: ' + clnEsc(s.levelSrc || '') + (s.levelSrc !== 'CLEAN15 15m' && pl.inv ? ' · ниво $' + fmt(pl.inv.p) + ' ' + clnEsc(pl.inv.lbl) : '')
+      + (s.levelSrc !== 'CLEAN15 15m' && pl.atrPct ? ' · ATR 1h ' + pl.atrPct.toFixed(2) + '%' : '')
+      + (s.tp2 != null ? ' · TP2 $' + fmt(s.tp2) : '') + '</div>'
+    : '';
+  let gateHtml = '';
+  const g = s.gate || { why: [], failed: [] };
+  if (isWatch) {
+    g.why.forEach(function(w) { gateHtml += '<span class="su-reason loc">⚠ ' + clnEsc(w) + '</span>'; });
+    g.failed.slice(0, 6).forEach(function(f) { gateHtml += '<span class="su-reason fail">✗ ' + clnEsc(f) + '</span>'; });
+    if (s.entry != null && !pl.ok && pl.why) gateHtml += '<span class="su-reason fail">1h план: ' + clnEsc(pl.why) + '</span>';
+  }
+  (pl.flags || []).forEach(function(f) { gateHtml += '<span class="su-reason">' + clnEsc(f) + '</span>'; });
+  if (gateHtml) gateHtml = '<div class="su-reasons">' + gateHtml + '</div>';
+  levels = levels + src + gateHtml;
 
   let reasonsHtml = '<div class="su-reasons">';
   s.reasons.forEach(function(r) { reasonsHtml += '<span class="su-reason">' + r.txt + '</span>'; });
   reasonsHtml += '</div>';
 
-  return '<div class="su-card ' + cardCls + '" data-coin="' + s.coin + '" onclick="openDetail(this.dataset.coin)">'
+  const verdict = isWatch
+    ? '<span class="cl-grade W">⚠ WATCH</span>'
+    : '<span class="cl-grade ' + (s.c15grade === 'B' ? 'B' : 'A') + '">✅ ' + (s.c15grade || '') + '</span>';
+  return '<div class="su-card ' + cardCls + (isWatch ? ' watch' : '') + '" data-coin="' + s.coin + '" onclick="openDetail(this.dataset.coin)">'
     + '<div class="su-top">'
     + '<div><div class="su-coin">' + alphaTag + maTag + s.coin + '<span style="font-size:10px;color:var(--muted);font-weight:normal"> USDT</span></div>'
     + '<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap">' + tfConfTag + pctTag + '</div>'
     + '<div style="font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)">Vol: $' + s.vol.toFixed(1) + 'M · FR: ' + (s.fr >= 0 ? '+' : '') + s.fr.toFixed(3) + '%</div></div>'
-    + '<div class="su-dir ' + dirCls + '">' + dirTxt + '</div>'
+    + '<div style="display:flex;gap:6px;align-items:center">' + verdict + '<div class="su-dir ' + dirCls + '">' + dirTxt + '</div></div>'
     + '</div>'
     + levels + reasonsHtml
     + '<div class="su-score-bar"><div class="su-score-fill" style="width:' + scorePct + '%;background:' + scoreCol + '"></div></div>'
@@ -4259,7 +4421,7 @@ function clnStruct(H,L,C,atr,i,pvRaw,jmaAbove,poc,mzNow){
   const nS=!!sup&&(-sup.d)<=CLEAN_LOC_ATR,nR=!!res&&res.d<=CLEAN_LOC_ATR;
   const loc=nS&&nR?((-sup.d)<=res.d?'AT-S':'AT-R'):nS?'AT-S':nR?'AT-R':'MID';
   const ext=(mzNow!=null&&Math.abs(mzNow)>=CLEAN_EXT_ATR)?(mzNow>0?1:-1):0;
-  return{trend,votes,vJ,vMa,vS,ma,maAtr,stL,brk,sup,res,loc,ext,mz:mzNow,fib};
+  return{trend,votes,vJ,vMa,vS,ma,maAtr,stL,brk,sup,res,loc,ext,mz:mzNow,fib,zones};   // zones: SETUPS v2 (1h plan)
 }
 function clnTrendTxt(st){
   if(!st)return 'n/a';
@@ -4963,6 +5125,7 @@ function helpSections(){
   {h:'🏷 ОЗНАКИ НА КАРТИЧКА',items:[
     {tag:'✅A▲ / ✅B▼',col:g,what:'CLEAN15 чист влез: оценка A или B, ▲ лонг / ▼ шорт. Испрекината рамка = B. Секогаш прва ознака.',action:'Клик → детали со сите 10 гејта.'},
     {tag:'📐▼DN·@R',col:a,what:'TRND (v2.7): 1h JMA/DWMA + затворање спрема SMA200 на 15m + структура од потврдени pivots (HH/HL или LH/LL, BRK = пробиен последен pivot). ▲UP / ▼DN = 2+ гласа во иста насока, ↔RNG = судир. LOC: @S / @R = во 0.5 ATR од зона (pivot, MA200, POC, Фибо .5–.786 на тековниот замав), mid = помеѓу, EXT = |MOMz 15m| ≥ 3.',action:'Само опис — не е гејт и не гласа во SCORE (уште). Се гледа само кај коини проверени во CLEAN15 (shortlist, FAV, пребарување).'},
+    {tag:'✅A · ⚠ WATCH',col:a,what:'СЕТАПИ (1h+4h): ✅ = CLEAN15 A/B на истата страна, нивоата се од CLEAN15. ⚠ WATCH = насока без чист влез: CLEAN15 WAIT, LOC15 блок (шорт @S, лонг @R, EXT) — прикажани се паднатите гејтови и 1h план (LIMIT на ниво, SL 0.5 ATR зад зоната, ≤1.5 ATR, R:R ≥ 2).',action:'WATCH не е влез. Чекај цената да дојде на нивото и CLEAN15 да даде A/B.'},
     {tag:'Лева лента',col:g,what:'Зелена = BULL, црвена = BEAR, портокалова = LIQ HUNT, сива = неутрално.'},
     {tag:'$цена · TV',col:'#2962ff',what:'Последна цена. TV отвора TradingView layout на тој TF.'},
     {tag:'±% · N M',col:g,what:'Промена на цената и 24h волумен во USDT (M = милиони).'},
