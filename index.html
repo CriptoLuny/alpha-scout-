@@ -1055,6 +1055,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-15-b  OI GLITCH GUARD. TRUTH 15.10: openInterestHist returned a run of bad
+//    points (~13:00-14:30). At 15:19 the row printed OI$ 5.87M (CoinGlass: 9.02M) and
+//    dOI coins +70%; at 16:02 the last point was right again but the 1.5h reference was
+//    still a bad one -> dOI +145%, OI24h -54%, REBUILD, OI SURGE, G4/G8 ABSORB +53%/+144%.
+//    CoinGlass showed a smooth decline. Now every OI series (row 15m/1h/..., OI24h 1h,
+//    CLEAN15 15m) passes oiGuard before anything is computed from it:
+//      - a step of >= 25% (coins) vs the last good point that comes back to within 10%
+//        of that point within 16 periods = glitch run, removed;
+//      - a jump with no return before the series ends = tail run: one live /openInterest
+//        decides (closer to the pre-jump level -> removed; no live value -> removed and
+//        flagged unverified);
+//      - lookbacks (6 periods, 3 periods, 6h) are found by TIMESTAMP among good points.
+//    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
+//    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
+//    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1063,7 +1078,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-15-a';
+const APP_BUILD='2026-10-15-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1602,6 +1617,44 @@ function getClsTag(coin){
   return `<span class="ct-cls ${t[0]}">${icon}${t[1]}${reg?' '+reg:''}</span>`;
 }
 
+// -- OI GLITCH GUARD (2026-10-15-b) -------------------------
+// openInterestHist occasionally returns runs of wrong points (TRUTH 15.10 ~13:00-14:30:
+// coins far below the real level, CoinGlass smooth). Every OI series passes oiGuard
+// before any delta, base, shape or gate is computed from it.
+const OI_GL_JUMP=0.25;   // one step >= 25% (coins) vs the last good point = suspect
+const OI_GL_BACK=0.10;   // ... and a later point within 10% of that good point = glitch run
+const OI_GL_RUN=16;      // max run length searched, periods
+function oiGlitchScan(pts){
+  const n=pts.length,bad=new Array(n).fill(false);let tail=null,g=0;
+  for(let i=1;i<n;i++){
+    const ref=pts[g].c;
+    if(!(ref>0)){g=i;continue;}
+    if(Math.abs(pts[i].c-ref)/ref<OI_GL_JUMP){g=i;continue;}
+    let j=-1;
+    for(let k=i+1;k<n&&k<=i+OI_GL_RUN;k++){if(Math.abs(pts[k].c-ref)/ref<=OI_GL_BACK){j=k;break;}}
+    if(j>0){for(let k=i;k<j;k++)bad[k]=true;g=j;i=j;continue;}
+    if(n-1-i<OI_GL_RUN){tail={from:i,refC:ref};break;}   // series ends before a return could show
+    g=i;   // lasting level change: real
+  }
+  return{bad,tail};
+}
+// pts: [{t,c,...}] sorted by t. Returns {pts: good points only, fix: removed count, flag}.
+async function oiGuard(coin,pts,liveC){
+  if(!pts||pts.length<3)return{pts:pts||[],fix:0,flag:null};
+  const r=oiGlitchScan(pts),bad=r.bad;let flag=null;
+  if(r.tail){
+    let live=liveC!=null?liveC:null;
+    if(live==null){try{const lo=await apiFetch(`/openInterest?symbol=${coin}USDT`);if(lo&&+lo.openInterest>0)live=+lo.openInterest;}catch(e){}}
+    const last=pts[pts.length-1].c;
+    if(live==null){for(let k=r.tail.from;k<pts.length;k++)bad[k]=true;flag='tail unverified';}
+    else if(Math.abs(live-r.tail.refC)<Math.abs(live-last)){for(let k=r.tail.from;k<pts.length;k++)bad[k]=true;flag='tail vs live';}
+  }
+  const good=pts.filter((x,k)=>!bad[k]);
+  return{pts:good,fix:pts.length-good.length,flag};
+}
+// last good point at or before t (fallback: the first good point)
+function oiAtOrBefore(pts,t){let r=null;for(const x of pts){if(x.t<=t)r=x;else break;}return r||pts[0];}
+
 // -- REAL OI (openInterestHist) ---------------------------
 // Returns BOTH sumOpenInterest (coins) and sumOpenInterestValue (USDT) in one call,
 // which is what makes the revaluation-vs-real-flow decomposition possible client side.
@@ -1617,10 +1670,16 @@ async function fetchOiHist(coin,tf){
   if(hit&&Date.now()-hit.t<OI_CACHE_TTL)return hit.v;
   // 2026-10-07-a: limit covers the whole kline window (was 30) so BASE◆% can be measured
   // from the window start. SHAPE still uses only the last 30 points, as before.
-  const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${p}&limit=${wp}`,FDAPI);
-  if(!d||d.length<2){_oiCache[ck]={t:Date.now(),v:null};return null;}
+  const dRaw=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${p}&limit=${wp}`,FDAPI);
+  if(!dRaw||dRaw.length<2){_oiCache[ck]={t:Date.now(),v:null};return null;}
+  // 2026-10-15-b: glitch guard first; lookbacks by timestamp among the good points
+  const gIn=dRaw.map(x=>({t:+x.timestamp,c:parseFloat(x.sumOpenInterest),x})).sort((a,b)=>a.t-b.t);
+  const gd=await oiGuard(coin,gIn,null);
+  const d=gd.pts.map(z=>z.x);
+  if(d.length<2){_oiCache[ck]={t:Date.now(),v:null};return null;}
+  const pMs=(TF_MIN[p]||15)*60000;
   const n=d[d.length-1];
-  const o=d[Math.max(0,d.length-1-OI_LOOKBACK)];
+  const o=oiAtOrBefore(gd.pts,+n.timestamp-OI_LOOKBACK*pMs).x;
   const C1=parseFloat(n.sumOpenInterest),V1=parseFloat(n.sumOpenInterestValue);
   const C0=parseFloat(o.sumOpenInterest),V0=parseFloat(o.sumOpenInterestValue);
   if(!(C1>0&&C0>0&&V1>0&&V0>0))return null;
@@ -1657,7 +1716,7 @@ async function fetchOiHist(coin,tf){
   else if(fromPeak<-15)               shape='FADED';    // well off the highs, unwinding
 
   // 3-period OI coin change -- aligned with the squeeze detector's 2-3 bar price/CVD window
-  const o3=d[Math.max(0,d.length-1-3)],C3=parseFloat(o3.sumOpenInterest);
+  const o3=oiAtOrBefore(gd.pts,+n.timestamp-3*pMs).x,C3=parseFloat(o3.sumOpenInterest);
   const oiCoinsChg3=C3>0?((C1-C3)/C3)*100:0;
 
   const res={
@@ -1672,7 +1731,8 @@ async function fetchOiHist(coin,tf){
     peakCoins:peak,barsSincePeak:ser.length-1-peakIdx,seriesBars:ser.length,
     period:p,
     ts:+n.timestamp,                       // OI@ : stamp of the last hist point (lags live price)
-    baseCoinsChg,baseUsdtChg,baseTs:+b0.timestamp,basePts:d.length
+    baseCoinsChg,baseUsdtChg,baseTs:+b0.timestamp,basePts:d.length,
+    oiFix:gd.fix,oiFixFlag:gd.flag
   };
   _oiCache[ck]={t:Date.now(),v:res};
   return res;
@@ -2326,7 +2386,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // OI decomposition (real, from openInterestHist) + the old volume proxy kept separately
   let oiCoinsChg=0,oiCoinsChg3=0,oiDom='',oiRevalPct=0,oiFlowPct=0,oiReal=false,volChange=0;
   let oiShape='',oiFromPeak=null,oiDrawdown=null;
-  let oiTs=null,oiBaseChg=null,oiBaseUsdtChg=null,oiBaseTs=null,oiBasePts=0;
+  let oiTs=null,oiBaseChg=null,oiBaseUsdtChg=null,oiBaseTs=null,oiBasePts=0,oiFix=0,oiFixFlag=null;
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
   let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null,liqPx3=null;
 
@@ -2342,6 +2402,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
       oiDom=oh.dominates;oiRevalPct=oh.revalPct;oiFlowPct=oh.flowPct;
       oiShape=oh.shape;oiFromPeak=oh.fromPeak;oiDrawdown=oh.drawdown;
       oiTs=oh.ts;oiBaseChg=oh.baseCoinsChg;oiBaseUsdtChg=oh.baseUsdtChg;oiBaseTs=oh.baseTs;oiBasePts=oh.basePts;
+      oiFix=oh.oiFix||0;oiFixFlag=oh.oiFixFlag||null;
     }else{
       const oi=await apiFetch(`/openInterest?symbol=${coin}USDT`);
       if(oi?.openInterest){oiCoins=parseFloat(oi.openInterest);oiUsdt=oiCoins*price;}
@@ -2647,7 +2708,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   const dir=confDir!=='none'?confDir:(bulls>bears?'bull':bears>bulls?'bear':'neutral');
   return{coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
-    oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,liqPx,liqPx3,
+    oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,oiFix,oiFixFlag,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
     volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,obvDiv,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
@@ -3503,6 +3564,7 @@ function buildDigest(){
    o+='LOOKBACK: dOI$%/dOI◆%/DOM = last OI point vs '+OI_LOOKBACK+' periods earlier ('+OI_LOOKBACK+'×'+pO+' = '+lb+'). '
      +'LIQ test = last 3 OI periods. SHAPE/oiPK = last 30 periods. BASE◆% = OI coins vs the FIRST point of the window '
      +'(same window as fHI/fLO; per-row start in BASE@). OI@ = stamp of the last openInterestHist point -- it LAGS the live PX by up to one period.\n';
+   o+='OI GUARD (2026-10-15-b): OI@ "*" / OI24h "*" / tag OI FIX n = n openInterestHist points removed as a glitch (step >= 25% coins that returns to within 10% inside 16 periods, or a tail run that live /openInterest did not confirm). Lookbacks then use the nearest good point by time. CLEAN15 "OIfix n" = same on its 15m series.\n';
    o+='⚡SHORT SQ / ⚡LONG DMP (2026-10-07-b) = price and CVD opposite over the same bars + (|px|>1.5% or long wick) '
      +'+ OI coins <= -'+LIQ_OI_MIN+'% over 3 periods WHILE price moves in the tag direction over those same 3 periods (build -b). '
      +'No real OI -> no tag. No longer votes in CONFL.\n';}
@@ -3573,6 +3635,7 @@ function buildDigest(){
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
     if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
     {const q=_oi24[s.coin];if(q&&q.h===Math.floor(Date.now()/3600000)&&q.c24!=null&&Math.abs(q.c24)>=0.25)tl.unshift('OI24h◆ '+(q.c24>=0?'+':'')+(q.c24*100).toFixed(0)+'%');}
+    if(s.oiFix)tl.unshift('OI FIX '+s.oiFix+(s.oiFixFlag?' ('+s.oiFixFlag+')':''));   // 2026-10-15-b
     if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
     const tags=tl.join(';');
     o+=[
@@ -3586,7 +3649,7 @@ function buildDigest(){
       n(s.fromHiPct),
       n(s.fromLoPct),
       s.oiUsdt>0?fmtM(s.oiUsdt):'—',
-      s.oiTs?clnHM(s.oiTs)+(oiStale?'!':''):'—',
+      s.oiTs?clnHM(s.oiTs)+(oiStale?'!':'')+(s.oiFix?'*':''):'—',
       s.oiReal?n(s.oiChange):'~'+n(s.oiChange),
       s.oiReal?n(s.oiCoinsChg):'n/a',
       oi24Cell(s.coin),
@@ -3662,15 +3725,19 @@ async function fetchOi24(coin){
   const h=Math.floor(Date.now()/3600000),c=_oi24[coin];if(c&&c.h===h)return c;
   const d=await apiFetch(`/openInterestHist?symbol=${coin}USDT&period=1h&limit=25`,FDAPI);
   if(!d||d.length<7){_oi24[coin]={h,none:true};return _oi24[coin];}
-  const p=d.map(x=>({t:+x.timestamp,v:parseFloat(x.sumOpenInterest)})).sort((a,b)=>a.t-b.t),L=p[p.length-1].v;
-  _oi24[coin]={h,c24:p[0].v>0?L/p[0].v-1:null,c6:p[p.length-7].v>0?L/p[p.length-7].v-1:null,ts:p[p.length-1].t,hrs:Math.round((p[p.length-1].t-p[0].t)/3600000)};
+  const raw=d.map(x=>({t:+x.timestamp,c:parseFloat(x.sumOpenInterest)})).sort((a,b)=>a.t-b.t);
+  const gd=await oiGuard(coin,raw,null);   // 2026-10-15-b
+  const p=gd.pts.map(x=>({t:x.t,v:x.c}));
+  if(p.length<7){_oi24[coin]={h,none:true,fix:gd.fix};return _oi24[coin];}
+  const Lp=p[p.length-1],L=Lp.v,p6=oiAtOrBefore(gd.pts,Lp.t-6*3600000);
+  _oi24[coin]={h,c24:p[0].v>0?L/p[0].v-1:null,c6:p6&&p6.c>0?L/p6.c-1:null,ts:Lp.t,hrs:Math.round((Lp.t-p[0].t)/3600000),fix:gd.fix};
   return _oi24[coin];
 }
 function oi24Cell(coin){
   const h=Math.floor(Date.now()/3600000),c=_oi24[coin];
   if(!c||c.h!==h)return '…';if(c.none)return 'n/a';
   const f=x=>x==null?'—':(x>=0?'+':'')+(x*100).toFixed(1);
-  return f(c.c24)+'/'+f(c.c6);
+  return f(c.c24)+'/'+f(c.c6)+(c.fix?'*':'');
 }
 async function refreshOi24ForDigest(){
   const h=Math.floor(Date.now()/3600000),need=_dgRows.map(s=>s.coin).filter(c=>!(_oi24[c]&&_oi24[c].h===h));
@@ -4652,7 +4719,9 @@ async function evalClean15(coin){
 
   // OI per bar: the openInterestHist point stamped at a bar's END (= next bar's open)
   const oiMap=new Map();
-  (oiH||[]).forEach(x=>oiMap.set(+x.timestamp,{c:+x.sumOpenInterest,v:+x.sumOpenInterestValue}));
+  // 2026-10-15-b: glitch guard; removed points simply have no OI (oiChg -> null, G4 n/a)
+  const oiG=await oiGuard(coin,(oiH||[]).map(x=>({t:+x.timestamp,c:+x.sumOpenInterest,v:+x.sumOpenInterestValue})).sort((a,b)=>a.t-b.t),null);
+  oiG.pts.forEach(x=>oiMap.set(x.t,{c:x.c,v:x.v}));
   const oiAt=ts=>{if(oiMap.has(ts))return oiMap.get(ts);for(const[t,v]of oiMap){if(Math.abs(t-ts)<=120000)return v;}return null;};
   let oiLag=false,oiLast=oiAt(T[i]+CLEAN_BAR_MS);
   if(!oiLast){   // hist lags right after a bar closes -> live snapshot as the trigger-bar value
@@ -4705,7 +4774,7 @@ async function evalClean15(coin){
   for(const sd of[Ls,Ss])if(sd.pass)await clnContextFlags(coin,sd,ctx);
   const pick=[Ls,Ss].filter(s=>s.pass).sort((a,b)=>b.rr-a.rr)[0]||null;
   return{coin,at:Date.now(),bar:Math.floor(Date.now()/CLEAN_BAR_MS),barT:T[i],price:C[i],atr,atrPct:atr/C[i]*100,
-    ls:lsr,fr,oiLag,st,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
+    ls:lsr,fr,oiLag,oiFix:oiG.fix,st,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
 }
 
 async function evalClean15Cached(coin,force){
@@ -4891,7 +4960,7 @@ function cleanDigestLine(r){
     const x=sd.gates.filter(g=>!g.ok);
     return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' x: '+x.map(g=>g.id+' '+g.note).join('; ');
   };
-  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+'|ATR '+r.atrPct.toFixed(2)+'%|TRND '+clnTrendTxt(r.st)+'|LOC '+clnLocTxt(r.st)+'|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
+  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+(r.oiFix?' OIfix '+r.oiFix:'')+'|ATR '+r.atrPct.toFixed(2)+'%|TRND '+clnTrendTxt(r.st)+'|LOC '+clnLocTxt(r.st)+'|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
 }
 
 function cleanDigest(rows){
