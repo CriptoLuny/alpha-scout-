@@ -1056,6 +1056,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-16-e  NEWS live run 3: 10/11 RSS ✓ (86 items), Binance DELIST + NEWS ✓ direct,
+//    LIST / ACT / AIRDROP ✗ (parallel burst). Binance catalogs now sequential, 400 ms apart,
+//    2 tries x 3 endpoint variants, 1.2 s back-off.
 //  2026-10-16-d  NEWS: live run 2 = names 1078 ✓, RSS Cointelegraph + The Block ✓ (r2j),
 //    Binance CMS ✗ on every route. Added: 3 CMS endpoint variants; futures launches straight
 //    from exchangeInfo onboardDate (14d, no CMS); spot Monitoring/Seed from product tags;
@@ -1099,7 +1102,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-16-d';
+const APP_BUILD='2026-10-16-e';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6814,12 +6817,16 @@ async function newsRefresh(force){
     try{const ei=await apiFetch('/exchangeInfo');(ei?.symbols||[]).forEach(x=>{const od=+x.onboardDate||0;if(!x.symbol.endsWith('USDT')||!od||Date.now()-od>14*864e5||od>Date.now())return;
       const c=x.symbol.replace(/USDT$/,''),b=newsBase(c);(bn[b]=bn[b]||[]).push({src:'Binance Futures',type:'📈FUT',title:`${x.symbol} perpetual listed on Binance Futures (${new Date(od).toISOString().slice(0,10)})`,ts:od,url:`https://www.binance.com/en/futures/${x.symbol}`});nb++;});
       NEWS.ok.FUTNEW='api';}catch(e){NEWS.ok.FUTNEW=false;}
-    await Promise.all(NEWS_BN_CATS.map(async([id,cat])=>{
-      let j=null;for(let v=0;v<NEWS_BN_URLS.length&&!j?.data;v++){const k=(NEWS_BN_VAR+v)%NEWS_BN_URLS.length;j=await newsJson(NEWS_BN_URLS[k](id));if(j?.data){NEWS_BN_VAR=k;}}
+    // sequential + 2 tries per catalog: Binance answered DELIST/NEWS but not LIST/ACT/AIRDROP in parallel (burst limit)
+    for(const[id,cat]of NEWS_BN_CATS){await (async()=>{
+      let j=null,arts0=[];
+      for(let tr=0;tr<2&&!arts0.length;tr++){for(let v=0;v<NEWS_BN_URLS.length&&!arts0.length;v++){const k=(NEWS_BN_VAR+v)%NEWS_BN_URLS.length;
+        j=await newsJson(NEWS_BN_URLS[k](id));arts0=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);if(arts0.length)NEWS_BN_VAR=k;}
+        if(!arts0.length)await sleep(1200);}
       const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=arts.length?(NEWS.via[NEWS_BN_URLS[NEWS_BN_VAR](id)]||'?'):false;
       arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;if(!ts||Date.now()-ts>14*864e5)return;nb++;
         newsTickersInTitle(t,uni).forEach(tk=>{if((bn[tk]||[]).some(z=>z.title===t))return;(bn[tk]=bn[tk]||[]).push({src:'Binance',type:newsBnType(cat,t),title:t,ts,url:'https://www.binance.com/en/support/announcement/'+(a.code||'')});});});
-    }));
+    })();await sleep(400);}
     // spot product tags (Monitoring / Seed) from the product list
     await namesP;
     Object.entries(NEWS.ptags||{}).forEach(([b,t])=>{(bn[b]=bn[b]||[]).push({src:'Binance Spot',type:t,title:`Binance spot tag: ${t.replace(/^\W+/,'')}`,ts:Date.now(),url:`https://www.binance.com/en/trade/${b}_USDT`});});
