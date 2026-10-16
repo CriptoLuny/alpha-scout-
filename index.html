@@ -1056,6 +1056,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-16-c  NEWS sources: first live run had every source ✗ (CORS: github.io cannot
+//    read binance.com/cms or outlet RSS directly; allorigins did not answer). Now: direct
+//    -> allorigins raw -> codetabs -> corsproxy.io -> allorigins json, best route remembered
+//    per host; RSS first via rss2json (JSON with CORS). Digest shows the route per source
+//    (✓direct/✓ao/✓ct/✓cp/✓aoj/✓r2j) and how many coin names loaded.
 //  2026-10-16-b  NEWS: Binance announcements (listing, Launchpool/HODLer airdrop, futures
 //    launch, Monitoring/Seed tag, delist) + RSS of CoinDesk/Cointelegraph/The Block/
 //    Decrypt/CryptoSlate, matched by ticker/name, flagged 🚨 hack/exploit, ⚖ legal,
@@ -1089,7 +1094,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-16-b';
+const APP_BUILD='2026-10-16-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6712,12 +6717,31 @@ const newsEsc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const newsHtml=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function newsAge(t){const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?m+'м':m<1440?Math.round(m/60)+'ч':Math.round(m/1440)+'д';}
 function newsAgeEn(t){const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d';}
+// 2026-10-16-c: several CORS routes (github.io cannot read binance.com/cms or outlet RSS directly);
+// the route that worked is remembered per host and shown in the digest (✓direct / ✓ao / ✓ct / ✓cp / ✓aoj).
+const NEWS_ROUTES=[['direct',u=>u,'t'],['ao',u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),'t'],
+  ['ct',u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u),'t'],['cp',u=>'https://corsproxy.io/?url='+encodeURIComponent(u),'t'],
+  ['aoj',u=>'https://api.allorigins.win/get?url='+encodeURIComponent(u),'j']];
+const NEWS_BEST={};NEWS.via={};
 async function newsText(url,timeout){
-  try{const r=await fetch(url,{signal:AbortSignal.timeout(timeout||8000)});if(r.ok)return await r.text();}catch(e){}
-  try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(14000)});if(r.ok)return await r.text();}catch(e){}
-  return null;
+  const host=(url.match(/^https?:\/\/([^/]+)/)||[])[1]||url,order=NEWS_ROUTES.slice();
+  if(NEWS_BEST[host]){const k=order.findIndex(r=>r[0]===NEWS_BEST[host]);if(k>0)order.unshift(order.splice(k,1)[0]);}
+  for(const[name,f,kind]of order){
+    try{const r=await fetch(f(url),{signal:AbortSignal.timeout(name==='direct'?(timeout||7000):12000)});if(!r.ok)continue;
+      let t=await r.text();if(kind==='j'){try{t=JSON.parse(t).contents||'';}catch(e){t='';}}
+      if(t&&t.length>50&&!/^\s*<!doctype html/i.test(t.slice(0,200))){NEWS_BEST[host]=name;NEWS.via[url]=name;return t;}}catch(e){}
+  }
+  NEWS.via[url]='✗';return null;
 }
 async function newsJson(url){const t=await newsText(url);if(!t)return null;try{return JSON.parse(t);}catch(e){return null;}}
+// RSS through rss2json (free, CORS-enabled JSON); falls back to newsText + the regex parser
+async function newsRssItems(url){
+  try{const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(url),{signal:AbortSignal.timeout(10000)});
+    if(r.ok){const j=await r.json();if(j&&j.status==='ok'&&Array.isArray(j.items)&&j.items.length){NEWS.via[url]='r2j';
+      return j.items.map(x=>({title:newsDecode(x.title),link:x.link||'',ts:Date.parse(String(x.pubDate||'').replace(' ','T')+'Z')||Date.parse(x.pubDate)||0,
+        cats:(x.categories||[]).join(' '),desc:newsDecode(x.description).slice(0,300)}));}}}catch(e){}
+  const x=await newsText(url,9000);return x?newsParseRss(x):null;
+}
 function newsUniverse(){const set=new Set(Object.keys(typeof _tMap!=='undefined'?_tMap:{}));Object.keys(NEWS.names).forEach(c=>set.add(c));return [...set].filter(c=>/^[A-Z0-9]{1,15}$/.test(c));}
 const newsBase=c=>c.replace(/^1000+/,'');
 
@@ -6772,15 +6796,15 @@ async function newsRefresh(force){
     const bn={};let nb=0;
     await Promise.all(NEWS_BN_CATS.map(async([id,cat])=>{
       const j=await newsJson(`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`);
-      const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=!!arts.length;
+      const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=arts.length?(NEWS.via[`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`]||'?'):false;
       arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;if(!ts||Date.now()-ts>14*864e5)return;nb++;
         newsTickersInTitle(t,uni).forEach(tk=>{if((bn[tk]||[]).some(z=>z.title===t))return;(bn[tk]=bn[tk]||[]).push({src:'Binance',type:newsBnType(cat,t),title:t,ts,url:'https://www.binance.com/en/support/announcement/'+(a.code||'')});});});
     }));
     // 2) RSS
     const M=newsMatchers(uni),rss={};let nr=0;
     await Promise.all(NEWS_RSS.map(async([src,url])=>{
-      const x=await newsText(url,9000);NEWS.ok[src]=!!x;if(!x)return;
-      newsParseRss(x).slice(0,60).forEach(it=>{
+      const items=await newsRssItems(url);NEWS.ok[src]=items&&items.length?(NEWS.via[url]||'?'):false;if(!items)return;
+      items.slice(0,60).forEach(it=>{
         const{title,link,ts,cats,desc}=it;if(!title||!ts||Date.now()-ts>7*864e5)return;nr++;
         const text=title+' '+cats+' '+desc,flag=newsFlag(title);
         M.forEach(m=>{
@@ -6821,7 +6845,7 @@ function newsDigestTag(coin){
 }
 function newsDigestBlock(rows){
   if(!NEWS.ts)return '\nNEWS: not loaded yet (first load ~15 s after the page opens, then every 15 min).\n';
-  const src=Object.entries(NEWS.ok).map(([k,v])=>k+(v?'✓':'✗')).join(' ');
+  const src=Object.entries(NEWS.ok).map(([k,v])=>k+(v?'✓'+v:'✗')).join(' ')+' | names '+Object.keys(NEWS.names).length;
   let o=`\nNEWS (loaded ${new Date(NEWS.ts).toTimeString().slice(0,5)} | Binance ${NEWS.nItems.bn} items 14d, RSS ${NEWS.nItems.rss} items 7d | sources: ${src}) — matched by ticker/name, may miss small coins; X/Twitter not covered\n`;
   let any=false;
   rows.forEach(s=>{const n=newsFor(s.coin),items=[...n.bn.slice(0,2),...n.rss.slice(0,3)];if(!items.length)return;any=true;
