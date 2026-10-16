@@ -1056,6 +1056,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-16-d  NEWS: live run 2 = names 1078 ✓, RSS Cointelegraph + The Block ✓ (r2j),
+//    Binance CMS ✗ on every route. Added: 3 CMS endpoint variants; futures launches straight
+//    from exchangeInfo onboardDate (14d, no CMS); spot Monitoring/Seed from product tags;
+//    6 more alt-heavy feeds (BeInCrypto, CryptoPotato, U.Today, NewsBTC, CoinJournal,
+//    Bitcoinist); names load in parallel; shorter route timeouts; 'loading…' status.
 //  2026-10-16-c  NEWS sources: first live run had every source ✗ (CORS: github.io cannot
 //    read binance.com/cms or outlet RSS directly; allorigins did not answer). Now: direct
 //    -> allorigins raw -> codetabs -> corsproxy.io -> allorigins json, best route remembered
@@ -1094,7 +1099,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-16-c';
+const APP_BUILD='2026-10-16-d';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6690,8 +6695,15 @@ setInterval(()=>{if(Date.now()-REG.ts>60*60000)computeRegime();},10*60000);
 // ══════════════════════════════════════════════════════════════
 const NEWS={bn:{},rss:{},ts:0,busy:false,ok:{},names:{},nItems:{bn:0,rss:0}};
 const NEWS_BN_CATS=[[48,'LIST'],[49,'NEWS'],[93,'ACT'],[161,'DELIST'],[128,'AIRDROP']];
-const NEWS_RSS=[['CoinDesk','https://www.coindesk.com/arc/outboundfeeds/rss/'],['Cointelegraph','https://cointelegraph.com/rss'],
-  ['The Block','https://www.theblock.co/rss.xml'],['Decrypt','https://decrypt.co/feed'],['CryptoSlate','https://cryptoslate.com/feed/']];
+const NEWS_RSS=[['CoinDesk','https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml'],['Cointelegraph','https://cointelegraph.com/rss'],
+  ['The Block','https://www.theblock.co/rss.xml'],['Decrypt','https://decrypt.co/feed/'],['CryptoSlate','https://cryptoslate.com/feed/'],
+  ['BeInCrypto','https://beincrypto.com/feed/'],['CryptoPotato','https://cryptopotato.com/feed/'],['U.Today','https://u.today/rss'],
+  ['NewsBTC','https://www.newsbtc.com/feed/'],['CoinJournal','https://coinjournal.net/feed/'],['Bitcoinist','https://bitcoinist.com/feed/']];
+// Binance CMS endpoint variants (first one that answers is remembered)
+const NEWS_BN_URLS=[id=>`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`,
+  id=>`https://www.binance.com/bapi/composite/v1/public/cms/article/catalog/list/query?catalogId=${id}&pageNo=1&pageSize=30`,
+  id=>`https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`];
+let NEWS_BN_VAR=0;
 const NEWS_UPPER_STOP=new Set(['USD','USDT','USDC','ETF','SEC','CEO','CFO','CTO','API','NFT','NFTS','DAO','CEX','DEX','AI','AML','KYC','IPO','GDP','CPI','FED','FOMC','ATH','ATL','TVL','APY','APR','RWA','DEFI','CFTC','DOJ','FBI','IMF','ECB','UK','EU','US','USA','UAE','NYSE','OTC','ICO','IDO','IEO','TGE','L1','L2','ZK','EVM','ETH2','PSA','FAQ','LIVE','JUST','NEW','NEWS','BREAKING','UPDATE','WEEK','DAY','TOP','BIG','THE','AND','FOR','WITH','NOT','ALL','ONE','TWO','HOW','WHY','WHAT','WHO','GPU','CPU','LLM','AGI','ESG','ESMA','MICA','SAFU','OCC','FDIC','BOJ','PBOC','HK','SG','JP','CN','KR','IN','EST','UTC','GMT','Q1','Q2','Q3','Q4','H1','H2','PM','AM']);
 const NEWS_NAME_STOP=new Set(['act','bank','magic','flow','sign','story','space','sonic','movement','open','life','swarm','zero','one','gas','cream','fire','games','game','wild','star','sun','moon','dog','cat','frog','pepe coin','bounce','core','origin','request','power','spell','tree','token','network','protocol','chain','world','vision','solar','arena','bridge','hook','high','lit','loom','mask','mina','near','nest','oasis','ocean','pixel','prom','pundi','rare','reef','render','safe','sand','scroll','shell','sleepless','sushi','theta','tron','trust','union','unit','velo','wave','waves','wing','wolf','yield','zeta','alpine','balance','bat','beam','blur','book','bread','cake','cyber','edge','epic','echo','fusion','harmony','hero','jupiter','kite','light','lumia','mantra','map','mode','neutron','orca','pond','portal','pump','quick','radiant','raydium','ring','rose','saga','seed','skate','sky','stable','super','synapse','time','turbo','venom','voxel','wall','walrus','plume','initia','zora','gold','silver','sahara','resolv','mubarak','official trump','melania meme','the sandbox','b','c','q','a','s','us','me','w']);
 const NEWS_FLAGS=[['🚨',/\b(hack|hacked|exploit|exploited|breach|drain|drained|stolen|theft|attack|attacker|rug ?pull|compromis\w*|vulnerab\w*|suspend\w*|halt\w*|depeg\w*|insolven\w*)\b/i],
@@ -6727,7 +6739,7 @@ async function newsText(url,timeout){
   const host=(url.match(/^https?:\/\/([^/]+)/)||[])[1]||url,order=NEWS_ROUTES.slice();
   if(NEWS_BEST[host]){const k=order.findIndex(r=>r[0]===NEWS_BEST[host]);if(k>0)order.unshift(order.splice(k,1)[0]);}
   for(const[name,f,kind]of order){
-    try{const r=await fetch(f(url),{signal:AbortSignal.timeout(name==='direct'?(timeout||7000):12000)});if(!r.ok)continue;
+    try{const r=await fetch(f(url),{signal:AbortSignal.timeout(name==='direct'?(timeout||5000):8000)});if(!r.ok)continue;
       let t=await r.text();if(kind==='j'){try{t=JSON.parse(t).contents||'';}catch(e){t='';}}
       if(t&&t.length>50&&!/^\s*<!doctype html/i.test(t.slice(0,200))){NEWS_BEST[host]=name;NEWS.via[url]=name;return t;}}catch(e){}
   }
@@ -6746,13 +6758,15 @@ function newsUniverse(){const set=new Set(Object.keys(typeof _tMap!=='undefined'
 const newsBase=c=>c.replace(/^1000+/,'');
 
 async function newsLoadNames(){
-  try{const c=JSON.parse(localStorage.getItem('newsNames')||'null');if(c&&Date.now()-c.ts<24*3600e3){NEWS.names=c.m;return;}}catch(e){}
+  try{const c=JSON.parse(localStorage.getItem('newsNames')||'null');if(c&&Date.now()-c.ts<24*3600e3&&Object.keys(c.m||{}).length>50){NEWS.names=c.m;NEWS.ptags=c.tg||{};return;}}catch(e){}
   const m={};
   const p=await newsJson('https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=false');
-  (p?.data||[]).forEach(x=>{if(x.q==='USDT'&&x.b&&x.an)m[x.b.toUpperCase()]=x.an;});
+  const tg={};(p?.data||[]).forEach(x=>{if(x.q==='USDT'&&x.b&&x.an)m[x.b.toUpperCase()]=x.an;
+    if(x.b&&Array.isArray(x.tags)){const t=x.tags.join(' ');if(/monitor/i.test(t))tg[x.b.toUpperCase()]='⚠MONITOR';else if(/\bseed\b/i.test(t))tg[x.b.toUpperCase()]=tg[x.b.toUpperCase()]||'🌱SEED';}});
+  NEWS.ptags=tg;
   const a=await newsJson(BAPI);
   (a?.data||[]).forEach(t=>{const s=(t.symbol||t.cexCoinName||'').toUpperCase();if(s&&t.name&&!m[s])m[s]=t.name;});
-  NEWS.names=m;try{localStorage.setItem('newsNames',JSON.stringify({ts:Date.now(),m}));}catch(e){}
+  NEWS.names=m;try{localStorage.setItem('newsNames',JSON.stringify({ts:Date.now(),m,tg:NEWS.ptags||{}}));}catch(e){}
 }
 function newsTickersInTitle(title,uni){
   const out=new Set(),U=new Set(uni.map(newsBase));
@@ -6790,18 +6804,27 @@ async function newsRefresh(force){
   if(NEWS.busy)return;if(!force&&Date.now()-NEWS.ts<15*60000)return;
   NEWS.busy=true;
   try{
-    if(!Object.keys(NEWS.names).length)await newsLoadNames();
-    const uni=newsUniverse();
+    NEWS.loading=Date.now();
+    const namesP=Object.keys(NEWS.names).length?Promise.resolve():newsLoadNames();
+    const uni0=Object.keys(typeof _tMap!=='undefined'?_tMap:{});
     // 1) Binance announcements
     const bn={};let nb=0;
+    const uni=newsUniverse().concat(uni0);
+    // Binance futures exchangeInfo: perps onboarded in the last 14 days = futures launch (no CMS needed)
+    try{const ei=await apiFetch('/exchangeInfo');(ei?.symbols||[]).forEach(x=>{const od=+x.onboardDate||0;if(!x.symbol.endsWith('USDT')||!od||Date.now()-od>14*864e5||od>Date.now())return;
+      const c=x.symbol.replace(/USDT$/,''),b=newsBase(c);(bn[b]=bn[b]||[]).push({src:'Binance Futures',type:'📈FUT',title:`${x.symbol} perpetual listed on Binance Futures (${new Date(od).toISOString().slice(0,10)})`,ts:od,url:`https://www.binance.com/en/futures/${x.symbol}`});nb++;});
+      NEWS.ok.FUTNEW='api';}catch(e){NEWS.ok.FUTNEW=false;}
     await Promise.all(NEWS_BN_CATS.map(async([id,cat])=>{
-      const j=await newsJson(`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`);
-      const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=arts.length?(NEWS.via[`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`]||'?'):false;
+      let j=null;for(let v=0;v<NEWS_BN_URLS.length&&!j?.data;v++){const k=(NEWS_BN_VAR+v)%NEWS_BN_URLS.length;j=await newsJson(NEWS_BN_URLS[k](id));if(j?.data){NEWS_BN_VAR=k;}}
+      const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=arts.length?(NEWS.via[NEWS_BN_URLS[NEWS_BN_VAR](id)]||'?'):false;
       arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;if(!ts||Date.now()-ts>14*864e5)return;nb++;
         newsTickersInTitle(t,uni).forEach(tk=>{if((bn[tk]||[]).some(z=>z.title===t))return;(bn[tk]=bn[tk]||[]).push({src:'Binance',type:newsBnType(cat,t),title:t,ts,url:'https://www.binance.com/en/support/announcement/'+(a.code||'')});});});
     }));
+    // spot product tags (Monitoring / Seed) from the product list
+    await namesP;
+    Object.entries(NEWS.ptags||{}).forEach(([b,t])=>{(bn[b]=bn[b]||[]).push({src:'Binance Spot',type:t,title:`Binance spot tag: ${t.replace(/^\W+/,'')}`,ts:Date.now(),url:`https://www.binance.com/en/trade/${b}_USDT`});});
     // 2) RSS
-    const M=newsMatchers(uni),rss={};let nr=0;
+    const M=newsMatchers(newsUniverse()),rss={};let nr=0;
     await Promise.all(NEWS_RSS.map(async([src,url])=>{
       const items=await newsRssItems(url);NEWS.ok[src]=items&&items.length?(NEWS.via[url]||'?'):false;if(!items)return;
       items.slice(0,60).forEach(it=>{
@@ -6815,7 +6838,7 @@ async function newsRefresh(force){
       });
     }));
     Object.values(bn).forEach(a=>a.sort((x,y)=>y.ts-x.ts));Object.values(rss).forEach(a=>a.sort((x,y)=>y.ts-x.ts));
-    NEWS.bn=bn;NEWS.rss=rss;NEWS.ts=Date.now();NEWS.nItems={bn:nb,rss:nr};
+    NEWS.bn=bn;NEWS.rss=rss;NEWS.ts=Date.now();NEWS.loading=0;NEWS.nItems={bn:nb,rss:nr};
     if(typeof renderList==='function'&&typeof S!=='undefined'&&S.signals&&S.signals.length)renderList();
     if(typeof S!=='undefined'&&S.detailCoin&&document.getElementById('ov')?.classList.contains('open'))renderNewsDetail(S.detailCoin);
   }catch(e){}
@@ -6844,7 +6867,7 @@ function newsDigestTag(coin){
   return p.join(';');
 }
 function newsDigestBlock(rows){
-  if(!NEWS.ts)return '\nNEWS: not loaded yet (first load ~15 s after the page opens, then every 15 min).\n';
+  if(!NEWS.ts)return NEWS.loading?`\nNEWS: loading… (started ${new Date(NEWS.loading).toTimeString().slice(0,5)}; first load can take 1-2 min, then it is fast)\n`:'\nNEWS: not started yet (starts ~15 s after the page opens, then every 15 min).\n';
   const src=Object.entries(NEWS.ok).map(([k,v])=>k+(v?'✓'+v:'✗')).join(' ')+' | names '+Object.keys(NEWS.names).length;
   let o=`\nNEWS (loaded ${new Date(NEWS.ts).toTimeString().slice(0,5)} | Binance ${NEWS.nItems.bn} items 14d, RSS ${NEWS.nItems.rss} items 7d | sources: ${src}) — matched by ticker/name, may miss small coins; X/Twitter not covered\n`;
   let any=false;
