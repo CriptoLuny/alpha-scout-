@@ -767,6 +767,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     </div>
     <div class="dp-price"><div class="dp-p" id="dpP">—</div><div class="dp-c" id="dpC">—</div></div>
     <div class="dp-links" id="dpLinks"></div>
+    <div class="dp-sigs" id="dpNews"></div>
     <div class="dp-badge-row">
       <div class="big-b" id="dpBB"></div>
       <button onclick="closeOv()" style="background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:12px;cursor:pointer;font-weight:600">✕ ЗАТВОРИ</button>
@@ -1055,6 +1056,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-16-b  NEWS: Binance announcements (listing, Launchpool/HODLer airdrop, futures
+//    launch, Monitoring/Seed tag, delist) + RSS of CoinDesk/Cointelegraph/The Block/
+//    Decrypt/CryptoSlate, matched by ticker/name, flagged 🚨 hack/exploit, ⚖ legal,
+//    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
+//    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
+//    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-16-a  LAB v5: RANDOM_OI control in the exit table = random entries only in
+//    the hours where OI_ARM can fire (OI history ~20 days, minus the 240h exit window).
+//    OI_ARM went +0.42R (Oct 9) -> -0.43R (Oct 16) while RANDOM spanned all 83 days;
+//    the fair benchmark is the same period. + ❓ help row for ⚙ DEAD (OI↓ + DECEL).
 //  2026-10-15-b  OI GLITCH GUARD. TRUTH 15.10: openInterestHist returned a run of bad
 //    points (~13:00-14:30). At 15:19 the row printed OI$ 5.87M (CoinGlass: 9.02M) and
 //    dOI coins +70%; at 16:02 the last point was right again but the 1.5h reference was
@@ -1078,7 +1089,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-15-b';
+const APP_BUILD='2026-10-16-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2810,6 +2821,7 @@ function rowHTML(s){
   // CHASE (LAB v3): big up-day = negative expectancy for a new long
   if(!blk&&typeof chaseTagHTML==='function'){const ch=chaseTagHTML(s);if(ch)tags.push(ch);}
   if(!blk&&s.obvDiv&&s.obvDiv.on)tags.push(`<span class="ctag" title="OBV_DIV (1h, 48h): OBV расте при рамна цена. LAB v5: НЕ најавува пумпа, но P(−20% за 4 дена) 2.9% наспроти 4.7% — помал ризик за лонг" style="background:rgba(0,229,255,.10);color:var(--accent);border:1px solid rgba(0,229,255,.45)">📈OBV↑</span>`);
+  if(!blk&&typeof newsTagHTML==='function'){const nt=newsTagHTML(s.coin);if(nt)tags.push(nt);}
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
@@ -2915,6 +2927,7 @@ function openDetail(coin){
   else fetchAndShowDetail(coin);
   loadCciObvCross(coin);
   loadCleanDetail(coin);
+  if(typeof renderNewsDetail==='function')renderNewsDetail(coin);
 }
 
 async function refreshDetail(){
@@ -3539,6 +3552,7 @@ function buildDigest(){
     +'  ->  '+view.length+' of '+S.signals.length+' signals, showing '+rows.length+'\n';
   if(typeof regimeLine==='function')o+=regimeLine();
   o+='OBV_DIV[1h] = OBV flow > +5% of 48h volume, OBV in top 20% of its 48h range, price -5%..+15% (LAB v5: no pump edge, lower dump risk: P(-20%/96h) 2.9% vs 4.7%).\n';
+  o+='NEWS tags: BN:<type> age = Binance announcement (LIST, SEED, MONITOR, DELIST, POOL, AIRDROP, FUT, ALPHA), 14d | NEWS<flag>xN age = outlet headlines 72h (🚨 hack/exploit/suspend, ⚖ legal, 🔓 unlock, 🤝 partnership/listing, 📰 other). Headlines in the NEWS block below.\n';
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
@@ -3636,6 +3650,7 @@ function buildDigest(){
     if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
     {const q=_oi24[s.coin];if(q&&q.h===Math.floor(Date.now()/3600000)&&q.c24!=null&&Math.abs(q.c24)>=0.25)tl.unshift('OI24h◆ '+(q.c24>=0?'+':'')+(q.c24*100).toFixed(0)+'%');}
     if(s.oiFix)tl.unshift('OI FIX '+s.oiFix+(s.oiFixFlag?' ('+s.oiFixFlag+')':''));   // 2026-10-15-b
+    if(typeof newsDigestTag==='function'){const nt=newsDigestTag(s.coin);if(nt)tl.unshift(nt);}
     if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
     const tags=tl.join(';');
     o+=[
@@ -3680,6 +3695,7 @@ function buildDigest(){
     ].join('|')+'\n';
   });
 
+  if(typeof newsDigestBlock==='function')o+=newsDigestBlock(rows);
   o+=cleanDigest(rows);
   o+='\nNOTE: 1m and 1w have no native openInterestHist period — mapped to 5m / 1d.\n';
   o+='Rows with "~" on dOI$% are volume-proxy fallbacks, not real OI.\n';
@@ -5178,7 +5194,9 @@ function helpSections(){
     {tag:'◆ OI FLOW',col:g,what:'Реален OI: |OI◆| > 3% и промената е доминантно FLOW (нови/затворени позиции), не ревалуација од цената.'},
     {tag:'⚙ DRIVE',col:g,what:'Режим OI◆↑ + ACCEL — нови пари влегуваат и цената реагира.',action:'Вистинска експанзија; тренд со гориво.'},
     {tag:'⚙ ABSORB',col:am,what:'Режим OI◆↑ + DECEL — нови позиции, а движењето слабее.',action:'Апсорпција — предупредување пред PEAK/reversal.'},
-    {tag:'⚙ REG SQZ',col:pk,what:'Режим OI◆↓ + ACCEL — движењето е од ЗАТВОРАЊА, не нови пари.',action:'Не трае долго. (DEAD = OI↓ + DECEL, нема филтер.)'},
+    {tag:'⚙ REG SQZ',col:pk,what:'Режим OI◆↓ + ACCEL — движењето е од ЗАТВОРАЊА, не нови пари.',action:'Не трае долго.'},
+    {tag:'📢 BN · 🚨 📰',col:am,what:'Вести: 📢 Binance најава (LIST листинг, SEED/MONITOR предупредување, DELIST, POOL, AIRDROP, FUT) до 14 дена; 🚨 hack/exploit, ⚖ правно, 🔓 unlock, 🤝 партнерство/листинг, 📰 друго — наслови од CoinDesk/Cointelegraph/The Block/Decrypt/CryptoSlate до 72ч.',action:'Само контекст: движење со вест ≠ движење од позиции. Деталите имаат линкови до 𝕏 (живо), CryptoPanic и Binance Square — малите коини ретко се во медиумите.'},
+    {tag:'⚙ DEAD',col:m,what:'Режим OI◆↓ + DECEL — позициите се затвораат И движењето гасне. Никој не учествува.',action:'Нема гориво ни за лонг ни за шорт — прескокни додека OI не почне повторно да расте. (Нема посебен филтер.)'},
     {tag:'↗ ACCEL / ↘ DECEL',col:a,what:()=>'MDIR (наклон на моментумот × неговиот знак) во горните '+(100-MOM_ACCEL_PCT)+'% / долните '+MOM_DECEL_PCT+'% од универзумот на тој TF.',when:'ACCEL кај коин што паѓа = падот СЕ ЗАБРЗУВА (не раст). Под '+MOM_MIN_POP+' коини (пр. пребарување на еден коин) перцентилот се зема од последниот ЦЕЛОСЕН скен на истиот TF (до 6h) — DIGEST пишува „ref“. Без таков скен → STEADY.'},
     {tag:'⇄ FLIP↑ / FLIP↓',col:y,what:()=>'MOMz (поместување во ATR-и) сменил знак со замав ≥ '+MOM_FLIP_MIN.toFixed(2)+' ATR.',when:'Паралелен флаг — коин може да е ACCEL и FLIP истовремено.',action:'Рана смена на насока; бара потврда.'},
     {tag:'🏛 TRADFI',col:o,what:'Само TradFi перпетуали: акции (ACC US/HK/KR/CN), стоки (COM), pre-IPO (IPO).'},
@@ -6541,15 +6559,18 @@ function l5Report(R){
   const models=['TP20','TIME96','TRAIL15','RUN20'];
   o+=`\n3) EXITS on rule ONSETS (first ON after >= 24h off), entry = 1h close, risk 10% (SL -10%), up to ${L5.X}h. R uncapped.\n`;
   o+=`SET | MODEL | n | avg R ±se | median R | P(R>0) | P(R>=3) | max R\n`;
-  const sets={RANDOM:[]};['JOINT','DIV','ABSORB','USPAT','OI_ARM','OBV_DIV'].forEach(k=>sets[k]=[]);
+  const sets={RANDOM:[],RANDOM_OI:[]};['JOINT','DIV','ABSORB','USPAT','OI_ARM','OBV_DIV'].forEach(k=>sets[k]=[]);
   coins.forEach(c=>{const X=R.data[c];const lastOn={};
     for(let i=168;i<=X.n-1-L5.X;i++){
       ['JOINT','DIV','ABSORB','USPAT','OI_ARM','OBV_DIV'].forEach(k=>{const b=1<<RN.indexOf(k);if(X.bits[i]&b){if(i-(lastOn[k]??-1e9)>24)sets[k].push({X,i});lastOn[k]=i;}});
     }
     for(let k=0;k<6;k++){const i=168+Math.floor(Math.random()*(X.n-1-L5.X-168));if(i>168)sets.RANDOM.push({X,i});}
+    // 2026-10-16-a: RANDOM_OI = same period as OI_ARM (hours with OI history that still have the full exit window)
+    if(X.oi){let a=-1;for(let i=168;i<=X.n-1-L5.X;i++){if(X.oi.get(X.T[i])){a=i;break;}}
+      if(a>=0){const b=X.n-1-L5.X;for(let k=0;k<8&&b>a;k++){const i=a+Math.floor(Math.random()*(b-a+1));sets.RANDOM_OI.push({X,i});}}}
   });
   Object.entries(sets).forEach(([name,arr])=>{models.forEach(m=>{o+=`${name}|${m}|${l5Stats(arr.map(e=>l5Exit(e.X,e.i,m)))}\n`;});});
-  o+=`READ: a rule is tradable only if some exit model gives avg R > 0 by > 2x ±se AND beats RANDOM with the same model.\n`;
+  o+=`READ: a rule is tradable only if some exit model gives avg R > 0 by > 2x ±se AND beats RANDOM with the same model. OI_ARM must be compared with RANDOM_OI (same ~10-day period where OI history + the exit window exist), not with RANDOM (all 83 days).\n`;
 
   // ── 4) case timeline ──
   R.caseList.forEach(cn=>{const X=R.data[cn];if(!X){o+=`\nCASE ${cn}: нема податоци\n`;return;}
@@ -6644,6 +6665,186 @@ async function computeRegime(){
 renderRegime();
 setTimeout(()=>{if(Date.now()-REG.ts>60*60000)computeRegime();},8000);
 setInterval(()=>{if(Date.now()-REG.ts>60*60000)computeRegime();},10*60000);
+
+
+// ══════════════════════════════════════════════════════════════
+// NEWS (2026-10-16-b) — catalysts next to the flow data, so a move can be read as
+// "news-driven" vs "positioning-driven" (DOS.P, Q.P). Free sources only (CryptoPanic API
+// is paid, CoinDesk Data retired its free tier on 2026-05-21):
+//  1) Binance announcements (CMS): new listings, Launchpool / HODLer airdrops, futures
+//     launches, Monitoring / Seed tag, delistings. Matched by TICKER in the title
+//     ("(XYZ)", "XYZUSDT", "XYZ/USDT", or the token list of Monitoring-tag titles).
+//  2) RSS of large outlets (CoinDesk, Cointelegraph, The Block, Decrypt, CryptoSlate),
+//     matched by "$TICKER" / "(TICKER)" / plain upper-case ticker (>= 3 chars, not a common
+//     word) / project NAME (from Binance product + Alpha lists; generic English names only
+//     count together with the ticker). Keyword flags: 🚨 hack/exploit/drain/suspend,
+//     ⚖ SEC/lawsuit/charged, 🔓 unlock, 🤝 partnership/integration/listing/mainnet.
+//  3) Quick links in the detail panel: X live search ($TICKER), CryptoPanic, Binance Square.
+// One global refresh every 15 min (~11 requests via the proxy), no per-coin calls.
+// Descriptive only — nothing here votes in SCORE.
+// ══════════════════════════════════════════════════════════════
+const NEWS={bn:{},rss:{},ts:0,busy:false,ok:{},names:{},nItems:{bn:0,rss:0}};
+const NEWS_BN_CATS=[[48,'LIST'],[49,'NEWS'],[93,'ACT'],[161,'DELIST'],[128,'AIRDROP']];
+const NEWS_RSS=[['CoinDesk','https://www.coindesk.com/arc/outboundfeeds/rss/'],['Cointelegraph','https://cointelegraph.com/rss'],
+  ['The Block','https://www.theblock.co/rss.xml'],['Decrypt','https://decrypt.co/feed'],['CryptoSlate','https://cryptoslate.com/feed/']];
+const NEWS_UPPER_STOP=new Set(['USD','USDT','USDC','ETF','SEC','CEO','CFO','CTO','API','NFT','NFTS','DAO','CEX','DEX','AI','AML','KYC','IPO','GDP','CPI','FED','FOMC','ATH','ATL','TVL','APY','APR','RWA','DEFI','CFTC','DOJ','FBI','IMF','ECB','UK','EU','US','USA','UAE','NYSE','OTC','ICO','IDO','IEO','TGE','L1','L2','ZK','EVM','ETH2','PSA','FAQ','LIVE','JUST','NEW','NEWS','BREAKING','UPDATE','WEEK','DAY','TOP','BIG','THE','AND','FOR','WITH','NOT','ALL','ONE','TWO','HOW','WHY','WHAT','WHO','GPU','CPU','LLM','AGI','ESG','ESMA','MICA','SAFU','OCC','FDIC','BOJ','PBOC','HK','SG','JP','CN','KR','IN','EST','UTC','GMT','Q1','Q2','Q3','Q4','H1','H2','PM','AM']);
+const NEWS_NAME_STOP=new Set(['act','bank','magic','flow','sign','story','space','sonic','movement','open','life','swarm','zero','one','gas','cream','fire','games','game','wild','star','sun','moon','dog','cat','frog','pepe coin','bounce','core','origin','request','power','spell','tree','token','network','protocol','chain','world','vision','solar','arena','bridge','hook','high','lit','loom','mask','mina','near','nest','oasis','ocean','pixel','prom','pundi','rare','reef','render','safe','sand','scroll','shell','sleepless','sushi','theta','tron','trust','union','unit','velo','wave','waves','wing','wolf','yield','zeta','alpine','balance','bat','beam','blur','book','bread','cake','cyber','edge','epic','echo','fusion','harmony','hero','jupiter','kite','light','lumia','mantra','map','mode','neutron','orca','pond','portal','pump','quick','radiant','raydium','ring','rose','saga','seed','skate','sky','stable','super','synapse','time','turbo','venom','voxel','wall','walrus','plume','initia','zora','gold','silver','sahara','resolv','mubarak','official trump','melania meme','the sandbox','b','c','q','a','s','us','me','w']);
+const NEWS_FLAGS=[['🚨',/\b(hack|hacked|exploit|exploited|breach|drain|drained|stolen|theft|attack|attacker|rug ?pull|compromis\w*|vulnerab\w*|suspend\w*|halt\w*|depeg\w*|insolven\w*)\b/i],
+  ['⚖',/\b(SEC|lawsuit|sued|sues|charged|indict\w*|investigat\w*|probe|fined|fine|settlement|ban|banned)\b/i],
+  ['🔓',/\b(unlock\w*|vesting|cliff)\b/i],
+  ['🤝',/\b(partner\w*|integrat\w*|collaborat\w*|lists|listing|listed|launch\w*|mainnet|upgrade|acquir\w*|acquisition|ETF|approv\w*|adopt\w*|airdrop)\b/i]];
+function newsDecode(s){return String(s||'').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<[^>]+>/g,' ')
+  .replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi,(m,n)=>String.fromCharCode(parseInt(n,16)))
+  .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();}
+// regex RSS/Atom parser (works the same in every browser; CDATA and entities handled)
+function newsParseRss(x){
+  const blocks=x.split(/<item[\s>]|<entry[\s>]/i).slice(1);
+  const tag=(b,n)=>{const m=b.match(new RegExp('<'+n+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+n+'>','i'));return m?m[1]:'';};
+  return blocks.map(b=>{
+    let link=newsDecode(tag(b,'link'));if(!link){const h=b.match(/<link[^>]*href="([^"]+)"/i);link=h?h[1]:'';}
+    const date=tag(b,'pubDate')||tag(b,'dc:date')||tag(b,'published')||tag(b,'updated');
+    const cats=(b.match(/<category[^>]*>([\s\S]*?)<\/category>/gi)||[]).map(c=>newsDecode(c)).join(' ');
+    return{title:newsDecode(tag(b,'title')),link,ts:Date.parse(newsDecode(date))||0,cats,desc:newsDecode(tag(b,'description')).slice(0,300)};
+  });
+}
+function newsFlag(t){for(const[f,re]of NEWS_FLAGS)if(re.test(t))return f;return '📰';}
+const newsEsc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const newsHtml=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function newsAge(t){const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?m+'м':m<1440?Math.round(m/60)+'ч':Math.round(m/1440)+'д';}
+function newsAgeEn(t){const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?m+'m':m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d';}
+async function newsText(url,timeout){
+  try{const r=await fetch(url,{signal:AbortSignal.timeout(timeout||8000)});if(r.ok)return await r.text();}catch(e){}
+  try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(14000)});if(r.ok)return await r.text();}catch(e){}
+  return null;
+}
+async function newsJson(url){const t=await newsText(url);if(!t)return null;try{return JSON.parse(t);}catch(e){return null;}}
+function newsUniverse(){const set=new Set(Object.keys(typeof _tMap!=='undefined'?_tMap:{}));Object.keys(NEWS.names).forEach(c=>set.add(c));return [...set].filter(c=>/^[A-Z0-9]{1,15}$/.test(c));}
+const newsBase=c=>c.replace(/^1000+/,'');
+
+async function newsLoadNames(){
+  try{const c=JSON.parse(localStorage.getItem('newsNames')||'null');if(c&&Date.now()-c.ts<24*3600e3){NEWS.names=c.m;return;}}catch(e){}
+  const m={};
+  const p=await newsJson('https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=false');
+  (p?.data||[]).forEach(x=>{if(x.q==='USDT'&&x.b&&x.an)m[x.b.toUpperCase()]=x.an;});
+  const a=await newsJson(BAPI);
+  (a?.data||[]).forEach(t=>{const s=(t.symbol||t.cexCoinName||'').toUpperCase();if(s&&t.name&&!m[s])m[s]=t.name;});
+  NEWS.names=m;try{localStorage.setItem('newsNames',JSON.stringify({ts:Date.now(),m}));}catch(e){}
+}
+function newsTickersInTitle(title,uni){
+  const out=new Set(),U=new Set(uni.map(newsBase));
+  (title.match(/\(([A-Z0-9]{1,15})\)/g)||[]).forEach(x=>out.add(x.slice(1,-1)));
+  (title.match(/\b([A-Z0-9]{1,15})(?:USDT|USDC|FDUSD)\b/g)||[]).forEach(x=>out.add(x.replace(/(USDT|USDC|FDUSD)$/,'')));
+  (title.match(/\b([A-Z0-9]{2,15})\/(?:USDT|USDC|BTC|FDUSD|TRY|EUR|BNB)\b/g)||[]).forEach(x=>out.add(x.split('/')[0]));
+  if(/Monitoring Tag|Seed Tag|Vote to Delist|Will Delist/i.test(title)){
+    const QUOTE=new Set(['USDT','USDC','BTC','BNB','ETH','FDUSD','TRY','EUR']);
+    const tail=title.split(/\b(?:Include|Includes|Delist)\b|:/i).slice(1).join(' ');
+    (tail.match(/\b[A-Z0-9]{2,15}\b/g)||[]).forEach(x=>{if(!NEWS_UPPER_STOP.has(x)&&!QUOTE.has(x))out.add(x);});
+  }
+  return [...out].filter(t=>U.has(t));
+}
+function newsBnType(cat,title){
+  if(/Monitoring Tag/i.test(title))return '⚠MONITOR';if(/Seed Tag/i.test(title))return '🌱SEED';
+  if(cat==='DELIST'||/Delist|Removal of/i.test(title))return '⛔DELIST';
+  if(/Launchpool|Launchpad|Megadrop/i.test(title))return '🌾POOL';
+  if(/HODLer|Airdrop/i.test(title))return '🪂AIRDROP';
+  if(/Futures Will Launch|Perpetual Contract/i.test(title))return '📈FUT';
+  if(cat==='LIST'||/Will List|Lists /i.test(title))return '📢LIST';
+  if(/Alpha/i.test(title))return '🅐ALPHA';
+  return '📢BN';
+}
+function newsMatchers(uni){
+  return uni.map(c=>{
+    const b=newsBase(c),name=NEWS.names[b]||NEWS.names[c]||'';
+    const tick=new RegExp('(\\$'+newsEsc(b)+'\\b|\\('+newsEsc(b)+'\\))');
+    const plain=b.length>=3&&!NEWS_UPPER_STOP.has(b)?new RegExp('\\b'+newsEsc(b)+'\\b'):null;   // case-sensitive
+    const nm=name&&name.length>=4?new RegExp('\\b'+newsEsc(name)+'\\b','i'):null;
+    const generic=!name||NEWS_NAME_STOP.has(name.toLowerCase());
+    return{c,b,tick,plain,nm,generic};
+  });
+}
+async function newsRefresh(force){
+  if(NEWS.busy)return;if(!force&&Date.now()-NEWS.ts<15*60000)return;
+  NEWS.busy=true;
+  try{
+    if(!Object.keys(NEWS.names).length)await newsLoadNames();
+    const uni=newsUniverse();
+    // 1) Binance announcements
+    const bn={};let nb=0;
+    await Promise.all(NEWS_BN_CATS.map(async([id,cat])=>{
+      const j=await newsJson(`https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=30&catalogId=${id}`);
+      const arts=(j?.data?.catalogs||[]).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=!!arts.length;
+      arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;if(!ts||Date.now()-ts>14*864e5)return;nb++;
+        newsTickersInTitle(t,uni).forEach(tk=>{if((bn[tk]||[]).some(z=>z.title===t))return;(bn[tk]=bn[tk]||[]).push({src:'Binance',type:newsBnType(cat,t),title:t,ts,url:'https://www.binance.com/en/support/announcement/'+(a.code||'')});});});
+    }));
+    // 2) RSS
+    const M=newsMatchers(uni),rss={};let nr=0;
+    await Promise.all(NEWS_RSS.map(async([src,url])=>{
+      const x=await newsText(url,9000);NEWS.ok[src]=!!x;if(!x)return;
+      newsParseRss(x).slice(0,60).forEach(it=>{
+        const{title,link,ts,cats,desc}=it;if(!title||!ts||Date.now()-ts>7*864e5)return;nr++;
+        const text=title+' '+cats+' '+desc,flag=newsFlag(title);
+        M.forEach(m=>{
+          const byTick=m.tick.test(text),byPlain=m.plain&&m.plain.test(title),byName=m.nm&&m.nm.test(title+' '+cats);
+          const hit=byTick||byPlain||(byName&&(!m.generic||byTick||byPlain));
+          if(hit)(rss[m.b]=rss[m.b]||[]).push({src,type:flag,title,ts,url:link});
+        });
+      });
+    }));
+    Object.values(bn).forEach(a=>a.sort((x,y)=>y.ts-x.ts));Object.values(rss).forEach(a=>a.sort((x,y)=>y.ts-x.ts));
+    NEWS.bn=bn;NEWS.rss=rss;NEWS.ts=Date.now();NEWS.nItems={bn:nb,rss:nr};
+    if(typeof renderList==='function'&&typeof S!=='undefined'&&S.signals&&S.signals.length)renderList();
+    if(typeof S!=='undefined'&&S.detailCoin&&document.getElementById('ov')?.classList.contains('open'))renderNewsDetail(S.detailCoin);
+  }catch(e){}
+  NEWS.busy=false;
+}
+function newsFor(coin){const b=newsBase(coin);return{bn:NEWS.bn[b]||[],rss:NEWS.rss[b]||[]};}
+const NEWS_PRI={'🚨':5,'⚖':4,'🔓':3,'🤝':2,'📰':1};
+function newsTop(coin){
+  const n=newsFor(coin),bn=n.bn.find(x=>Date.now()-x.ts<7*864e5)||null;
+  const recent=n.rss.filter(x=>Date.now()-x.ts<72*3600e3);
+  const rs=recent.sort((a,b)=>(NEWS_PRI[b.type]-NEWS_PRI[a.type])||(b.ts-a.ts))[0]||null;
+  return{bn,rs,nRss:recent.length};
+}
+function newsTagHTML(coin){
+  if(!NEWS.ts)return '';const t=newsTop(coin);let h='';
+  if(t.bn){const warn=/MONITOR|SEED|DELIST/.test(t.bn.type);
+    h+=`<span class="ctag" title="${newsHtml(t.bn.title)}" style="background:${warn?'rgba(255,34,68,.14)':'rgba(240,192,0,.14)'};color:${warn?'var(--red)':'var(--alpha)'};border:1px solid ${warn?'var(--red)':'rgba(240,192,0,.45)'}">${t.bn.type} ${newsAge(t.bn.ts)}</span>`;}
+  if(t.rs){const bad=t.rs.type==='🚨'||t.rs.type==='⚖';
+    h+=`<span class="ctag" title="${newsHtml(t.rs.src+': '+t.rs.title)}" style="background:${bad?'rgba(255,34,68,.14)':'rgba(128,128,160,.12)'};color:${bad?'var(--red)':'var(--text2)'};border:1px solid ${bad?'var(--red)':'var(--border)'}">${t.rs.type}${t.nRss>1?'×'+t.nRss:''} ${newsAge(t.rs.ts)}</span>`;}
+  return h;
+}
+function newsDigestTag(coin){
+  if(!NEWS.ts)return '';const t=newsTop(coin),p=[];
+  if(t.bn)p.push('BN:'+t.bn.type.replace(/^\W+/,'')+' '+newsAgeEn(t.bn.ts));
+  if(t.rs)p.push('NEWS'+t.rs.type+(t.nRss>1?'x'+t.nRss:'')+' '+newsAgeEn(t.rs.ts));
+  return p.join(';');
+}
+function newsDigestBlock(rows){
+  if(!NEWS.ts)return '\nNEWS: not loaded yet (first load ~15 s after the page opens, then every 15 min).\n';
+  const src=Object.entries(NEWS.ok).map(([k,v])=>k+(v?'✓':'✗')).join(' ');
+  let o=`\nNEWS (loaded ${new Date(NEWS.ts).toTimeString().slice(0,5)} | Binance ${NEWS.nItems.bn} items 14d, RSS ${NEWS.nItems.rss} items 7d | sources: ${src}) — matched by ticker/name, may miss small coins; X/Twitter not covered\n`;
+  let any=false;
+  rows.forEach(s=>{const n=newsFor(s.coin),items=[...n.bn.slice(0,2),...n.rss.slice(0,3)];if(!items.length)return;any=true;
+    o+=s.coin+': '+items.map(x=>`[${x.src} ${newsAgeEn(x.ts)} ${x.type}] ${x.title.slice(0,110)}`).join(' || ')+'\n';});
+  if(!any)o+='(no Binance announcement or outlet headline for the rows above)\n';
+  return o;
+}
+function renderNewsDetail(coin){
+  const el=document.getElementById('dpNews');if(!el)return;
+  const b=newsBase(coin),n=newsFor(coin),items=[...n.bn.slice(0,4),...n.rss.slice(0,6)].sort((x,y)=>y.ts-x.ts);
+  const q=encodeURIComponent('$'+b);
+  const links=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+    <a class="ext-link" href="https://x.com/search?q=${q}&f=live" target="_blank" rel="noopener">𝕏 $${b} live</a>
+    <a class="ext-link" href="https://cryptopanic.com/news/?search=${encodeURIComponent(b)}" target="_blank" rel="noopener">🐼 CryptoPanic</a>
+    <a class="ext-link" href="https://www.binance.com/en/square/search?s=${encodeURIComponent(b)}" target="_blank" rel="noopener">🟨 Binance Square</a>
+    <a class="ext-link" href="https://www.binance.com/en/support/announcement" target="_blank" rel="noopener">📢 BN најави</a></div>`;
+  const list=!NEWS.ts?'<div style="color:var(--muted)">Вестите уште се вчитуваат…</div>':items.length?items.map(x=>
+    `<div style="margin:4px 0;line-height:1.45"><span style="color:var(--muted)">${newsAge(x.ts)} · ${newsHtml(x.src)}</span> ${x.type} <a href="${newsHtml(x.url)}" target="_blank" rel="noopener" style="color:var(--text)">${newsHtml(x.title)}</a></div>`).join('')
+    :'<div style="color:var(--muted)">Нема најава на Binance (14д) ниту наслов во CoinDesk / Cointelegraph / The Block / Decrypt / CryptoSlate (7д). Малите коини ретко се таму — провери на 𝕏.</div>';
+  el.innerHTML=`<div class="dp-sigs-t">// 📰 ВЕСТИ И НАЈАВИ</div>${links}<div style="font-family:var(--mono);font-size:11px">${list}</div>`;
+}
+setTimeout(()=>newsRefresh(true),15000);
+setInterval(()=>newsRefresh(false),5*60000);
 
 </script>
 </body>
