@@ -1056,6 +1056,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-16-g  TRUTH 16.10 14:03 (first -f digest): every Binance catalog = (0/20) with no
+//    oldest date -> 20 posts returned, NONE with a readable releaseDate, so every CMS post
+//    was dropped by the 14d filter since -b. The "Binance 8 items" were ALL futures launches
+//    from exchangeInfo (FUTNEW). BN:LIST/DELIST/ALPHA tags and the SPOT DELIST guard never fired.
+//    Fix: bnTs() reads releaseDate / publishDate / publishTime / createTime / ... as ms, seconds
+//    or a date string; last resort the YYYY-MM-DD in the title if it is not in the future.
+//    SPOT DELIST no longer needs the post date when the title has a future delist date.
+//    Digest: "Binance N items 14d (CMS x + FUT y)"; a catalog with no readable dates prints
+//    the field names of its first post (nodate:k1,k2,...) so the next fix needs no guessing.
+//    Endpoint returns 20 per page although 30 is requested.
 //  2026-10-16-f  NEWS check vs binance.com (16.10): Delisting page 1 = 10 posts back to 15.09,
 //    only 2 inside 14d, so pageSize=30 was never the cut. Findings fixed here:
 //    (1) per-catalog counts in the digest: BNLIST✓direct(w/n ≥date) = posts inside 14d /
@@ -1117,7 +1127,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-16-f';
+const APP_BUILD='2026-10-16-g';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6777,6 +6787,17 @@ async function newsRssItems(url){
 }
 function newsUniverse(){const set=new Set(Object.keys(typeof _tMap!=='undefined'?_tMap:{}));Object.keys(NEWS.names).forEach(c=>set.add(c));return [...set].filter(c=>/^[A-Z0-9]{1,15}$/.test(c));}
 const newsBase=c=>c.replace(/^1000+/,'');
+// Binance CMS post time: field name / unit differ by endpoint variant (TRUTH 16.10: releaseDate unreadable)
+function bnTs(a){
+  if(!a||typeof a!=='object')return 0;
+  for(const k of ['releaseDate','publishDate','publishTime','releaseTime','createTime','createdAt','ctime','date','time','updateTime']){
+    const v=a[k];if(v==null||v==='')continue;
+    if(typeof v==='number'||/^\d+$/.test(String(v))){let n=+v;if(n>1e9&&n<1e11)n*=1000;if(n>1e12&&n<1e14)return n;continue;}
+    const d=Date.parse(String(v));if(d>1e12)return d;
+  }
+  const m=String(a.title||'').match(/(\d{4}-\d{2}-\d{2})/);if(m){const d=Date.parse(m[1]+'T00:00:00Z');if(d&&d<=Date.now()+864e5)return d;}
+  return 0;
+}
 
 async function newsLoadNames(){
   try{const c=JSON.parse(localStorage.getItem('newsNames')||'null');if(c&&Date.now()-c.ts<24*3600e3&&Object.keys(c.m||{}).length>50){NEWS.names=c.m;NEWS.ptags=c.tg||{};return;}}catch(e){}
@@ -6831,11 +6852,11 @@ async function newsRefresh(force){
     const namesP=Object.keys(NEWS.names).length?Promise.resolve():newsLoadNames();
     const uni0=Object.keys(typeof _tMap!=='undefined'?_tMap:{});
     // 1) Binance announcements
-    const bn={},seenT=new Set(),spotDel={};let nb=0;NEWS.cnt={};
+    const bn={},seenT=new Set(),spotDel={};let nb=0,nf=0;NEWS.cnt={};
     const uni=newsUniverse().concat(uni0);
     // Binance futures exchangeInfo: perps onboarded in the last 14 days = futures launch (no CMS needed)
     try{const ei=await apiFetch('/exchangeInfo');(ei?.symbols||[]).forEach(x=>{const od=+x.onboardDate||0;if(!x.symbol.endsWith('USDT')||!od||Date.now()-od>14*864e5||od>Date.now())return;
-      const c=x.symbol.replace(/USDT$/,''),b=newsBase(c);(bn[b]=bn[b]||[]).push({src:'Binance Futures',type:'📈FUT',title:`${x.symbol} perpetual listed on Binance Futures (${new Date(od).toISOString().slice(0,10)})`,ts:od,url:`https://www.binance.com/en/futures/${x.symbol}`});nb++;});
+      const c=x.symbol.replace(/USDT$/,''),b=newsBase(c);(bn[b]=bn[b]||[]).push({src:'Binance Futures',type:'📈FUT',title:`${x.symbol} perpetual listed on Binance Futures (${new Date(od).toISOString().slice(0,10)})`,ts:od,url:`https://www.binance.com/en/futures/${x.symbol}`});nf++;});
       NEWS.ok.FUTNEW='api';}catch(e){NEWS.ok.FUTNEW=false;}
     // sequential + 2 tries per catalog: Binance answered DELIST/NEWS but not LIST/ACT/AIRDROP in parallel (burst limit)
     for(const[id,cat]of NEWS_BN_CATS){await (async()=>{
@@ -6845,15 +6866,18 @@ async function newsRefresh(force){
         if(!arts0.length)await sleep(1200);}
       const cats0=j?.data?.catalogs||[],mine=cats0.filter(c=>+c.catalogId===id);
       const arts=(mine.length?mine:cats0).flatMap(c=>c.articles||[]).concat(j?.data?.articles||[]);NEWS.ok['BN'+cat]=arts.length?(NEWS.via[NEWS_BN_URLS[NEWS_BN_VAR](id)]||'?'):false;
-      const tss=arts.map(a=>+a.releaseDate||0).filter(Boolean);
-      NEWS.cnt['BN'+cat]={n:arts.length,w:tss.filter(x=>Date.now()-x<=14*864e5).length,old:tss.length?Math.min(...tss):0};
+      const tss=arts.map(bnTs).filter(Boolean);
+      NEWS.cnt['BN'+cat]={n:arts.length,w:tss.filter(x=>Date.now()-x<=14*864e5).length,old:tss.length?Math.min(...tss):0,
+        nodate:arts.length&&!tss.length?Object.keys(arts[0]||{}).slice(0,12).join(','):''};
       // spot delist guard: perp stays open (no deliveryDate) while spot goes -> block the perp too
-      arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;
-        if(!ts||Date.now()-ts>30*864e5||!/Will Delist/i.test(t)||/Margin|Futures|Alpha/i.test(t))return;
-        const dm=t.match(/\bon (\d{4}-\d{2}-\d{2})/i),dd=dm?Date.parse(dm[1]+'T00:00:00Z'):0;if(dd&&dd<Date.now()-864e5)return;
+      arts.forEach(a=>{const t=a.title||'',ts=bnTs(a);
+        if(!/Will Delist/i.test(t)||/Margin|Futures|Alpha/i.test(t))return;
+        const dm=t.match(/\bon (\d{4}-\d{2}-\d{2})/i),dd=dm?Date.parse(dm[1]+'T00:00:00Z'):0;
+        if(dd){if(dd<Date.now()-864e5)return;}            // future delist date in the title = current, post date not needed
+        else if(!ts||Date.now()-ts>30*864e5)return;
         const perps=Object.keys(typeof _tMap!=='undefined'?_tMap:{});
         newsTickersInTitle(t,perps).forEach(tk=>perps.filter(c=>newsBase(c)===tk).forEach(c=>{if(!spotDel[c])spotDel[c]={t:dd||null,title:t,ts};}));});
-      arts.forEach(a=>{const t=a.title||'',ts=+a.releaseDate||0;if(!ts||Date.now()-ts>14*864e5)return;if(!seenT.has(t)){seenT.add(t);nb++;}
+      arts.forEach(a=>{const t=a.title||'',ts=bnTs(a);if(!ts||Date.now()-ts>14*864e5)return;if(!seenT.has(t)){seenT.add(t);nb++;}
         newsTickersInTitle(t,uni).forEach(tk=>{if((bn[tk]||[]).some(z=>z.title===t))return;(bn[tk]=bn[tk]||[]).push({src:'Binance',type:newsBnType(cat,t),title:t,ts,url:'https://www.binance.com/en/support/announcement/'+(a.code||'')});});});
     })();await sleep(400);}
     // spot product tags (Monitoring / Seed) from the product list
@@ -6874,7 +6898,7 @@ async function newsRefresh(force){
       });
     }));
     Object.values(bn).forEach(a=>a.sort((x,y)=>y.ts-x.ts));Object.values(rss).forEach(a=>a.sort((x,y)=>y.ts-x.ts));
-    NEWS.bn=bn;NEWS.rss=rss;NEWS.ts=Date.now();NEWS.loading=0;NEWS.nItems={bn:nb,rss:nr};NEWS.spotDelist=spotDel;
+    NEWS.bn=bn;NEWS.rss=rss;NEWS.ts=Date.now();NEWS.loading=0;NEWS.nItems={bn:nb+nf,cms:nb,fut:nf,rss:nr};NEWS.spotDelist=spotDel;
     if(typeof renderDelistBanner==='function')renderDelistBanner();
     if(typeof renderList==='function'&&typeof S!=='undefined'&&S.signals&&S.signals.length)renderList();
     if(typeof S!=='undefined'&&S.detailCoin&&document.getElementById('ov')?.classList.contains('open'))renderNewsDetail(S.detailCoin);
@@ -6905,9 +6929,9 @@ function newsDigestTag(coin){
 }
 function newsDigestBlock(rows){
   if(!NEWS.ts)return NEWS.loading?`\nNEWS: loading… (started ${new Date(NEWS.loading).toTimeString().slice(0,5)}; first load can take 1-2 min, then it is fast)\n`:'\nNEWS: not started yet (starts ~15 s after the page opens, then every 15 min).\n';
-  const cf=k=>{const c=NEWS.cnt[k];return c?`(${c.w}/${c.n}${c.old?' ≥'+new Date(c.old).toISOString().slice(5,10):''})`:'';};
+  const cf=k=>{const c=NEWS.cnt[k];return c?`(${c.w}/${c.n}${c.old?' ≥'+new Date(c.old).toISOString().slice(5,10):''}${c.nodate?' nodate:'+c.nodate:''})`:'';};
   const src=Object.entries(NEWS.ok).map(([k,v])=>k+(v?'✓'+v:'✗')+cf(k)).join(' ')+' | names '+Object.keys(NEWS.names).length;
-  let o=`\nNEWS (loaded ${new Date(NEWS.ts).toTimeString().slice(0,5)} | Binance ${NEWS.nItems.bn} items 14d, RSS ${NEWS.nItems.rss} items 7d | sources: ${src}) — matched by ticker/name, may miss small coins; X/Twitter not covered\nBN catalog (w/n ≥MM-DD) = posts inside 14d / posts returned, oldest returned. Oldest newer than 14d ago = the page cut the window.\n`;
+  let o=`\nNEWS (loaded ${new Date(NEWS.ts).toTimeString().slice(0,5)} | Binance ${NEWS.nItems.bn} items 14d (CMS ${NEWS.nItems.cms??'?'} + FUT ${NEWS.nItems.fut??'?'}), RSS ${NEWS.nItems.rss} items 7d | sources: ${src}) — matched by ticker/name, may miss small coins; X/Twitter not covered\nBN catalog (w/n ≥MM-DD) = posts inside 14d / posts returned, oldest returned. Oldest newer than 14d ago = the page cut the window.\n`;
   let any=false;
   rows.forEach(s=>{const n=newsFor(s.coin),items=[...n.bn.slice(0,2),...n.rss.slice(0,3)];if(!items.length)return;any=true;
     o+=s.coin+': '+items.map(x=>`[${x.src} ${newsAgeEn(x.ts)} ${x.type}] ${x.title.slice(0,110)}`).join(' || ')+'\n';});
