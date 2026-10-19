@@ -527,9 +527,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-clear" onclick="openLab()" title="PUMP LAB — што покажувале коините пред пумпа">🧪</button>
   <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
-    <div class="tf active" id="tf-1m"  onclick="setTF('1m',this)">1m</div>
+    <div class="tf"        id="tf-1m"  onclick="setTF('1m',this)">1m</div>
     <div class="tf"        id="tf-5m"  onclick="setTF('5m',this)">5m</div>
-    <div class="tf"        id="tf-15m" onclick="setTF('15m',this)">15m</div>
+    <div class="tf active" id="tf-15m" onclick="setTF('15m',this)">15m</div>
     <div class="tf"        id="tf-1h"  onclick="setTF('1h',this)">1h</div>
     <div class="tf"        id="tf-4h"  onclick="setTF('4h',this)">4h</div>
     <div class="tf"        id="tf-12h" onclick="setTF('12h',this)">12h</div>
@@ -845,7 +845,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //  v2.7 STRUCT · build 2026-10-07-c   (phase 0 + phase 1 of the TREND/LOCATION plan)
 //   - NEW: TRND (15m+1h) -- three votes in a fixed order: 1h JMA/DWMA, close vs SMA200 on
 //     closed 15m bars, confirmed-pivot structure (HH/HL vs LH/LL, a break of the last pivot
-//     counts). UP = 2+ votes up, DOWN = 2+ votes down, RANGE otherwise. RLC 07.10 15:15:
+//     counts). UP/DOWN = net vote sum >= +2 / <= -2, RANGE otherwise (wording fixed in 10-19-a). RLC 07.10 15:15:
 //     the short was with 1h↓, <MA200 and LH/LL while FLIP▲ read the relief bounce as a turn.
 //   - NEW: LOC (15m) -- nearest support/resistance from confirmed pivots, MA200, POC and
 //     Fibo .5/.618/.786 of the current leg; levels within 0.15 ATR are merged (confluence).
@@ -1056,6 +1056,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-19-a  TRUTH 19.10 11:03 (ARIA): the 📐↔RNG·@R badge was not found in ❓ -- the help row
+//    only showed 📐▼DN·@R, and on the phone ↔ reads as a minus. Help row now lists every variant.
+//    TRND rule text fixed to match the code (code unchanged): UP/DOWN = NET vote sum >= +2 / <= -2
+//    (each vote +1/0/-1), RANGE otherwise -- a 2:1 split (net +-1) is RANGE, not a trend. The old
+//    text said "2+ votes the same way", which a 2:1 split satisfies. Help, digest legend and
+//    this log now say the same thing.
+//    Default scan TF 1m -> 15m (button + S.tf), same TF as CLEAN15 and the digest work.
 //  2026-10-16-g  TRUTH 16.10 14:03 (first -f digest): every Binance catalog = (0/20) with no
 //    oldest date -> 20 posts returned, NONE with a readable releaseDate, so every CMS post
 //    was dropped by the 14d filter since -b. The "Binance 8 items" were ALL futures launches
@@ -1127,7 +1134,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-16-g';
+const APP_BUILD='2026-10-19-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1333,7 +1340,7 @@ function momRefLoad(tf){try{const r=JSON.parse(localStorage.getItem('momRef_'+tf
 
 const S={
   scanning:false,timer:null,abort:false,
-  signals:[],filters:new Set(),sort:'score',tf:'1m',srch:'',srchList:[],srchMissing:[],
+  signals:[],filters:new Set(),sort:'score',tf:'15m',srch:'',srchList:[],srchMissing:[],
   alphaSet:new Set(),
   favorites:new Set(JSON.parse(localStorage.getItem('favs')||'[]')),
   _partial:{},detailCoin:null,chartTF:null,
@@ -5030,7 +5037,7 @@ function cleanDigest(rows){
     +'G9 SL TREND=level-'+CLEAN_SL_ATR+'ATR / SWEEP=wick-'+CLEAN_SL_SWEEP_BUF+'ATR, <='+CLEAN_SL_MAX_ATR+'ATR, R:R>='+CLEAN_RR_MIN+' | G10 trap: range<='+CLEAN_TRAP_ATR+'ATR >='+CLEAN_TRAP_BARS
     +' bars + OI coins >=+'+CLEAN_TRAP_OI+'% + crowded L/S -> SWEEP only. A=10/10, B=10/10+flag, WAIT=any fail.\n';
   o+='TRND (v2.7) = 3 votes in order: 1h JMA/DWMA | close vs SMA'+CLEAN_MA_LEN+' on closed 15m | pivot structure HH/HL vs LH/LL '
-    +'(BRK = close beyond the last confirmed pivot). UP/DOWN = 2+ votes the same way, RANGE = conflict. '
+    +'(BRK = close beyond the last confirmed pivot). Each vote +1/0/-1; UP/DOWN = NET sum >= +2 / <= -2, RANGE otherwise (a 2:1 split = net +-1 = RANGE); the number after the label is the net sum. '
     +'LOC = nearest S/R zone from pivots, MA200, POC, Fibo .5/.618/.786 of the current leg (levels within '+CLEAN_LVL_MERGE
     +' ATR merged); AT-S/AT-R = close within '+CLEAN_LOC_ATR+' ATR, MID otherwise; EXT = |MOMz 15m| >= '+CLEAN_EXT_ATR
     +'. Descriptive only: no gate and no SCORE vote uses TRND/LOC yet.\n';
@@ -5252,7 +5259,7 @@ function helpSections(){
   ]},
   {h:'🏷 ОЗНАКИ НА КАРТИЧКА',items:[
     {tag:'✅A▲ / ✅B▼',col:g,what:'CLEAN15 чист влез: оценка A или B, ▲ лонг / ▼ шорт. Испрекината рамка = B. Секогаш прва ознака.',action:'Клик → детали со сите 10 гејта.'},
-    {tag:'📐▼DN·@R',col:a,what:'TRND (v2.7): 1h JMA/DWMA + затворање спрема SMA200 на 15m + структура од потврдени pivots (HH/HL или LH/LL, BRK = пробиен последен pivot). ▲UP / ▼DN = 2+ гласа во иста насока, ↔RNG = судир. LOC: @S / @R = во 0.5 ATR од зона (pivot, MA200, POC, Фибо .5–.786 на тековниот замав), mid = помеѓу, EXT = |MOMz 15m| ≥ 3.',action:'Само опис — не е гејт и не гласа во SCORE (уште). Се гледа само кај коини проверени во CLEAN15 (shortlist, FAV, пребарување).'},
+    {tag:'📐▲UP · ▼DN · ↔RNG  ·@S ·@R ·mid ·EXT',col:a,what:'TRND (v2.7): 3 гласа, секој +1 / 0 / −1: 1h JMA/DWMA, затворање спрема SMA200 на 15m, структура од потврдени pivots (HH/HL = +1, LH/LL = −1, мешано = 0; BRK = пробиен последен pivot). ▲UP / ▼DN = НЕТО-збир ≥ +2 / ≤ −2. ↔RNG (сива, стрелката на телефон личи на минус) = сè друго, вклучително сплит 2:1 (нето ±1). Бројот во DIGEST, пр. RANGE(-1), е нето-збирот. LOC: @S / @R = во 0.5 ATR од зона (pivot, MA200, POC, Фибо .5–.786 на тековниот замав), mid = помеѓу, EXT = |MOMz 15m| ≥ 3.',action:'Само опис — не е гејт и не гласа во SCORE (уште). Се гледа само кај коини проверени во CLEAN15 (shortlist, FAV, пребарување).'},
     {tag:'✅A · ⚠ WATCH',col:a,what:'СЕТАПИ (1h+4h): ✅ = CLEAN15 A/B на истата страна, нивоата се од CLEAN15. ⚠ WATCH = насока без чист влез: CLEAN15 WAIT, LOC15 блок (шорт @S, лонг @R, EXT) — прикажани се паднатите гејтови и 1h план (LIMIT на ниво, SL 0.5 ATR зад зоната, ≤1.5 ATR, R:R ≥ 2).',action:'WATCH не е влез. Чекај цената да дојде на нивото и CLEAN15 да даде A/B.'},
     {tag:'Лева лента',col:g,what:'Зелена = BULL, црвена = BEAR, портокалова = LIQ HUNT, сива = неутрално.'},
     {tag:'$цена · TV',col:'#2962ff',what:'Последна цена. TV отвора TradingView layout на тој TF.'},
