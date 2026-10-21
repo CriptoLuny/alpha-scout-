@@ -514,6 +514,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <span class="search-x" id="srchX" onclick="clrSrch()">✕</span>
   </div>
   <div class="dot" id="dot"></div>
+  <button class="hm-btn" id="wBtn" onclick="watchOpen()" style="margin-right:4px;border-color:var(--green);color:var(--green)">🔔 WATCH</button>
   <button class="hm-btn" onclick="toggleHelp()" style="margin-right:4px;border-color:rgba(255,208,0,.3);color:var(--yellow)">❓</button>
   <button class="hm-btn" id="suTabBtn" onclick="toggleSetups()" style="margin-right:4px">📊 СЕТАПИ</button><button class="hm-btn" id="hmTabBtn" onclick="toggleHeatmap()">⚡ HEATMAP</button>
 </div>
@@ -1056,6 +1057,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    dimmed, failed gates listed, and the 1h plan shown as a LIMIT at the invalidation zone
 //    (SL 0.5 ATR beyond it, <= 1.5 ATR, R:R >= 2) -- a plan, not a market entry.
 //    Tab button and toast count GO only; WATCH count shown separately.
+//  2026-10-21-a  WATCH: per-coin alarm zones (R resistance / S support / L line), checked every
+//    5 minutes on the 5m grid (+12 s) on CLOSED 15m/1h bars + live price, independent of the scan.
+//    R rejection (wick >= 40%, close under the zone, OI coins 3x15m <= 0, taker < 48%B) = short
+//    candidate with SL/TP1/R:R; S reclaim mirrored (OI within +-1.5%, taker > 52%B); 1h close
+//    through a zone with OI +-1% = breakout warning; L = line cross; zone entry = info. Failed
+//    checks are listed ("test without confirmation"). Delivery: in-page popup (queue, copy-to-chat
+//    text), beep (mute toggle), vibration, title flash, optional system notification for a
+//    background tab (PC). On/off, mute and notifications persist (localStorage watch_v1).
+//    Header button 🔔 / 🔕 / ⏸. Not a CLEAN15 grade. iPhone pauses it in the background.
 //  2026-10-19-a  TRUTH 19.10 11:03 (ARIA): the 📐↔RNG·@R badge was not found in ❓ -- the help row
 //    only showed 📐▼DN·@R, and on the phone ↔ reads as a minus. Help row now lists every variant.
 //    TRND rule text fixed to match the code (code unchanged): UP/DOWN = NET vote sum >= +2 / <= -2
@@ -1134,7 +1144,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-19-a';
+const APP_BUILD='2026-10-21-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -5259,6 +5269,7 @@ function helpSections(){
   ]},
   {h:'🏷 ОЗНАКИ НА КАРТИЧКА',items:[
     {tag:'✅A▲ / ✅B▼',col:g,what:'CLEAN15 чист влез: оценка A или B, ▲ лонг / ▼ шорт. Испрекината рамка = B. Секогаш прва ознака.',action:'Клик → детали со сите 10 гејта.'},
+    {tag:'🔔 WATCH / 🔕 / ⏸',col:g,what:'Аларми по зони за избрани коини, проверка на секои 5 мин на затворени 15m/1h свеќи: R отфрлање (▼ кандидат), S reclaim (▲ кандидат), пробив на зона со OI (⚠), пресек на L линија, влез во зона (инфо). Попап + звук + (опционално) системско известување на PC.',action:'Вклучи/исклучи и мутирај во панелот или во попапот. 📋 КОПИРАЈ го дава снимокот за анализа. Кандидат не е CLEAN15 оценка. На iPhone работи само додека апликацијата е отворена.'},
     {tag:'📐▲UP · ▼DN · ↔RNG  ·@S ·@R ·mid ·EXT',col:a,what:'TRND (v2.7): 3 гласа, секој +1 / 0 / −1: 1h JMA/DWMA, затворање спрема SMA200 на 15m, структура од потврдени pivots (HH/HL = +1, LH/LL = −1, мешано = 0; BRK = пробиен последен pivot). ▲UP / ▼DN = НЕТО-збир ≥ +2 / ≤ −2. ↔RNG (сива, стрелката на телефон личи на минус) = сè друго, вклучително сплит 2:1 (нето ±1). Бројот во DIGEST, пр. RANGE(-1), е нето-збирот. LOC: @S / @R = во 0.5 ATR од зона (pivot, MA200, POC, Фибо .5–.786 на тековниот замав), mid = помеѓу, EXT = |MOMz 15m| ≥ 3.',action:'Само опис — не е гејт и не гласа во SCORE (уште). Се гледа само кај коини проверени во CLEAN15 (shortlist, FAV, пребарување).'},
     {tag:'✅A · ⚠ WATCH',col:a,what:'СЕТАПИ (1h+4h): ✅ = CLEAN15 A/B на истата страна, нивоата се од CLEAN15. ⚠ WATCH = насока без чист влез: CLEAN15 WAIT, LOC15 блок (шорт @S, лонг @R, EXT) — прикажани се паднатите гејтови и 1h план (LIMIT на ниво, SL 0.5 ATR зад зоната, ≤1.5 ATR, R:R ≥ 2).',action:'WATCH не е влез. Чекај цената да дојде на нивото и CLEAN15 да даде A/B.'},
     {tag:'Лева лента',col:g,what:'Зелена = BULL, црвена = BEAR, портокалова = LIQ HUNT, сива = неутрално.'},
@@ -6963,5 +6974,402 @@ setTimeout(()=>newsRefresh(true),15000);
 setInterval(()=>newsRefresh(false),5*60000);
 
 </script>
+<!-- ══ WATCH (2026-10-21-a): аларми по зони, проверка на секои 5 минути ══ -->
+<style>
+.w-ov{display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.w-box{max-width:640px;margin:20px auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px;width:calc(100% - 24px)}
+.w-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.w-tg{font-family:var(--mono);font-size:11px;padding:7px 11px;border-radius:8px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:var(--text2);user-select:none;-webkit-user-select:none}
+.w-tg.on{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.08)}
+.w-tg.off{border-color:rgba(255,34,68,.45);color:var(--red);background:rgba(255,34,68,.06)}
+.w-tg.mut{border-color:var(--yellow);color:var(--yellow);background:rgba(255,208,0,.08)}
+.w-h{font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:1px;margin:16px 0 6px}
+.w-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px}
+.w-item.dis{opacity:.45}
+.w-in{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:12px;box-sizing:border-box}
+textarea.w-in{min-height:96px;resize:vertical}
+.w-btn{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:var(--text2)}
+.w-chip{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:4px;margin:2px 3px 0 0;border:1px solid var(--border)}
+.w-chip.R{color:var(--red);border-color:rgba(255,34,68,.4)}.w-chip.S{color:var(--green);border-color:rgba(0,255,136,.4)}.w-chip.L{color:var(--yellow);border-color:rgba(255,208,0,.4)}
+.w-note{font-size:11px;color:var(--text2);line-height:1.6}
+.w-pop{display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:12px}
+.w-pop.open{display:flex}
+.w-pbox{background:var(--bg2);border:2px solid var(--accent);border-radius:14px;max-width:460px;width:100%;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.6);max-height:90vh;overflow-y:auto;box-sizing:border-box}
+.w-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}
+.w-cell{background:var(--card);border-radius:8px;padding:7px 9px;font-family:var(--mono);font-size:12px}
+.w-cell span{display:block;font-size:9px;color:var(--muted);letter-spacing:.5px;margin-bottom:2px}
+.w-plan{background:var(--card);border:1px dashed var(--border);border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:12px;line-height:1.7;margin-bottom:10px}
+.w-log{font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer}
+</style>
+
+<div class="w-ov" id="wOv" onclick="if(event.target===this)watchClose()">
+  <div class="w-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-family:var(--mono);font-size:16px;font-weight:bold;color:var(--accent)">🔔 WATCH — аларми</div>
+      <button class="w-btn" onclick="watchClose()">✕ ЗАТВОРИ</button>
+    </div>
+    <div class="w-row" id="wTgls"></div>
+    <div id="wStat" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px">—</div>
+
+    <div class="w-h">// СЛЕДЕЊА</div>
+    <div id="wList"></div>
+
+    <div class="w-h">// ДОДАДИ / ИЗМЕНИ</div>
+    <div class="w-item">
+      <input class="w-in" id="wCoin" placeholder="Коин, пр. ARIA" autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase;margin-bottom:6px">
+      <textarea class="w-in" id="wZones" placeholder="R 0.0645-0.0655&#10;S 0.0587-0.0603&#10;L 0.0620" spellcheck="false"></textarea>
+      <div class="w-row" style="margin-top:6px">
+        <button class="w-btn" onclick="wSaveItem()" style="border-color:var(--green);color:var(--green)">💾 ЗАЧУВАЈ</button>
+        <button class="w-btn" onclick="wClearForm()">ИСЧИСТИ</button>
+      </div>
+      <div class="w-note" style="margin-top:8px">Еден ред = едно ниво. <b>R</b> отпор, <b>S</b> поддршка (зона <code>од-до</code> или една цена), <b>L</b> линија (аларм на пресек). Ист коин = се заменуваат нивоата.</div>
+    </div>
+
+    <div class="w-h">// ПРАВИЛА</div>
+    <div class="w-note" id="wRules"></div>
+
+    <div class="w-h">// ДНЕВНИК (последни 40)</div>
+    <div id="wLog"></div>
+  </div>
+</div>
+
+<div class="w-pop" id="wPop"><div class="w-pbox" id="wPbox"></div></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// WATCH (2026-10-21-a). Per-coin zones (R / S / L) checked every 5 minutes, aligned to the
+// 5m close + 12 s, on CLOSED 15m / 1h bars plus the live price. Each hit opens a popup
+// (in-page), optional system notification (desktop, tab in background), title flash and a
+// beep that can be muted. A candidate is a prompt to check, not a CLEAN15 grade.
+// Data per coin and run: 15m klines (40), 1h klines (4), openInterestHist 15m (12, through
+// oiGuard), premiumIndex (FR), globalLongShortAccountRatio 15m (2) = 5 requests.
+// ══════════════════════════════════════════════════════════════
+const W_KEY='watch_v1';
+const W_STEP=5*60*1000, W_LAG=12*1000;
+const W_TAKER_SHORT=48, W_TAKER_LONG=52;   // taker buy % of the closed 15m bar
+const W_WICK=0.40;                         // rejection / reclaim wick >= this share of the bar
+const W_OI_BRK=1.0;                        // breakout needs OI coins >= +1% (3 x 15m); breakdown <= -1%
+const W_OI_HOLD=1.5;                       // long reclaim: OI coins within +-1.5% (FLUSH->HOLD, no new pile-up)
+const W_SL_BUF=0.3;                        // SL buffer beyond the wick / zone, in ATR(14) 15m
+const W_LOG_MAX=40;
+
+function wDefault(){return{on:true,mute:false,notif:false,
+  list:[{coin:'ARIA',on:true,zones:[{k:'R',lo:0.0645,hi:0.0655},{k:'R',lo:0.0675,hi:0.0685},{k:'S',lo:0.0587,hi:0.0603},{k:'L',lo:0.0620,hi:0.0620},{k:'L',lo:0.0668,hi:0.0668}]}],
+  seen:{},inz:{},px:{},log:[]};}
+function wLoad(){try{const s=JSON.parse(localStorage.getItem(W_KEY)||'null');if(s&&Array.isArray(s.list))return Object.assign(wDefault(),s);}catch(e){}return wDefault();}
+function wSave(){try{localStorage.setItem(W_KEY,JSON.stringify(WT));}catch(e){}}
+let WT=wLoad();
+let _wTimer=null,_wNext=0,_wLast=0,_wBusy=false,_wQ=[],_wQi=0,_wAC=null,_wTitle=null,_wFlash=null;
+
+function wEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function wSgn(x,d){return x==null||isNaN(x)?'—':(x>=0?'+':'')+x.toFixed(d==null?1:d);}
+function wHM(t){return new Date(t).toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit'});}
+function wHMS(t){return new Date(t).toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function wZtxt(z){return z.k+' '+(z.lo===z.hi?fmt(z.lo):fmt(z.lo)+'–'+fmt(z.hi));}
+function wKey(c,z){return c+'|'+z.k+'|'+z.lo+'|'+z.hi;}   // editing a zone resets its memory
+
+// ── schedule ───────────────────────────────────────────────
+function wSchedule(){
+  clearTimeout(_wTimer);
+  if(!WT.on){_wNext=0;wStat();return;}
+  const now=Date.now();
+  _wNext=Math.floor(now/W_STEP)*W_STEP+W_STEP+W_LAG;
+  _wTimer=setTimeout(async()=>{await wRun();wSchedule();},_wNext-now);
+  wStat();
+}
+async function wRun(manual){
+  if(_wBusy)return;_wBusy=true;wStat();
+  const items=WT.list.filter(x=>x.on&&x.zones&&x.zones.length);
+  for(const it of items){try{await wCheck(it);}catch(e){it.err='грешка: '+(e&&e.message||e);}}
+  _wLast=Date.now();_wBusy=false;wSave();wStat();wRender();
+  if(manual)toast(items.length?`🔔 WATCH: проверени ${items.length} коини`:'🔔 WATCH: нема активни следења');
+}
+
+// ── one coin ───────────────────────────────────────────────
+async function wCheck(it){
+  const c=it.coin,sym=c+'USDT';
+  const[k15,k1h,oiH,pi,ls]=await Promise.all([
+    apiFetch(`/klines?symbol=${sym}&interval=15m&limit=40`),
+    apiFetch(`/klines?symbol=${sym}&interval=1h&limit=4`),
+    apiFetch(`/openInterestHist?symbol=${sym}&period=15m&limit=12`,FDAPI),
+    apiFetch(`/premiumIndex?symbol=${sym}`),
+    apiFetch(`/globalLongShortAccountRatio?symbol=${sym}&period=15m&limit=2`,FDAPI)
+  ]);
+  const now=Date.now();
+  if(!Array.isArray(k15)||k15.length<20){it.err='нема 15m свеќи од Binance';return;}
+  const closed=k15.filter(k=>+k[6]<now);
+  if(closed.length<16){it.err='премалку затворени свеќи';return;}
+  const px=+k15[k15.length-1][4];
+  const b=closed[closed.length-1];
+  const bT=+b[0],bO=+b[1],bH=+b[2],bL=+b[3],bC=+b[4],bQ=+b[7],bB=+b[10];
+  const rng=bH-bL;
+  const upW=rng>0?(bH-Math.max(bO,bC))/rng:0, loW=rng>0?(Math.min(bO,bC)-bL)/rng:0;
+  const taker=bQ>0?bB/bQ*100:50;
+  let atr=0;{let s=0;const n=14;for(let i=closed.length-n;i<closed.length;i++){const h=+closed[i][2],l=+closed[i][3],pc=+closed[i-1][4];s+=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc));}atr=s/n;}
+  let d3=0,q3=0;closed.slice(-3).forEach(k=>{d3+=2*(+k[10])-(+k[7]);q3+=+k[7];});
+  const cvd3=q3>0?d3/q3*100:0;
+  let oi3=null,oiNow=null,oiFix=0;
+  if(Array.isArray(oiH)&&oiH.length>=4){
+    const g=await oiGuard(c,oiH.map(x=>({t:+x.timestamp,c:+x.sumOpenInterest})).sort((a,b2)=>a.t-b2.t),null);
+    oiFix=g.fix||0;
+    if(g.pts.length>=2){const last=g.pts[g.pts.length-1],ref=oiAtOrBefore(g.pts,last.t-3*15*60000);oiNow=last.c;if(ref&&ref!==last&&ref.c>0)oi3=(last.c/ref.c-1)*100;}
+  }
+  const fr=pi&&pi.lastFundingRate!=null?parseFloat(pi.lastFundingRate)*100:null;
+  const lsN=Array.isArray(ls)&&ls.length?+ls[ls.length-1].longShortRatio:null;
+  const lsP=Array.isArray(ls)&&ls.length>1?+ls[ls.length-2].longShortRatio:null;
+  const h1s=(Array.isArray(k1h)?k1h:[]).filter(k=>+k[6]<now),h1=h1s.length?h1s[h1s.length-1]:null;
+  const snap={px,bT,bH,bL,bC,upW,loW,taker,cvd3,oi3,oiNow,oiFix,fr,lsN,lsP,atr,atrPct:px>0?atr/px*100:0,h1C:h1?+h1[4]:null,h1T:h1?+h1[0]:null};
+  it.err=null;it.snap=snap;it.t=now;
+
+  const prev=WT.px[c];WT.px[c]=px;
+  const once=(key,rule,t)=>{const k2=key+'|'+rule;if(WT.seen[k2]===t)return false;WT.seen[k2]=t;return true;};
+  const push=a=>wPush(Object.assign({coin:c,snap},a));
+
+  it.zones.forEach(z=>{
+    const key=wKey(c,z);
+    if(z.k==='L'){
+      if(prev!=null&&((prev<z.lo&&px>=z.lo)||(prev>z.lo&&px<=z.lo)))
+        push({kind:'info',title:`Линија ${fmt(z.lo)} пресечена ${px>=z.lo?'↑':'↓'}`,msg:`Цената ${fmt(prev)} → ${fmt(px)} од последната проверка.`});
+      return;
+    }
+    const inside=px>=z.lo&&px<=z.hi;
+    if(inside&&!WT.inz[key])push({kind:'info',title:`Цена во зона ${wZtxt(z)}`,msg:`Чекај затворена 15m свеќа за потврда (${z.k==='R'?'отфрлање или пробив':'reclaim или пробив'}).`});
+    WT.inz[key]=inside;
+
+    if(z.k==='R'){
+      if(bH>=z.lo&&bC<z.lo&&once(key,'rej',bT)){
+        const f=[];
+        if(upW<W_WICK)f.push(`горен фитил ${Math.round(upW*100)}% (< ${W_WICK*100}%)`);
+        if(oi3==null)f.push('нема OI податок');else if(oi3>0)f.push(`OI◆ ${wSgn(oi3)}% (нови позиции)`);
+        if(taker>=W_TAKER_SHORT)f.push(`taker ${taker.toFixed(0)}%B (≥ ${W_TAKER_SHORT})`);
+        if(!f.length){
+          const sl=Math.max(z.hi,bH)+W_SL_BUF*atr,nz=wNextZone(it,'S',bC),tp=nz?nz.hi:bC-2*(sl-bC);
+          push({kind:'short',title:`▼ ШОРТ кандидат — отфрлање на ${wZtxt(z)}`,msg:`Затворена 15m ${wHM(bT)}: фитил до ${fmt(bH)}, затвори ${fmt(bC)} под зоната. OI◆ ${wSgn(oi3)}%, taker ${taker.toFixed(0)}%B.`,
+            plan:{side:'S',e1:bC,e2:z.lo,sl,tp,tpSrc:nz?wZtxt(nz):'2R',rr:(bC-tp)/(sl-bC),slAtr:(sl-bC)/atr}});
+        }else push({kind:'info',title:`Тест на ${wZtxt(z)} без потврда`,msg:'Недостасува: '+f.join(' · ')});
+      }
+      if(h1&&+h1[4]>z.hi&&oi3!=null&&oi3>=W_OI_BRK&&once(key,'brk',+h1[0]))
+        push({kind:'warn',title:`▲ ПРОБИВ над ${wZtxt(z)}`,msg:`1h затвори ${fmt(+h1[4])} над зоната со OI◆ ${wSgn(oi3)}% (нови позиции). Шортови: излез по план. Лонг само по ретест.`});
+    }else{
+      if(bL<=z.hi&&bC>z.hi&&once(key,'rcl',bT)){
+        const f=[];
+        if(loW<W_WICK)f.push(`долен фитил ${Math.round(loW*100)}% (< ${W_WICK*100}%)`);
+        if(oi3==null)f.push('нема OI податок');else if(Math.abs(oi3)>W_OI_HOLD)f.push(`OI◆ ${wSgn(oi3)}% (не е HOLD)`);
+        if(taker<=W_TAKER_LONG)f.push(`taker ${taker.toFixed(0)}%B (≤ ${W_TAKER_LONG})`);
+        if(!f.length){
+          const sl=Math.min(z.lo,bL)-W_SL_BUF*atr,nz=wNextZone(it,'R',bC),tp=nz?nz.lo:bC+2*(bC-sl);
+          push({kind:'long',title:`▲ ЛОНГ кандидат — reclaim на ${wZtxt(z)}`,msg:`Затворена 15m ${wHM(bT)}: фитил до ${fmt(bL)}, затвори ${fmt(bC)} над зоната. OI◆ ${wSgn(oi3)}%, taker ${taker.toFixed(0)}%B.`,
+            plan:{side:'L',e1:bC,e2:z.hi,sl,tp,tpSrc:nz?wZtxt(nz):'2R',rr:(tp-bC)/(bC-sl),slAtr:(bC-sl)/atr}});
+        }else push({kind:'info',title:`Тест на ${wZtxt(z)} без потврда`,msg:'Недостасува: '+f.join(' · ')});
+      }
+      if(h1&&+h1[4]<z.lo&&oi3!=null&&oi3<=-W_OI_BRK&&once(key,'bdn',+h1[0]))
+        push({kind:'warn',title:`▼ ПРОБИВ под ${wZtxt(z)}`,msg:`1h затвори ${fmt(+h1[4])} под зоната со OI◆ ${wSgn(oi3)}% (лонговите излегуваат). Лонгови: излез по план. Шорт само по ретест.`});
+    }
+  });
+}
+function wNextZone(it,k,p){
+  const zs=it.zones.filter(z=>z.k===k&&(k==='S'?z.hi<p:z.lo>p));
+  if(!zs.length)return null;
+  return k==='S'?zs.reduce((a,z)=>z.hi>a.hi?z:a):zs.reduce((a,z)=>z.lo<a.lo?z:a);
+}
+
+// ── alert delivery ─────────────────────────────────────────
+function wPush(a){
+  a.t=Date.now();
+  WT.log.unshift(a);if(WT.log.length>W_LOG_MAX)WT.log.length=W_LOG_MAX;
+  _wQ.unshift(a);_wQi=0;
+  wShowPop();wBeep(a.kind);wNotify(a);wFlashTitle(a);
+  if(!WT.mute&&navigator.vibrate){try{navigator.vibrate(a.kind==='info'?200:[300,150,300,150,300]);}catch(e){}}
+}
+function wAudio(){try{if(!_wAC)_wAC=new(window.AudioContext||window.webkitAudioContext)();if(_wAC.state==='suspended')_wAC.resume();}catch(e){}return _wAC;}
+document.addEventListener('pointerdown',()=>wAudio(),{once:true});   // browsers unlock audio only after a tap/click
+function wBeep(kind){
+  if(WT.mute)return;const ac=wAudio();if(!ac)return;
+  try{
+    const n=kind==='short'||kind==='long'?3:kind==='warn'?2:1,f=kind==='warn'?440:kind==='info'?660:880;
+    for(let i=0;i<n;i++){const o=ac.createOscillator(),g=ac.createGain(),t0=ac.currentTime+0.02+i*0.28;
+      o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(0.35,t0+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t0+0.22);
+      o.connect(g);g.connect(ac.destination);o.start(t0);o.stop(t0+0.25);}
+  }catch(e){}
+}
+function wNotify(a){
+  if(!WT.notif||!document.hidden||!('Notification' in window)||Notification.permission!=='granted')return;
+  try{const n=new Notification('αSCOUT · '+a.coin+' · '+a.title,{body:a.msg||'',tag:'w-'+a.coin,renotify:true,silent:WT.mute});
+    n.onclick=()=>{try{window.focus();}catch(e){}n.close();};}catch(e){}
+}
+function wFlashTitle(a){
+  if(!document.hidden)return;
+  if(_wTitle==null)_wTitle=document.title;
+  clearInterval(_wFlash);let k=0;
+  _wFlash=setInterval(()=>{document.title=(k++%2)?_wTitle:('🔔 '+a.coin+' — '+a.title);},1000);
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)return;
+  if(_wFlash){clearInterval(_wFlash);_wFlash=null;}
+  if(_wTitle!=null)document.title=_wTitle;
+  // a phone that slept through a slot: check now, then back on the 5m grid
+  if(WT.on&&!_wBusy&&(!_wLast||Date.now()-_wLast>W_STEP+60000))wRun().then(wSchedule);
+});
+
+// ── popup ──────────────────────────────────────────────────
+const W_KIND={short:{c:'var(--red)',b:'▼ ШОРТ'},long:{c:'var(--green)',b:'▲ ЛОНГ'},warn:{c:'var(--yellow)',b:'⚠ ПРЕДУПРЕДУВАЊЕ'},info:{c:'var(--accent)',b:'ℹ ИНФО'}};
+function wShowPop(){
+  if(!_wQ.length){wClosePop();return;}
+  const a=_wQ[_wQi],k=W_KIND[a.kind]||W_KIND.info,s=a.snap||{};
+  const cell=(l,v,cls)=>`<div class="w-cell"><span>${l}</span><b${cls?` style="color:${cls}"`:''}>${v}</b></div>`;
+  const col=(x,pos)=>x==null?null:(x>0?(pos?'var(--green)':'var(--red)'):x<0?(pos?'var(--red)':'var(--green)'):null);
+  let plan='';
+  if(a.plan){const p=a.plan,lo=Math.min(p.e1,p.e2),hi=Math.max(p.e1,p.e2);
+    plan=`<div class="w-plan">Влез ${fmt(lo)}–${fmt(hi)}<br>SL ${fmt(p.sl)} (${p.slAtr.toFixed(2)} ATR)${p.slAtr>1.5?' <span style="color:var(--yellow)">⚠ > 1.5 ATR</span>':''}<br>TP1 ${fmt(p.tp)} · ${wEsc(p.tpSrc)}<br>R:R ${p.rr.toFixed(2)}${p.rr<2?' <span style="color:var(--yellow)">⚠ < 2</span>':''}</div>`;}
+  const nav=_wQ.length>1?`<div class="w-row" style="justify-content:center;margin-top:8px"><button class="w-btn" onclick="wNav(-1)">‹</button><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">${_wQi+1} / ${_wQ.length}</span><button class="w-btn" onclick="wNav(1)">›</button></div>`:'';
+  const lsTxt=s.lsN==null?'—':(s.lsP!=null?s.lsP.toFixed(2)+' → ':'')+s.lsN.toFixed(2);
+  document.getElementById('wPbox').style.borderColor=k.c;
+  document.getElementById('wPbox').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span style="font-family:var(--mono);font-size:11px;font-weight:bold;color:${k.c}">${k.b}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${wHMS(a.t)}</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:20px;font-weight:bold;margin-top:6px">${wEsc(a.coin)}<span style="font-size:11px;color:var(--muted)">USDT</span></div>
+    <div style="font-size:14px;font-weight:700;color:${k.c};margin-top:4px">${wEsc(a.title)}</div>
+    <div class="w-note" style="margin-top:6px">${wEsc(a.msg||'')}</div>
+    <div class="w-grid">
+      ${cell('ЦЕНА',s.px!=null?fmt(s.px):'—')}
+      ${cell('OI◆ 3×15m',wSgn(s.oi3)+'%'+(s.oiFix?' *':''),col(s.oi3,true))}
+      ${cell('TAKER (15m)',s.taker!=null?s.taker.toFixed(0)+'%B':'—',s.taker==null?null:s.taker>=52?'var(--green)':s.taker<=48?'var(--red)':null)}
+      ${cell('CVD 3 свеќи',wSgn(s.cvd3)+'%',col(s.cvd3,true))}
+      ${cell('FR',s.fr!=null?wSgn(s.fr,4)+'%':'—')}
+      ${cell('L/S сметки',lsTxt)}
+      ${cell('ATR 15m',s.atrPct?s.atrPct.toFixed(2)+'%':'—')}
+      ${cell('15m свеќа',s.bT?wHM(s.bT)+' · C '+fmt(s.bC):'—')}
+    </div>
+    ${plan}
+    <div class="w-note" style="color:var(--muted);margin-bottom:10px">Кандидат ≠ влез. Ова не е CLEAN15 оценка — провери DIGEST пред да влезеш.</div>
+    <div class="w-row">
+      <button class="w-btn" onclick="wPopDetail()">📊 ДЕТАЛИ</button>
+      <button class="w-btn" onclick="wCopy()">📋 КОПИРАЈ</button>
+      <button class="w-btn" onclick="wToggle('mute')">${WT.mute?'🔊 ВКЛ. ЗВУК':'🔇 МУТИРАЈ'}</button>
+      <button class="w-btn" onclick="wClosePop()" style="margin-left:auto;border-color:${k.c};color:${k.c}">✓ OK</button>
+    </div>${nav}`;
+  document.getElementById('wPop').classList.add('open');
+}
+function wNav(d){_wQi=Math.max(0,Math.min(_wQ.length-1,_wQi+d));wShowPop();}
+function wClosePop(){document.getElementById('wPop').classList.remove('open');_wQ=[];_wQi=0;}
+function wPopDetail(){const a=_wQ[_wQi];wClosePop();watchClose();if(a&&typeof openDetail==='function')openDetail(a.coin);}
+function wText(a){
+  const s=a.snap||{},p=a.plan;
+  let t=`αSCOUT WATCH ${APP_BUILD} | ${new Date(a.t).toLocaleString('mk-MK')} | ${a.coin} | ${a.title}\n${a.msg||''}\n`
+    +`PX ${s.px!=null?fmt(s.px):'—'} | 15m ${s.bT?wHM(s.bT):'—'} H ${s.bH!=null?fmt(s.bH):'—'} L ${s.bL!=null?fmt(s.bL):'—'} C ${s.bC!=null?fmt(s.bC):'—'} upW ${s.upW!=null?Math.round(s.upW*100):'—'}% loW ${s.loW!=null?Math.round(s.loW*100):'—'}%`
+    +` | taker ${s.taker!=null?s.taker.toFixed(0):'—'}%B | CVD3 ${wSgn(s.cvd3)}% | OI◆3x15m ${wSgn(s.oi3)}%${s.oiFix?' (OIfix '+s.oiFix+')':''}${s.oiNow?' ('+(s.oiNow/1e6).toFixed(1)+'M)':''}`
+    +` | FR ${s.fr!=null?wSgn(s.fr,4):'—'}% | L/S ${s.lsP!=null?s.lsP.toFixed(2)+'->':''}${s.lsN!=null?s.lsN.toFixed(2):'—'} | ATR ${s.atrPct?s.atrPct.toFixed(2):'—'}% | 1h C ${s.h1C!=null?fmt(s.h1C):'—'}`;
+  if(p)t+=`\nPLAN ${p.side==='S'?'SHORT':'LONG'} entry ${fmt(Math.min(p.e1,p.e2))}-${fmt(Math.max(p.e1,p.e2))} | SL ${fmt(p.sl)} (${p.slAtr.toFixed(2)} ATR) | TP1 ${fmt(p.tp)} ${p.tpSrc} | R:R ${p.rr.toFixed(2)}`;
+  const it=WT.list.find(x=>x.coin===a.coin);if(it)t+=`\nZONES ${it.zones.map(wZtxt).join(' ; ')}`;
+  return t;
+}
+function wCopy(){
+  const a=_wQ[_wQi];if(!a)return;const t=wText(a);
+  const ok=()=>toast('📋 Копирано — залепи во анализа');
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,()=>wCopyFb(t,ok));else wCopyFb(t,ok);
+}
+function wCopyFb(t,ok){const x=document.createElement('textarea');x.value=t;x.style.cssText='position:fixed;opacity:0';document.body.appendChild(x);x.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(x);}
+
+// ── panel ──────────────────────────────────────────────────
+function watchOpen(){document.getElementById('wOv').style.display='block';wRender();}
+function watchClose(){document.getElementById('wOv').style.display='none';}
+function wToggle(k){
+  if(k==='on'){WT.on=!WT.on;wSave();wSchedule();if(WT.on)wRun(true);}
+  else if(k==='mute'){WT.mute=!WT.mute;wSave();if(document.getElementById('wPop').classList.contains('open'))wShowPop();}
+  else if(k==='notif'){
+    if(!WT.notif){
+      if(!('Notification' in window)){toast('Овој прелистувач нема системски известувања');return;}
+      Notification.requestPermission().then(p=>{WT.notif=p==='granted';wSave();wRender();wBtnUpd();if(!WT.notif)toast('Дозволата е одбиена во прелистувачот');});
+      return;
+    }
+    WT.notif=false;wSave();
+  }
+  wBtnUpd();wRender();
+}
+function wBtnUpd(){
+  const b=document.getElementById('wBtn');if(!b)return;
+  b.textContent=!WT.on?'⏸ WATCH':WT.mute?'🔕 WATCH':'🔔 WATCH';
+  const c=!WT.on?'var(--muted)':WT.mute?'var(--yellow)':'var(--green)';
+  b.style.color=c;b.style.borderColor=c;
+}
+function wStat(){
+  const e=document.getElementById('wStat');if(!e)return;
+  e.textContent=!WT.on?'ИСКЛУЧЕН — нема проверки.'
+    :(_wBusy?'проверувам…':(_wNext?'следна проверка '+wHMS(_wNext):'—'))+(_wLast?' · последна '+wHMS(_wLast):'')+' · ритам 5 мин (затворена 5m + 12 s)';
+}
+function wRender(){
+  const tg=document.getElementById('wTgls');if(!tg)return;
+  tg.innerHTML=`<div class="w-tg ${WT.on?'on':'off'}" onclick="wToggle('on')">${WT.on?'⏻ ВКЛУЧЕН':'⏻ ИСКЛУЧЕН'}</div>`
+    +`<div class="w-tg ${WT.mute?'mut':'on'}" onclick="wToggle('mute')">${WT.mute?'🔇 МУТИРАН':'🔊 ЗВУК'}</div>`
+    +`<div class="w-tg ${WT.notif?'on':''}" onclick="wToggle('notif')" title="Системско известување кога табот не е активен (PC)">🖥 ${WT.notif?'ИЗВЕСТ. ВКЛ':'ИЗВЕСТ. ИСКЛ'}</div>`
+    +`<div class="w-tg" onclick="wRun(true)">▶ ПРОВЕРИ СЕГА</div>`
+    +`<div class="w-tg" onclick="wTest()">🔔 ТЕСТ</div>`;
+  wStat();
+  document.getElementById('wList').innerHTML=WT.list.length?WT.list.map((it,i)=>{
+    const s=it.snap;
+    const line=it.err?`<span style="color:var(--red)">${wEsc(it.err)}</span>`
+      :s?`PX ${fmt(s.px)} · OI◆ ${wSgn(s.oi3)}% · taker ${s.taker.toFixed(0)}%B · CVD3 ${wSgn(s.cvd3)}% · ${wHM(it.t)}`:'уште не е проверен';
+    return`<div class="w-item${it.on?'':' dis'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <b style="font-family:var(--mono);font-size:14px;cursor:pointer" onclick="wDetail('${wEsc(it.coin)}')">${wEsc(it.coin)}</b>
+        <div class="w-row"><button class="w-btn" onclick="wItemTgl(${i})">${it.on?'⏸':'▶'}</button><button class="w-btn" onclick="wEdit(${i})">✎</button><button class="w-btn" onclick="wDel(${i})" style="color:var(--red)">🗑</button></div>
+      </div>
+      <div>${it.zones.map(z=>`<span class="w-chip ${z.k}">${wEsc(wZtxt(z))}</span>`).join('')}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:6px">${line}</div>
+    </div>`;}).join(''):'<div class="w-note">Нема следења. Додади коин подолу.</div>';
+  document.getElementById('wLog').innerHTML=WT.log.length?WT.log.map((a,i)=>{const k=W_KIND[a.kind]||W_KIND.info;
+    return`<div class="w-log" onclick="wLogOpen(${i})"><span style="color:var(--muted)">${wHM(a.t)}</span> <b>${wEsc(a.coin)}</b> <span style="color:${k.c}">${wEsc(a.title)}</span></div>`;}).join('')
+    :'<div class="w-note">Уште нема аларми.</div>';
+  document.getElementById('wRules').innerHTML=
+    `<b>L</b> линија: аларм кога живата цена ќе ја пресече помеѓу две проверки.<br>`
+    +`<b>R / S</b> зона: инфо кога живата цена ќе влезе во зоната.<br>`
+    +`<b>R отфрлање</b> (затворена 15m): high ≥ R.од, close < R.од, горен фитил ≥ ${W_WICK*100}% од свеќата, OI◆ 3×15m ≤ 0, taker &lt; ${W_TAKER_SHORT}%B → ▼ кандидат. SL = max(R.до, high) + ${W_SL_BUF} ATR, TP1 = најблиската S зона под цената (без S: 2R). Ако нешто фали → инфо „тест без потврда“ со листа.<br>`
+    +`<b>R пробив</b> (затворена 1h): close > R.до и OI◆ 3×15m ≥ +${W_OI_BRK}% → ⚠ предупредување.<br>`
+    +`<b>S reclaim</b> (затворена 15m): low ≤ S.до, close > S.до, долен фитил ≥ ${W_WICK*100}%, OI◆ во ±${W_OI_HOLD}% (HOLD), taker &gt; ${W_TAKER_LONG}%B → ▲ кандидат. <b>S пробив</b> (1h): close < S.од и OI◆ ≤ −${W_OI_BRK}% → ⚠.<br>`
+    +`Секое правило ѕвони еднаш по свеќа. Попапот има 📋 КОПИРАЈ за анализа во разговор.<br>`
+    +`<span style="color:var(--yellow)">iPhone ја паузира апликацијата во позадина: WATCH работи само додека αSCOUT е отворен и екранот е вклучен. На PC работи и кога табот е во позадина; со 🖥 добиваш системско известување.</span>`;
+}
+function wDetail(c){watchClose();if(typeof openDetail==='function')openDetail(c);}
+function wItemTgl(i){WT.list[i].on=!WT.list[i].on;wSave();wRender();}
+function wDel(i){if(!confirm('Избриши WATCH за '+WT.list[i].coin+'?'))return;WT.list.splice(i,1);wGc();wSave();wRender();}
+function wEdit(i){const it=WT.list[i];document.getElementById('wCoin').value=it.coin;document.getElementById('wZones').value=it.zones.map(z=>z.k+' '+(z.lo===z.hi?z.lo:z.lo+'-'+z.hi)).join('\n');document.getElementById('wCoin').scrollIntoView({behavior:'smooth',block:'center'});}
+function wClearForm(){document.getElementById('wCoin').value='';document.getElementById('wZones').value='';}
+function wSaveItem(){
+  const coin=document.getElementById('wCoin').value.toUpperCase().replace(/USDT$/,'').replace(/[^A-Z0-9]/g,'');
+  if(!coin){toast('Внеси коин');return;}
+  const zones=[],bad=[];
+  document.getElementById('wZones').value.split('\n').map(x=>x.trim()).filter(Boolean).forEach(line=>{
+    const m=line.replace(/,/g,'.').match(/^([RSL])\s+([0-9]*\.?[0-9]+)\s*(?:[-–]\s*([0-9]*\.?[0-9]+))?$/i);
+    if(!m){bad.push(line);return;}
+    let lo=parseFloat(m[2]),hi=m[3]!=null?parseFloat(m[3]):lo;if(lo>hi)[lo,hi]=[hi,lo];
+    const k=m[1].toUpperCase();if(k==='L')hi=lo;
+    zones.push({k,lo,hi});
+  });
+  if(bad.length){toast('Неважечки ред: '+bad[0]);return;}
+  if(!zones.length){toast('Внеси барем едно ниво');return;}
+  const ix=WT.list.findIndex(x=>x.coin===coin);
+  if(ix>=0){WT.list[ix].zones=zones;WT.list[ix].on=true;WT.list[ix].snap=null;}else WT.list.push({coin,on:true,zones});
+  wGc();wSave();wClearForm();wRender();toast('🔔 WATCH: '+coin+' зачуван');
+  if(WT.on)wRun();
+}
+function wGc(){   // drop rule memory of zones that no longer exist
+  const keep=new Set();WT.list.forEach(it=>it.zones.forEach(z=>keep.add(wKey(it.coin,z))));
+  Object.keys(WT.seen).forEach(k=>{if(!keep.has(k.split('|').slice(0,4).join('|')))delete WT.seen[k];});
+  Object.keys(WT.inz).forEach(k=>{if(!keep.has(k))delete WT.inz[k];});
+  Object.keys(WT.px).forEach(c=>{if(!WT.list.some(it=>it.coin===c))delete WT.px[c];});
+}
+function wLogOpen(i){_wQ=[WT.log[i]];_wQi=0;wShowPop();}
+function wTest(){
+  const it=WT.list[0];
+  wPush({coin:it?it.coin:'TEST',kind:'short',title:'ТЕСТ — вака изгледа аларм',msg:'Звук, попап и (ако е вклучено) системско известување.',snap:it&&it.snap||{}});
+  WT.log.shift();wSave();wRender();   // a test does not stay in the log
+}
+
+wBtnUpd();wSchedule();
+if(WT.on)setTimeout(()=>{if(!_wLast)wRun();},5000);
+</script>
+
 </body>
 </html>
