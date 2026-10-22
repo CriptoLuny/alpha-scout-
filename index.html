@@ -634,7 +634,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
     · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
     · палење ≥<input id="labIgn" class="thresh-input" type="number" value="10" min="3" max="50" step="1" style="width:44px">%
-    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v5" selected>v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
+    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v6" selected>v6 RE-PUMP 4h+1d</option><option value="v5">v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
     · случај <input id="labCase" class="thresh-input" type="text" value="US,OGN" style="width:110px;text-transform:uppercase">
     <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
     <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
@@ -1133,6 +1133,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
 //    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
 //    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-22-c  DIGEST context for the pre-entry checklist:
+//    - FR% cell gets the funding interval (/1h, /4h, /8h from /fundingInfo) + FR@CAP tag + legend.
+//      IOST 22.10: -0.60% looked mild next to the 0.05% threshold, but it was PER HOUR.
+//    - CLEAN15 line gets a CTX line: FUND (per hour + 10x margin cost), TOPpos (top-trader
+//      position ratio + change 1.5h/6h, to tell WHO opens the new OI), LEG1D (latest daily
+//      leg, Fib .382/.5/.618/.786, where price sits). Observation only, no gate, no vote.
+//    - Not possible from Binance: liquidation heatmap (CoinGlass, paid API) -> still manual.
+//    - RE-PUMP ARM stays out of the digest until PUMP LAB v6 has a result.
+//  2026-10-22-b  PUMP LAB v6 RE-PUMP (🧪, default study): spike X -> retrace >= 80% to the
+//    pre-spike base -> base holds -> Bollinger squeeze, on 1d and 4h. One event per X, entry
+//    at the close, outcomes over 30d (1d) / 14d (4h) vs QUIET (same squeeze, no prior spike)
+//    and RANDOM. Harmonic XABCD ratios were inconsistent across the user's 5 examples
+//    (XD 0.63..2.27), so they are not used and D is not projected. CASE + LIVE ARM lists.
+//  2026-10-22-a  CLEAN15 G4 SWEEP: HOLD gets an upper edge. Before, any OI change >= -0.3%
+//    on the reclaim bar counted as HOLD, so OI +5% with no price follow-through passed.
+//    Now: -0.3% .. +1.0% = HOLD; above +1.0% passes only with price >= 0.3 ATR in the entry
+//    direction (FLUSH -> DRIVE), else ABSORB = the opposite side building -> ✗.
+//    TRUTH IOST.P 22.10 00:49: OI coins +1.3% with flat price was read (manually) as HOLD;
+//    price then wicked to 0.0010207. HOLD window stays 1 bar (sweep is on i-1 or i).
 //  2026-10-16-a  LAB v5: RANDOM_OI control in the exit table = random entries only in
 //    the hours where OI_ARM can fire (OI history ~20 days, minus the 240h exit window).
 //    OI_ARM went +0.42R (Oct 9) -> -0.43R (Oct 16) while RANDOM spanned all 83 days;
@@ -1160,7 +1179,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-21-d';
+const APP_BUILD='2026-10-22-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1298,6 +1317,18 @@ let _rawMeta={};  // coin -> {ct, ut, sub}  (raw exchangeInfo fields, for the pr
 // -- DELIST GUARD (2026-10-05-c) --
 let _delistMap={};   // coin -> {t: settlement ms or null, status, reason:'SCHED'|'HALT'}
 let _mMap={};        // coin -> mark price (premiumIndex)
+// 2026-10-22-c: funding interval + cap per symbol (/fundingInfo lists only ADJUSTED symbols;
+// everything else is the default 8h). FR thresholds in SCORE/tags stay per interval.
+let _fiMap={},_fiTs=0;
+async function loadFundingInfo(){
+  if(_fiTs&&Date.now()-_fiTs<3600e3)return;
+  const d=await apiFetch('/fundingInfo');
+  if(!Array.isArray(d))return;
+  const m={};d.forEach(x=>{if(!x.symbol||!x.symbol.endsWith('USDT'))return;
+    m[x.symbol.replace(/USDT$/,'')]={h:+x.fundingIntervalHours||8,cap:x.adjustedFundingRateCap!=null?parseFloat(x.adjustedFundingRateCap)*100:null,floor:x.adjustedFundingRateFloor!=null?parseFloat(x.adjustedFundingRateFloor)*100:null};});
+  _fiMap=m;_fiTs=Date.now();
+}
+function frIv(c){const f=_fiMap[c];return{h:f&&f.h?f.h:8,cap:f?f.cap:null,floor:f?f.floor:null,known:!!_fiTs};}
 let _iMap={};        // coin -> index price  (SRC: spot basket)
 let _irMap={};       // coin -> interestRate (SRC: funding normalisation)
 const DELIST_SENTINEL=4e12;   // perps carry deliveryDate 4133404800000 (year 2100) until a delisting is scheduled
@@ -1859,7 +1890,7 @@ async function doScanPass(){
   document.getElementById('prog').style.display='block';
   setP('Вчитувам Alpha листа + тикери...',3);
   _btcCloses1h=null;_coin1hCache={}; // refresh BTC reference + per-coin 1h cache each new scan
-  const[,tickers,fundings,exchangeInfo]=await Promise.all([fetchAlphaList(),apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),apiFetch('/exchangeInfo')]);
+  const[,tickers,fundings,exchangeInfo]=await Promise.all([fetchAlphaList(),apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),apiFetch('/exchangeInfo'),loadFundingInfo().catch(()=>null)]);
   if(!tickers){errShow('⚠️ Binance API недостапен');stopScan();return;}
 
   const tradingSymbols=new Set();
@@ -3151,7 +3182,7 @@ async function refreshDetail(){
   if(!S.detailCoin)return;
   const btn=document.getElementById('dpRefBtn');btn.classList.add('spin');
   document.getElementById('dpCharts').style.display='none';
-  const[tickers,fundings]=await Promise.all([apiFetch('/ticker/24hr'),apiFetch('/premiumIndex')]);
+  const[tickers,fundings]=await Promise.all([apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),loadFundingInfo().catch(()=>null)]);
   if(tickers){_tMap={};tickers.forEach(t=>{if(t.symbol.endsWith('USDT')&&!t.symbol.includes('_'))_tMap[t.symbol.replace('USDT','')]=t;});}
   if(fundings){_fMap={};fundings.forEach(f=>{if(!f.symbol.endsWith('USDT'))return;const c=f.symbol.replace('USDT','');_fMap[c]=parseFloat(f.lastFundingRate||0)*100;_iMap[c]=parseFloat(f.indexPrice||0);_irMap[c]=parseFloat(f.interestRate||0.0001);});}
   const coin=S.detailCoin,ticker=_tMap[coin];
@@ -3572,6 +3603,7 @@ async function fetchAndShowDetail(coin){
   document.getElementById('dpAlphaBadge').innerHTML=isAlpha(coin)?`<div class="dp-alpha-badge">🅐 BINANCE ALPHA</div>`:'';
   document.getElementById('dpP').textContent='Се вчитува...';document.getElementById('dpC').textContent='';
   document.getElementById('tfGrid').innerHTML=TFS_FULL.map(tf=>`<div class="tf-card tf-none" id="tfc-${tf}"><div class="tf-loading">${tf}...</div></div>`).join('');
+  loadFundingInfo().catch(()=>null);
   if(!Object.keys(_tMap).length){const[t,f]=await Promise.all([apiFetch('/ticker/24hr'),apiFetch('/premiumIndex')]);if(t)t.forEach(x=>{if(x.symbol.endsWith('USDT'))_tMap[x.symbol.replace('USDT','')]=x;});if(f)f.forEach(x=>{if(!x.symbol.endsWith('USDT'))return;const c=x.symbol.replace('USDT','');_fMap[c]=parseFloat(x.lastFundingRate||0)*100;_iMap[c]=parseFloat(x.indexPrice||0);_irMap[c]=parseFloat(x.interestRate||0.0001);});}
   const ticker=_tMap[coin];if(!ticker){document.getElementById('dpP').textContent='Не постои на Futures';return;}
   const fav=isFav(coin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');
@@ -3770,6 +3802,7 @@ function buildDigest(){
   if(typeof regimeLine==='function')o+=regimeLine();
   o+='OBV_DIV[1h] = OBV flow > +5% of 48h volume, OBV in top 20% of its 48h range, price -5%..+15% (LAB v5: no pump edge, lower dump risk: P(-20%/96h) 2.9% vs 4.7%).\n';
   o+='NEWS tags: BN:<type> age = Binance announcement (LIST, SEED, MONITOR, DELIST, POOL, AIRDROP, FUT, ALPHA), 14d | NEWS<flag>xN age = outlet headlines 72h (🚨 hack/exploit/suspend, ⚖ legal, 🔓 unlock, 🤝 partnership/listing, 📰 other). Headlines in the NEWS block below.\n';
+  o+='FR% = last funding rate PER INTERVAL, /Nh = interval (Binance fundingInfo, default 8h). Cost per hour = FR/N; on a 1h coin -0.60% = 0.60% of notional EVERY hour. FR@CAP = within 10% of the adjusted cap/floor. SCORE/tag FR thresholds are still per interval.\n';
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
@@ -3869,6 +3902,7 @@ function buildDigest(){
     if(s.oiFix)tl.unshift('OI FIX '+s.oiFix+(s.oiFixFlag?' ('+s.oiFixFlag+')':''));   // 2026-10-15-b
     if(typeof newsDigestTag==='function'){const nt=newsDigestTag(s.coin);if(nt)tl.unshift(nt);}
     if(s.src&&s.src.tags&&s.src.tags.length)s.src.tags.forEach(t=>tl.push(t));
+    {const fi=frIv(s.coin),lim=(s.fr||0)<0?fi.floor:fi.cap;if(lim!=null&&lim!==0&&Math.abs(s.fr||0)>=0.9*Math.abs(lim))tl.push('FR@CAP '+(lim>0?'+':'')+lim.toFixed(2)+'%');}
     if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
     const tags=tl.join(';');
     o+=[
@@ -3900,7 +3934,7 @@ function buildDigest(){
       n(s.cvdDelta),
       s.cvdNewLow?'LOW':s.cvdNewHigh?'HIGH':'--',
       s.takerBuyPct!==undefined?s.takerBuyPct.toFixed(0):'—',
-      (s.fr>=0?'+':'')+(s.fr||0).toFixed(4),
+      (s.fr>=0?'+':'')+(s.fr||0).toFixed(4)+(_fiTs?'/'+frIv(s.coin).h+'h':''),
       (s.src&&s.src.col)?s.src.col:'--',
       s.lsRatio?s.lsRatio.toFixed(2):'—',
       (s.btcCorr===null||s.btcCorr===undefined)?'—':((s.btcCorr>=0?'+':'')+s.btcCorr.toFixed(2)),
@@ -4580,6 +4614,9 @@ const CLEAN_RECLAIM_POS=0.6;   // G3 SWEEP: reclaim close in the top (short: bot
 const CLEAN_OI_MIN=0.5;        // G4 TREND: OI coins change over 3 bars, %
 const CLEAN_OI_PX_ATR=0.3;     // G4 TREND: price move over the same 3 bars, ATR (less = ABSORB)
 const CLEAN_OI_FLUSH=-0.3;     // G4 SWEEP: OI coins change on the sweep bar must be <= this, %
+const CLEAN_OI_HOLD_MAX=1.0;   // G4 SWEEP: HOLD band upper edge, %. OI above it on the reclaim bar passes only
+                               // if price moved >= CLEAN_OI_PX_ATR in the entry direction (FLUSH -> DRIVE);
+                               // otherwise it is ABSORB = the opposite side building (2026-10-22-a)
 const CLEAN_TAKER_L=52;        // G5: taker buy share for longs, % (shorts use 100-x)
 const CLEAN_FR_MAX=0.05;       // G8: funding ceiling, % per interval
 const CLEAN_PREM_DROP=0.5;     // G8: premium index fell >= 50% from its 2h extreme ...
@@ -4596,6 +4633,36 @@ const CLEAN_TRAP_OI=2.0;       // G10: OI coins build-up inside the range, %
 const CLEAN_LS_OVB=1.5;        // same threshold as L/S EXT (shorts use 1/L/S, i.e. 0.67)
 const CLEAN_MMR=0.02, CLEAN_LEV_CAP=20;         // MAX LEV = floor(1/(1.5*SL% + MMR)), capped
 const CLEAN_OI_MAX30=0.95;     // B flag: OI coins >= 95% of the 30d max
+const CLEAN_LEG_WIN=30, CLEAN_LEG_LOOK=20;   // LEG1D: latest extreme of the last 30 daily bars, leg start = opposite extreme in the 20 bars before it
+function clnLeg1d(k){
+  if(!k||k.length<CLEAN_LEG_LOOK+5)return null;
+  const w=k.slice(-CLEAN_LEG_WIN),H=w.map(x=>+x[2]),L=w.map(x=>+x[3]),T=w.map(x=>+x[0]),n=w.length;   // live day included: extremes count
+  let hi=0,lo=0;for(let j=1;j<n;j++){if(H[j]>=H[hi])hi=j;if(L[j]<=L[lo])lo=j;}
+  const up=hi>=lo,b=up?hi:lo;let a=b;
+  for(let j=Math.max(0,b-CLEAN_LEG_LOOK);j<=b;j++){if(up?L[j]<L[a]:H[j]>H[a])a=j;}
+  const p0=up?L[a]:H[a],p1=up?H[b]:L[b];if(!(p0>0)||!(p1>0)||p0===p1)return null;
+  const lv={};[0.236,0.382,0.5,0.618,0.786].forEach(f=>lv[f]=p1-(p1-p0)*f);
+  return{up,p0,p1,t0:T[a],t1:T[b],lv};
+}
+function clnLegTxt(g,px){
+  if(!g)return 'LEG1D n/a';
+  const d=t=>{const x=new Date(t);return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0');};
+  const r=(g.p1-px)/(g.p1-g.p0);
+  const fs=[0.236,0.382,0.5,0.618,0.786];let band='';
+  if(r<0.236)band='<.236';else if(r>0.786)band=r>1?'beyond 1.0':'>.786';else{for(let k=0;k<fs.length-1;k++)if(r>=fs[k]&&r<=fs[k+1]){band=String(fs[k]).replace('0.','.')+'–'+String(fs[k+1]).replace('0.','.');break;}}
+  return 'LEG1D '+(g.up?'↑ ':'↓ ')+fmt(g.p0)+' ('+d(g.t0)+') → '+fmt(g.p1)+' ('+d(g.t1)+') · .382 '+fmt(g.lv[0.382])+' · .5 '+fmt(g.lv[0.5])+' · .618 '+fmt(g.lv[0.618])+' · .786 '+fmt(g.lv[0.786])+' · PX retr '+Math.round(r*100)+'% ('+band+')';
+}
+function clnTopTxt(t){
+  if(!t)return 'TOPpos n/a';
+  const sg=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(2);
+  return 'TOPpos '+t.now.toFixed(2)+' (Δ1.5h '+sg(t.d6)+' · Δ6h '+sg(t.d24)+')';
+}
+function clnFundTxt(coin,fr){
+  const fi=frIv(coin),h=fi.h,ph=(fr||0)/h;
+  if(!fi.known)return 'FUND '+((fr>=0?'+':'')+(fr||0).toFixed(4))+'% (interval n/a)';
+  return 'FUND '+(fr>=0?'+':'')+(fr||0).toFixed(4)+'%/'+h+'h = '+(ph>=0?'+':'')+ph.toFixed(4)+'%/h · 10x '+(Math.abs(ph)*10).toFixed(2)+'% margin/h, '+((fr||0)<0?'short pays / long receives':'long pays / short receives')
+    +((fr||0)<0&&fi.floor!=null?' · floor '+fi.floor.toFixed(2)+'%':(fr||0)>=0&&fi.cap!=null?' · cap +'+fi.cap.toFixed(2)+'%':'');
+}
 let _clean={}, _cleanCache={}, _cleanBuilding=false, _cleanTs=null;
 
 const clnHM=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
@@ -4803,10 +4870,16 @@ function clnSide(c){
   let g4=false,g4n='OI n/a';
   if(mode==='SWEEP'){
     const fl=c.oiChg(sweepIdx,sweepIdx-1),hold=sweepIdx===i?0:c.oiChg(i,i-1);
+    // 2026-10-22-a: HOLD has an upper edge too. OI rising on the reclaim bar is read
+    // together with price: with price in the entry direction = our side joining (DRIVE),
+    // without it = ABSORB, the opposite side building into the reclaim (IOST.P 22.10).
+    const hpx=sweepIdx===i?0:(C[i]-C[i-1])/atr;
     if(fl!=null&&hold!=null){
-      if(fl<=CLEAN_OI_FLUSH&&hold>=CLEAN_OI_FLUSH){g4=true;g4n='FLUSH '+clnPct(fl)+(sweepIdx===i?'':' → HOLD '+clnPct(hold));}
-      else if(fl>CLEAN_OI_FLUSH)g4n='нема flush на sweep ('+clnPct(fl)+')';
-      else g4n='OI продолжува да паѓа ('+clnPct(hold)+')';
+      if(fl>CLEAN_OI_FLUSH)g4n='нема flush на sweep ('+clnPct(fl)+')';
+      else if(hold<CLEAN_OI_FLUSH)g4n='OI продолжува да паѓа ('+clnPct(hold)+')';
+      else if(hold<=CLEAN_OI_HOLD_MAX){g4=true;g4n='FLUSH '+clnPct(fl)+(sweepIdx===i?'':' → HOLD '+clnPct(hold));}
+      else if(hpx>=CLEAN_OI_PX_ATR){g4=true;g4n='FLUSH '+clnPct(fl)+' → DRIVE '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR';}
+      else g4n='FLUSH '+clnPct(fl)+' → ABSORB '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR (нови '+(up?'шортови':'лонгови')+')';
     }
   }else{
     const d3=c.oiChg(i,i-3),px3=(C[i]-C[i-3])/atr;
@@ -4940,13 +5013,15 @@ async function clnContextFlags(coin,sd,ctx){
 
 async function evalClean15(coin){
   const needFr=_fMap[coin]===undefined;
-  const[kl,oiH,lsD,prem,c1h,pi]=await Promise.all([
+  const[kl,oiH,lsD,prem,c1h,pi,topH,k1d]=await Promise.all([
     apiFetch(`/klines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=260`),   // v2.7: 200+ closed bars for SMA200
     apiFetch(`/openInterestHist?symbol=${coin}USDT&period=${CLEAN_TF}&limit=40`,FDAPI),
     fetchLSRatio(coin,CLEAN_TF).catch(()=>null),
     apiFetch(`/premiumIndexKlines?symbol=${coin}USDT&interval=${CLEAN_TF}&limit=12`),
     getCoin1hCloses(coin,null,null),
-    needFr?apiFetch(`/premiumIndex?symbol=${coin}USDT`):Promise.resolve(null)
+    needFr?apiFetch(`/premiumIndex?symbol=${coin}USDT`):Promise.resolve(null),
+    apiFetch(`/topLongShortPositionRatio?symbol=${coin}USDT&period=${CLEAN_TF}&limit=25`,FDAPI).catch(()=>null),   // 2026-10-22-c
+    apiFetch(`/klines?symbol=${coin}USDT&interval=1d&limit=${CLEAN_LEG_WIN+2}`).catch(()=>null)                   // 2026-10-22-c LEG1D
   ]);
   if(!kl||kl.length<70)return null;
   const kc=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl;   // closed bars only
@@ -5014,7 +5089,10 @@ async function evalClean15(coin){
   for(const sd of[Ls,Ss])if(sd.pass)await clnContextFlags(coin,sd,ctx);
   const pick=[Ls,Ss].filter(s=>s.pass).sort((a,b)=>b.rr-a.rr)[0]||null;
   return{coin,at:Date.now(),bar:Math.floor(Date.now()/CLEAN_BAR_MS),barT:T[i],price:C[i],atr,atrPct:atr/C[i]*100,
-    ls:lsr,fr,oiLag,oiFix:oiG.fix,st,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT'};
+    ls:lsr,fr,oiLag,oiFix:oiG.fix,st,L:Ls,S:Ss,best:pick?(pick===Ls?'L':'S'):null,grade:pick?(pick.flags.length?'B':'A'):'WAIT',
+    top:(()=>{if(!Array.isArray(topH)||!topH.length)return null;const v=topH.map(x=>parseFloat(x.longShortRatio)).filter(isFinite);if(!v.length)return null;
+      const now=v[v.length-1];return{now,d6:v.length>6?now-v[v.length-7]:null,d24:v.length>=25?now-v[0]:null};})(),
+    leg:clnLeg1d(k1d)};
 }
 
 async function evalClean15Cached(coin,force){
@@ -5200,7 +5278,8 @@ function cleanDigestLine(r){
     const x=sd.gates.filter(g=>!g.ok);
     return a+' '+(sd.gates.length-x.length)+'/'+sd.gates.length+' x: '+x.map(g=>g.id+' '+g.note).join('; ');
   };
-  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+(r.oiFix?' OIfix '+r.oiFix:'')+'|ATR '+r.atrPct.toFixed(2)+'%|TRND '+clnTrendTxt(r.st)+'|LOC '+clnLocTxt(r.st)+'|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼');
+  return r.coin+'|'+r.grade+'|bar '+clnHM(r.barT)+(r.oiFix?' OIfix '+r.oiFix:'')+'|ATR '+r.atrPct.toFixed(2)+'%|TRND '+clnTrendTxt(r.st)+'|LOC '+clnLocTxt(r.st)+'|'+sdl(r.L,'▲')+' || '+sdl(r.S,'▼')
+    +'\n  CTX '+r.coin+'|'+clnFundTxt(r.coin,r.fr)+'|'+clnTopTxt(r.top)+'|'+clnLegTxt(r.leg,r.price);
 }
 
 function cleanDigest(rows){
@@ -5217,6 +5296,9 @@ function cleanDigest(rows){
     +'LOC = nearest S/R zone from pivots, MA200, POC, Fibo .5/.618/.786 of the current leg (levels within '+CLEAN_LVL_MERGE
     +' ATR merged); AT-S/AT-R = close within '+CLEAN_LOC_ATR+' ATR, MID otherwise; EXT = |MOMz 15m| >= '+CLEAN_EXT_ATR
     +'. Descriptive only: no gate and no SCORE vote uses TRND/LOC yet.\n';
+  o+='CTX (2026-10-22-c, observation only, no gate/vote): FUND = FR per interval + per hour + margin cost at 10x | '
+    +'TOPpos = top-trader LONG/SHORT POSITION ratio (top 20% accounts, Binance), now and change over 6 / 24 closed 15m bars; read it WITH OI coins: OI◆↑ + TOPpos↑ = top traders adding long, OI◆↑ + TOPpos↓ = adding short (top accounts only, not the whole market) | '
+    +'LEG1D = latest daily leg (latest extreme of the last '+CLEAN_LEG_WIN+' days incl. today, start = opposite extreme in the '+CLEAN_LEG_LOOK+' days before it), Fib retracements and where the 15m close sits.\n';
   all.filter(r=>r.grade!=='WAIT').forEach(r=>{o+=cleanDigestLine(r)+'\n';});
   all.filter(r=>r.grade==='WAIT'&&inView.has(r.coin)).forEach(r=>{o+=cleanDigestLine(r)+'\n';});
   return o;
@@ -5374,7 +5456,7 @@ function helpSections(){
     {tag:'G1 · Тренд 1h',col:a,what:'JMA(8) над DWMA(10) на 1h за лонг, под за шорт.',action:'Само влезови во насока на 1h трендот.'},
     {tag:'G2 · Локација',col:a,what:()=>'Тригер-свеќата или претходната допрела ниво во рамки на '+CLEAN_LOC_ATR+' ATR(15m): 15m swing low/high (pivot 3/3), POC или дно/врв на тесен опсег.',action:()=>'Ако close-от е подалеку од '+CLEAN_LOC_ATR+' ATR од нивото, влезот е LIMIT на ниво ± '+CLEAN_LOC_ATR+' ATR (ретест), не MKT.'},
     {tag:'G3 · Тригер',col:a,what:'TREND = тело ≥ 50% од свеќата, close во горните 30% (шорт: долните) и над high (шорт: под low) на претходната свеќа. SWEEP = фитил низ нивото (≥ 0.1 ATR), а close назад над него (шорт: под) во горните 40%.',when:'SWEEP има предност — лов на стоповите па враќање е најчистиот тригер.'},
-    {tag:'G4 · OI◆',col:g,what:()=>'TREND: OI во коини +'+CLEAN_OI_MIN+'% за 3 свеќи СО цена ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (DRIVE) и DOM=FLOW. OI↑ а цената рамна = ABSORB → ✗. OI↑ со цена против = нови позиции на спротивната страна → ✗.',when:()=>'SWEEP: OI паѓа ≥ '+Math.abs(CLEAN_OI_FLUSH)+'% на sweep-свеќата (FLUSH) и не продолжува да паѓа на reclaim-от (HOLD).'},
+    {tag:'G4 · OI◆',col:g,what:()=>'TREND: OI во коини +'+CLEAN_OI_MIN+'% за 3 свеќи СО цена ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (DRIVE) и DOM=FLOW. OI↑ а цената рамна = ABSORB → ✗. OI↑ со цена против = нови позиции на спротивната страна → ✗.',when:()=>'SWEEP: OI паѓа ≥ '+Math.abs(CLEAN_OI_FLUSH)+'% на sweep-свеќата (FLUSH), а на reclaim-от останува во опсег '+CLEAN_OI_FLUSH+'% … +'+CLEAN_OI_HOLD_MAX+'% (HOLD). OI над +'+CLEAN_OI_HOLD_MAX+'% поминува само ако цената се движи ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (FLUSH → DRIVE); инаку е ABSORB = нови позиции на спротивната страна → ✗.'},
     {tag:'G5 · CVD / Taker',col:g,what:()=>'TREND: CVD расте 3 свеќи, taker buy ≥ '+CLEAN_TAKER_L+'% (шорт: CVD паѓа, ≤ '+(100-CLEAN_TAKER_L)+'%), CVDt не е на ново дно (шорт: на нов врв). SWEEP: reclaim-свеќата има позитивен delta (шорт: негативен) и taker ≥ '+CLEAN_TAKER_L+'% (шорт: ≤ '+(100-CLEAN_TAKER_L)+'%).',when:'Построго од правилото „OI$ со цената го надгласува CVD“ — за чист влез ги бара и двете.',action:'Пумпи со апсорпција (цена↑, CVD↓) намерно ги пропушта.'},
     {tag:'G6 · Моментум',col:a,what:'TREND: MOMz во насоката на влезот И наклонот (MSLP) во истата насока, без FLIP против. SWEEP: спротивното движење не смее да забрзува — MOMz се свртел на последната свеќа или MSLP веќе е во насоката.'},
     {tag:'G7 · Компресија',col:cy,what:'SQZ ON на тригер-свеќата (Bollinger внатре во Keltner) → ✗.',action:'Чекај release — компресијата нема позната насока додека не пукне.'},
@@ -6345,7 +6427,7 @@ async function runLabV3(){
   }
 }
 
-function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v5';return m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
+function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v6';return m==='v6'?runLabV6():m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
 function labIgnRow(name,arr){
   const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
   const p=f=>arr.filter(f).length/n;
@@ -6433,7 +6515,13 @@ function openLab(){
   document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
 `🧪 PUMP LAB — избери студија во редот горе:
 
- v5 1h OBV + A/D (стандардно): шемата од US — OBV и A/D растат заедно,
+ v6 RE-PUMP (стандардно): прв бркч X → речиси целосен retrace до базата (A)
+    → базата држи (C ≈ A) → компресија. Дали претходниот бркч го прави
+    следниот пумп поверојатен? Наспроти QUIET (иста компресија, без бркч)
+    и RANDOM. 1d и 4h. Во полето „случај“ внеси пр. IOST,JCT,MAGMA,Q,ARIA
+    за да видиш дали детекторот ги фаќа твоите примери. + LIVE листа. ~5 мин.
+
+ v5 1h OBV + A/D: шемата од US — OBV и A/D растат заедно,
     A/D расте додека цената стои и CVD паѓа (апсорпција), на 7д дно, па OI.
     Тест нанапред, пред пумпа (време на предност), излези без горна граница,
     временска линија за коините во полето „случај“ (US). ~10 мин.
@@ -6813,6 +6901,200 @@ function l5Report(R){
   o+=`\n5) LIVE — last closed 1h bar, DIV/ABSORB/USPAT/OI_ARM ON (UNVALIDATED until 1-3 say so) | ${live.length} coins, top 30 | COIN | rules | DIV since | A/D | OBV | CVD | px48 | from 7d low | OI 6h\n`;
   live.slice(0,30).forEach(x=>{const F=x.F;o+=`${x.c}|${RN.filter((k,j)=>x.b&(1<<j)).join(',')}|${loc(x.X.T[x.since])}|${lbF(F.ad_flow)}|${lbF(F.obv_flow)}|${lbF(F.cvd_flow)}|${lbPct(F.px_ret)}|${lbPct(F.from_low)}|${F.oi6==null?'—':lbPct(F.oi6)}\n`;});
   o+=`\nNOTES: ~83 days only (1h history cost). OI rules only on the last ~20 days. Entries at the 1h close; the stop is checked before the high on every bar (conservative). Survivorship: delisted coins missing.\n`;
+  return o;
+}
+
+// ══════════════════════════════════════════════════════════════
+// PUMP LAB v6 RE-PUMP (2026-10-22-b) — does a PRIOR ignition make the next pump likelier?
+// The shape (IOST 1d, JCT 4h, MAGMA 4h, ARIA 1W, Q 4h): spike X -> near-full retrace to the
+// pre-spike base (A) -> base holds (C ~ A) -> compression -> second impulse (D).
+// Harmonic ratios (XD 0.63..2.27, BC 0.74..0.96) were NOT consistent across the examples, so
+// they are not used and D is not projected. Only the structure is tested.
+// ARM at bar i (closed bars only, nothing after i is read):
+//   X   = highest high in [i-ageMax, i-ageMin], no higher high after it;
+//         X >= +80% over the median close of the base window before the spike,
+//         spike-window volume max >= 5x the base median volume
+//   A   = lowest low after X; retrace (X-A)/(X-base) >= 80%
+//   HOLD= no low in the last `hold` bars more than 3% under the earlier post-X low
+//   ZONE= close in the lower 35% of the A..X range
+//   SQZ = Bollinger width (20,2) in the lowest 30% of its last 120 bars
+// One event per X (the first ARM bar). Entry = close of that bar.
+// Controls: QUIET = same compression + lower-35% zone, but NO +80% range in the X window
+// (does the prior spike add anything beyond compression?); RANDOM = random bars, same coins
+// and period (base rate). Outcomes over `fwd` bars: P(+50%), P(+100%), P(-20%), which comes
+// first (+50% vs -20%, same bar = -20% = conservative), median max gain, P(reach X).
+// Nothing here votes in SCORE.
+// ══════════════════════════════════════════════════════════════
+const RP={
+  TF:{'1d':{iv:'1d',lim:499,base:20,ign:5,ageMin:10,ageMax:120,hold:7,fwd:30,bbw:120,ms:86400e3},
+      '4h':{iv:'4h',lim:1000,base:30,ign:12,ageMin:24,ageMax:360,hold:18,fwd:84,bbw:120,ms:14400e3}},
+  IGN:0.8,VOLX:5,RETR:0.8,ZONE:0.35,BBW:0.30,RAND:3,RAND_MIN:1500,SEED:20261022
+};
+function rpRng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+function rpMed(a){if(!a.length)return null;const s=Array.from(a).sort((x,y)=>x-y);return s[Math.floor(s.length/2)];}
+function rpPrep(S,cfg){
+  const ma=lbSMA(S.c,20),sd=lbSTD(S.c,20,ma),bbw=new Array(S.n).fill(null);
+  for(let i=0;i<S.n;i++)if(ma[i]>0&&sd[i]!=null)bbw[i]=4*sd[i]/ma[i];
+  S.bbw=bbw;S.baseCache=new Map();
+  S.start=Math.max(cfg.ageMax+cfg.ign+cfg.base+1,cfg.bbw+20);
+}
+function rpBase(S,cfg,x){
+  if(S.baseCache.has(x))return S.baseCache.get(x);
+  const s=x-cfg.ign-cfg.base,e=x-cfg.ign;let r=null;
+  if(s>=0){const cs=[],vs=[];for(let j=s;j<e;j++){cs.push(S.c[j]);vs.push(S.v[j]);}r={px:rpMed(cs),vol:rpMed(vs)};}
+  S.baseCache.set(x,r);return r;
+}
+function rpArm(S,cfg,i){
+  if(i<S.start||i>S.n-1)return null;
+  let x=-1,xh=0;for(let j=i-cfg.ageMax;j<=i-cfg.ageMin;j++)if(S.h[j]>xh){xh=S.h[j];x=j;}
+  if(x<0)return null;
+  for(let j=x+1;j<=i;j++)if(S.h[j]>=xh)return null;
+  const b=rpBase(S,cfg,x);if(!b||!(b.px>0))return null;
+  const spike=xh/b.px-1;if(spike<RP.IGN)return null;
+  let vmax=0;for(let j=x-cfg.ign;j<=x;j++)if(S.v[j]>vmax)vmax=S.v[j];
+  if(!(b.vol>0))return null;const volx=vmax/b.vol;if(volx<RP.VOLX)return null;
+  let prevMin=Infinity,recMin=Infinity;
+  for(let j=x+1;j<=i-cfg.hold;j++)if(S.l[j]<prevMin)prevMin=S.l[j];
+  for(let j=i-cfg.hold+1;j<=i;j++)if(S.l[j]<recMin)recMin=S.l[j];
+  if(!isFinite(prevMin)||!(prevMin>0))return null;
+  if(recMin<prevMin*0.97)return null;
+  const al=Math.min(prevMin,recMin),retr=(xh-al)/(xh-b.px);
+  if(retr<RP.RETR)return null;
+  const zone=(S.c[i]-al)/(xh-al);if(!(zone<=RP.ZONE))return null;
+  const rk=lbRank(S.bbw,i,cfg.bbw);if(rk==null||rk>RP.BBW)return null;
+  return{x,xh,tx:S.T[x],base:b.px,spike,volx,al,retr,zone,rk};
+}
+function rpQuiet(S,cfg,i){
+  if(i<S.start)return null;
+  let mx=0,mn=Infinity;for(let j=i-cfg.ageMax;j<=i;j++){if(S.h[j]>mx)mx=S.h[j];if(S.l[j]<mn)mn=S.l[j];}
+  if(!(mn>0)||mx/mn-1>=RP.IGN)return null;
+  const zone=(S.c[i]-mn)/(mx-mn);if(!(zone<=RP.ZONE))return null;
+  const rk=lbRank(S.bbw,i,cfg.bbw);if(rk==null||rk>RP.BBW)return null;
+  return{zone,rk};
+}
+function rpOut(S,i,fwd,xh){
+  if(i+fwd>S.n-1)return null;
+  const E=S.c[i];if(!(E>0))return null;
+  let mx=E,mn=E,tmax=0,first='T';
+  for(let j=i+1;j<=i+fwd;j++){
+    if(first==='T'){if(S.l[j]<=E*0.8)first='L';else if(S.h[j]>=E*1.5)first='W';}
+    if(S.h[j]>mx){mx=S.h[j];tmax=j-i;}
+    if(S.l[j]<mn)mn=S.l[j];
+  }
+  return{gain:mx/E-1,dd:mn/E-1,up50:mx>=E*1.5,up100:mx>=E*2,dn20:mn<=E*0.8,first,tmax,reachX:xh?mx>=xh:null};
+}
+function rpScan(S,cfg,coin){
+  const arm=[],quiet=[],usedX=new Set();let lastQ=-1e9;
+  for(let i=S.start;i<S.n;i++){
+    const a=rpArm(S,cfg,i);
+    if(a&&!usedX.has(a.x)){usedX.add(a.x);arm.push({coin,i,t:S.T[i],px:S.c[i],...a,out:rpOut(S,i,cfg.fwd,a.xh)});}
+    if(!a&&i-lastQ>=cfg.fwd){const q=rpQuiet(S,cfg,i);if(q){lastQ=i;quiet.push({coin,i,t:S.T[i],...q,out:rpOut(S,i,cfg.fwd,null)});}}
+  }
+  return{arm,quiet,live:rpArm(S,cfg,S.n-1)};
+}
+function rpRandom(set,cfg,count,rng){
+  const pool=[];let tot=0;
+  for(const coin in set){const S=set[coin];const len=S.n-1-cfg.fwd-S.start+1;if(len>0){tot+=len;pool.push([tot,coin,S]);}}
+  const out=[];if(!tot)return out;
+  for(let k=0;k<count;k++){
+    const r=rng()*tot;let lo=0,hi=pool.length-1;while(lo<hi){const m=(lo+hi)>>1;if(pool[m][0]>r)hi=m;else lo=m+1;}
+    const[,coin,S]=pool[lo];const i=S.start+Math.floor(rng()*(S.n-1-cfg.fwd-S.start+1));
+    out.push({coin,i,t:S.T[i],out:rpOut(S,i,cfg.fwd,null)});
+  }
+  return out;
+}
+function rpRow(name,evs,withX){
+  const e=evs.filter(x=>x.out),n=e.length;
+  if(!n)return `${name}|0|—|—|—|—|—|—${withX?'|—':''}\n`;
+  const p=f=>e.filter(f).length/n,g=rpMed(e.map(x=>x.out.gain)),tm=rpMed(e.map(x=>x.out.tmax));
+  return `${name}|${n}|${lbPct(p(x=>x.out.up50))}|${lbPct(p(x=>x.out.up100))}|${lbPct(p(x=>x.out.dn20))}|${lbPct(p(x=>x.out.first==='W'))} / ${lbPct(p(x=>x.out.first==='L'))}|+${(g*100).toFixed(0)}%|${tm}${withX?'|'+lbPct(p(x=>x.out.reachX)):''}\n`;
+}
+function rpEdge(a,b,f){
+  const A=a.filter(x=>x.out),B=b.filter(x=>x.out);if(A.length<5||B.length<5)return 'n<5';
+  const p1=A.filter(f).length/A.length,p2=B.filter(f).length/B.length,se=Math.sqrt(p1*(1-p1)/A.length+p2*(1-p2)/B.length);
+  const d=(p1-p2)*100;return `${d>=0?'+':''}${d.toFixed(1)}pp ±${(2*se*100).toFixed(1)} (2SE)`;
+}
+
+async function runLabV6(){
+  LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
+  const t0=Date.now(),caseList=(document.getElementById('labCase')?.value||'').toUpperCase().split(/[\s,;]+/).map(x=>x.replace(/USDT$/,'')).filter(Boolean);
+  try{
+    labSetProg('🧪 PUMP LAB v6 RE-PUMP · exchangeInfo...');
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(ei)buildClassMaps(ei);
+    const uni=[];let skipped=0;
+    (ei?.symbols||[]).forEach(s=>{if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
+      const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c,1)){skipped++;return;}uni.push(c);});
+    if(!uni.length){labSetProg('⚠️ Нема универзум');return;}
+    const data={'1d':{},'4h':{}},fail={'1d':0,'4h':0};
+    for(let i=0;i<uni.length;i+=3){
+      if(LAB.abort)break;
+      const chunk=uni.slice(i,i+3);
+      await Promise.all(chunk.map(async coin=>{
+        for(const tf of ['1d','4h']){
+          const cfg=RP.TF[tf];
+          let kl=await labFetch(`${FAPI}/klines?symbol=${coin}USDT&interval=${cfg.iv}&limit=${cfg.lim}`);
+          if(!kl){fail[tf]++;continue;}
+          if(kl.length&&kl[kl.length-1][6]>Date.now())kl=kl.slice(0,-1);
+          const need=Math.max(cfg.ageMax+cfg.ign+cfg.base+1,cfg.bbw+20)+10;
+          if(kl.length<need){fail[tf]++;continue;}
+          const S=l5Series(kl);rpPrep(S,cfg);data[tf][coin]=S;
+        }
+      }));
+      labSetProg(`🧪 v6 ФАЗА 1/2 · 1d + 4h свеќи · ${Math.min(i+3,uni.length)}/${uni.length} · кратка историја 1d ${fail['1d']} / 4h ${fail['4h']} · ${Math.round((Date.now()-t0)/1000)}s`);
+      await sleep(1200);
+    }
+    const res={};
+    for(const tf of ['1d','4h']){
+      const cfg=RP.TF[tf],coins=Object.keys(data[tf]),arm=[],quiet=[],live=[];
+      for(let k=0;k<coins.length;k++){
+        const c=coins[k],r=rpScan(data[tf][c],cfg,c);
+        arm.push(...r.arm);quiet.push(...r.quiet);
+        if(r.live)live.push({coin:c,...r.live,px:data[tf][c].c[data[tf][c].n-1],age:data[tf][c].n-1-r.live.x});
+        if(k%25===0){labSetProg(`🧪 v6 ФАЗА 2/2 · ${tf} · барам форми · ${k+1}/${coins.length}`);await sleep(0);}
+      }
+      const done=arm.filter(e=>e.out).length;
+      const rnd=rpRandom(data[tf],cfg,Math.max(RP.RAND_MIN,RP.RAND*done),rpRng(RP.SEED+(tf==='4h'?1:0)));
+      res[tf]={coins:coins.length,arm,quiet,rnd,live};
+    }
+    LAB.out=rpReport({uni,skipped,fail,res,data,caseList,t0,aborted:LAB.abort});
+  }catch(err){LAB.out='⚠️ PUMP LAB v6 грешка: '+(err&&err.stack||err);}
+  finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 PUMP LAB v6 готов — КОПИРАЈ':'🧪 прекинат');}
+}
+
+function rpReport(R){
+  const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const dt=(t,tf)=>{const x=new Date(t);return tf==='4h'?`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())} ${pad(x.getHours())}:00`:`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;};
+  const pc=v=>(v>=0?'+':'')+(v*100).toFixed(0)+'%';
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v6 · RE-PUMP | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
+  o+=`DATA: universe ${R.uni.length} (skipped ${R.skipped}) | 1d ${R.res['1d'].coins} coins x <=${RP.TF['1d'].lim} bars | 4h ${R.res['4h'].coins} coins x <=${RP.TF['4h'].lim} bars | short history 1d ${R.fail['1d']} / 4h ${R.fail['4h']} | rate-limit hits ${LAB.rateHit}\n`;
+  o+=`ARM: X = top high ${RP.TF['1d'].ageMin}-${RP.TF['1d'].ageMax} bars back (1d) / ${RP.TF['4h'].ageMin}-${RP.TF['4h'].ageMax} (4h), >= +${RP.IGN*100}% over base median, spike vol >= ${RP.VOLX}x base | A retrace >= ${RP.RETR*100}% | base held (no low > 3% under it in last ${RP.TF['1d'].hold}/${RP.TF['4h'].hold} bars) | close in lower ${RP.ZONE*100}% of A..X | BBW(20,2) rank <= ${RP.BBW*100}% of ${RP.TF['1d'].bbw} bars | 1 event per X, entry = close\n`;
+  o+=`CONTROLS: QUIET = same SQZ + lower-${RP.ZONE*100}% zone, no +${RP.IGN*100}% range in the X window | RANDOM = random bars, same coins/period (n = max(${RP.RAND_MIN}, ${RP.RAND}x ARM))\n`;
+  for(const tf of ['1d','4h']){
+    const r=R.res[tf],cfg=RP.TF[tf],a=r.arm,pend=a.filter(e=>!e.out).length;
+    o+=`\n══ ${tf} · forward ${cfg.fwd} bars (${Math.round(cfg.fwd*cfg.ms/86400e3)} days) ══\n`;
+    o+=`GROUP|n|P(+50%)|P(+100%)|P(-20%)|first +50 / first -20|med max gain|med bars to max|P(reach X)\n`;
+    o+=rpRow('RE-PUMP ARM',a,true)+rpRow('QUIET SQZ',r.quiet,false)+rpRow('RANDOM',r.rnd,false);
+    o+=`EDGE P(+50%): ARM-RANDOM ${rpEdge(a,r.rnd,x=>x.out.up50)} | ARM-QUIET ${rpEdge(a,r.quiet,x=>x.out.up50)}\n`;
+    o+=`EDGE first+50: ARM-RANDOM ${rpEdge(a,r.rnd,x=>x.out.first==='W')} | EDGE P(-20%): ARM-RANDOM ${rpEdge(a,r.rnd,x=>x.out.dn20)}\n`;
+    o+=`ARM pending (forward window not complete yet): ${pend}\n`;
+    o+=`SPLITS (ARM)|n|P(+50%)|P(+100%)|P(-20%)|first +50 / first -20|med max gain|med bars to max|P(reach X)\n`;
+    o+=rpRow(' spike < +200%',a.filter(e=>e.spike<2),true)+rpRow(' spike >= +200%',a.filter(e=>e.spike>=2),true);
+    o+=rpRow(' retrace < 100%',a.filter(e=>e.retr<1),true)+rpRow(' retrace >= 100%',a.filter(e=>e.retr>=1),true);
+    o+=rpRow(' BBW rank <= 15%',a.filter(e=>e.rk<=0.15),true)+rpRow(' BBW rank 15-30%',a.filter(e=>e.rk>0.15),true);
+    if(R.caseList.length){
+      o+=`CASE (${R.caseList.join(',')}):\n`;
+      R.caseList.forEach(c=>{
+        if(!R.data[tf][c]){o+=` ${c}: нема ${tf} податоци (кратка историја или не е во универзумот)\n`;return;}
+        const ev=a.filter(e=>e.coin===c);
+        if(!ev.length){o+=` ${c}: нема ARM настан\n`;return;}
+        ev.forEach(e=>{o+=` ${c} X ${dt(e.tx,tf)} ${fmt(e.xh)} (${pc(e.spike)}, vol ${e.volx.toFixed(1)}x) | A ${fmt(e.al)} (retr ${(e.retr*100).toFixed(0)}%) | ARM ${dt(e.t,tf)} @ ${fmt(e.px)} BBW ${(e.rk*100).toFixed(0)}% | `+(e.out?`max ${pc(e.out.gain)} in ${e.out.tmax} bars, dd ${pc(e.out.dd)}, first ${e.out.first}, reach X ${e.out.reachX?'Y':'N'}`:'PENDING')+`\n`;});
+      });
+    }
+    const lv=r.live.slice().sort((x,y)=>x.rk-y.rk);
+    o+=`LIVE ARM now (${lv.length}):${lv.length?'':' —'}\n`;
+    lv.slice(0,25).forEach(e=>{o+=` ${e.coin}|X ${dt(e.tx,tf)} ${fmt(e.xh)} ${pc(e.spike)}|A ${fmt(e.al)} retr ${(e.retr*100).toFixed(0)}%|PX ${fmt(e.px)} zone ${(e.zone*100).toFixed(0)}%|BBW ${(e.rk*100).toFixed(0)}%|X age ${e.age} bars\n`;});
+  }
+  o+=`\nNOTES: entry at the close of the first ARM bar per X. Events cluster in market-wide pumps, so the 2SE bands are too narrow (bars are not independent). QUIET coins have a smaller range = lower volatility, so QUIET vs ARM mixes "prior spike" with "volatility"; RANDOM is the base rate. Survivorship: delisted coins missing. No OI in v6 (openInterestHist = 30 days only). Nothing votes in SCORE.\n`;
   return o;
 }
 
