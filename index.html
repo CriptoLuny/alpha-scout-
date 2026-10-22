@@ -1133,6 +1133,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
 //    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
 //    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-22-d  WATCH copy: tap any Entry/SL/TP price = copied at the exchange tick precision
+//    (PRICE_FILTER tickSize, no thousands separator) for the Binance order form or a TV line's
+//    price field. Per option: 📋 TV Pine (Pine script with hline Entry/SL/TP1/TP2 -> Pine Editor,
+//    paste, Add to chart) and 📋 Текст (one line). Clipboard API with a textarea fallback.
 //  2026-10-22-c  DIGEST context for the pre-entry checklist:
 //    - FR% cell gets the funding interval (/1h, /4h, /8h from /fundingInfo) + FR@CAP tag + legend.
 //      IOST 22.10: -0.60% looked mild next to the 0.05% threshold, but it was PER HOUR.
@@ -1179,7 +1183,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-22-c';
+const APP_BUILD='2026-10-22-d';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -1320,6 +1324,7 @@ let _mMap={};        // coin -> mark price (premiumIndex)
 // 2026-10-22-c: funding interval + cap per symbol (/fundingInfo lists only ADJUSTED symbols;
 // everything else is the default 8h). FR thresholds in SCORE/tags stay per interval.
 let _fiMap={},_fiTs=0;
+let _tickMap={};   // 2026-10-22-d: coin -> PRICE_FILTER tickSize string (copy values at exchange precision)
 async function loadFundingInfo(){
   if(_fiTs&&Date.now()-_fiTs<3600e3)return;
   const d=await apiFetch('/fundingInfo');
@@ -1680,6 +1685,7 @@ function buildClassMaps(exchangeInfo){
   exchangeInfo.symbols.forEach(s=>{
     if(!s.symbol.endsWith('USDT')||s.symbol.includes('_'))return;
     const coin=s.symbol.replace('USDT','');
+    {const pf=(s.filters||[]).find(f=>f.filterType==='PRICE_FILTER');if(pf&&+pf.tickSize>0)_tickMap[coin]=pf.tickSize;}
     const ct=(s.contractType||'').toUpperCase();
     const ut=(s.underlyingType||'').toUpperCase();
     const subArr=Array.isArray(s.underlyingSubType)?s.underlyingSubType:(s.underlyingSubType?[s.underlyingSubType]:[]);
@@ -7444,6 +7450,10 @@ setInterval(()=>newsRefresh(false),5*60000);
 .w-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px}
 .w-card.ch{border-color:var(--yellow)}
 .w-card.go{border-color:var(--green)}
+.w-px{cursor:pointer;border-bottom:1px dashed currentColor;padding:0 2px;border-radius:3px;-webkit-user-select:none;user-select:none}
+.w-px:active{background:rgba(0,229,255,.25)}
+.w-cp{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.w-btn.w-sm{font-size:10px;padding:4px 8px}
 .w-opt{border-radius:8px;padding:8px 10px;margin-top:8px;font-family:var(--mono);font-size:12px;line-height:1.65}
 .w-opt.long{background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.35)}
 .w-opt.short{background:rgba(255,34,68,.07);border:1px solid rgba(255,34,68,.35)}
@@ -7609,9 +7619,46 @@ function wTagSet(r){
 }
 
 // ── options per coin ───────────────────────────────────────
-function wLv(o){
+// 2026-10-22-d: tap a price = copy it (exchange tick precision, no thousands separator) for the
+// Binance order form / a TV horizontal-line price field; 📋 TV Pine = all levels as a Pine script
+// (Pine Editor -> paste -> Add to chart draws Entry/SL/TP lines); 📋 Текст = one line for notes.
+function pxCopyStr(coin,v){
+  if(v==null||!isFinite(v))return '';
+  const ts=_tickMap[coin];
+  if(ts){const t=+ts,dec=(String(ts).replace(/0+$/,'').split('.')[1]||'').length;return (Math.round(v/t)*t).toFixed(dec);}
+  return String(fmt(+v)).replace(/,/g,'');
+}
+async function copyText(txt){
+  try{await navigator.clipboard.writeText(txt);return true;}catch(e){}
+  try{const ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='0';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,txt.length);const ok=document.execCommand('copy');ta.remove();return ok;}catch(e){return false;}
+}
+function wCopyPx(ev,coin,v){
+  if(ev){ev.stopPropagation();ev.preventDefault();}
+  const s=pxCopyStr(coin,v);if(!s)return;
+  copyText(s).then(ok=>toast(ok?'📋 '+s+' копирано':'⚠️ копирањето не успеа'));
+}
+function wCopyLv(ev,coin,side,e,sl,tp1,tp2,mode){
+  if(ev){ev.stopPropagation();ev.preventDefault();}
+  const P=v=>pxCopyStr(coin,v),dir=side==='L'?'LONG':'SHORT';
+  let txt;
+  if(mode==='pine'){
+    const L=[['Entry',e,'color.blue','solid'],['SL',sl,'color.red','dashed'],['TP1',tp1,'color.green','dashed'],['TP2',tp2,'color.teal','dotted']].filter(x=>x[1]!=null&&isFinite(x[1]));
+    txt='//@version=5\nindicator("aSCOUT '+coin+' '+dir+'", overlay=true)\n'
+      +L.map(x=>'hline('+P(x[1])+', "'+x[0]+' '+P(x[1])+'", color='+x[2]+', linestyle=hline.style_'+x[3]+', linewidth=2)').join('\n')+'\n';
+  }else txt=coin+'USDT '+dir+' | Entry '+P(e)+' | SL '+P(sl)+' | TP1 '+P(tp1)+(tp2!=null&&isFinite(tp2)?' | TP2 '+P(tp2):'');
+  copyText(txt).then(ok=>toast(ok?(mode==='pine'?'📋 Pine копиран → TV: Pine Editor · залепи · Add to chart':'📋 нивоа копирани'):'⚠️ копирањето не успеа'));
+}
+function wPx(coin,v){
+  if(v==null||isNaN(v))return '—';
+  return `<span class="w-px" onclick="wCopyPx(event,'${wEsc(coin)}',${+v})" title="допри = копирај">${wF(v)}</span>`;
+}
+function wLv(o,coin,side){
   if(!o||o.entry==null)return '';
-  return`Влез ${wF(o.entry)}${o.entryType?' ('+wEsc(o.entryType)+')':''} · SL ${wF(o.sl)}${o.slAtr!=null?' ('+(+o.slAtr).toFixed(2)+' ATR)':''}<br>TP1 ${wF(o.tp1)}${o.tp2!=null?' · TP2 '+wF(o.tp2):''}${o.rr!=null?' · R:R '+(+o.rr).toFixed(2):''}`;
+  const F=v=>coin?wPx(coin,v):wF(v),N=v=>v==null||!isFinite(v)?'null':String(+v);
+  return`Влез ${F(o.entry)}${o.entryType?' ('+wEsc(o.entryType)+')':''} · SL ${F(o.sl)}${o.slAtr!=null?' ('+(+o.slAtr).toFixed(2)+' ATR)':''}<br>TP1 ${F(o.tp1)}${o.tp2!=null?' · TP2 '+F(o.tp2):''}${o.rr!=null?' · R:R '+(+o.rr).toFixed(2):''}`
+    +(coin?`<div class="w-cp"><button class="w-btn w-sm" onclick="wCopyLv(event,'${wEsc(coin)}','${side}',${N(o.entry)},${N(o.sl)},${N(o.tp1)},${N(o.tp2)},'pine')">📋 TV Pine</button>`
+      +`<button class="w-btn w-sm" onclick="wCopyLv(event,'${wEsc(coin)}','${side}',${N(o.entry)},${N(o.sl)},${N(o.tp1)},${N(o.tp2)},'txt')">📋 Текст</button></div>`:'');
 }
 function wGates(sd){return sd&&sd.gates?sd.gates.filter(g=>!g.ok):[];}
 function wOptions(o){
@@ -7622,13 +7669,13 @@ function wOptions(o){
     let warn='';
     if(up&&o.chase)warn+=`<br><span style="color:var(--yellow)">⚠ ${wEsc(o.chase.tag)}: правилото е без нов лонг</span>`;
     if(sd.flags&&sd.flags.length)warn+=`<br><span style="color:var(--yellow)">флаг: ${wEsc(sd.flags.join(' · '))}</span>`;
-    out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ ${up?'▲ ЛОНГ':'▼ ШОРТ'} · CLEAN15 ${c15.grade}</b><br>${wLv(sd)}${warn}</div>`);
+    out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ ${up?'▲ ЛОНГ':'▼ ШОРТ'} · CLEAN15 ${c15.grade}</b><br>${wLv(sd,o.coin,up?'L':'S')}${warn}</div>`);
   }
   const s=o.su;
   if(s){
     const up=s.finalDir==='bull',why=(s.gate&&s.gate.why)||[];
     out.push(`<div class="w-opt ${up?'long':'short'}" style="${s.status==='GO'?'':'opacity:.85'}"><b>📊 СЕТАП ${s.status} ${up?'▲ ЛОНГ':'▼ ШОРТ'}</b>${s.levelSrc?' <span style="color:var(--muted)">· '+wEsc(s.levelSrc)+'</span>':''}${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}<br>`
-      +(s.entry!=null?wLv(s):'<span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
+      +(s.entry!=null?wLv(s,o.coin,up?'L':'S'):'<span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
       +(s.status!=='GO'&&why.length?`<br><span style="color:var(--yellow)">чекај: ${wEsc(why.join(' · '))}</span>`:'')
       +(up&&o.chase?`<br><span style="color:var(--yellow)">⚠ ${wEsc(o.chase.tag)}: без нов лонг</span>`:'')+`</div>`);
   }
