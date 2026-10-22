@@ -776,6 +776,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="dp-tf-section">
       <div class="section-title">// СТАТУС ПО TF · клик = графици</div>
       <div class="tf-grid" id="tfGrid"></div>
+      <div id="tfAlign" style="font-family:var(--mono);font-size:11px;line-height:1.8;margin-top:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px"></div>
     </div>
     <!-- CLEAN15 PANEL (v2.6) -->
     <div class="dp-clean" id="dpClean" style="display:none">
@@ -1133,6 +1134,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
 //    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
 //    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-22-e  TF CONFLICT made visible (TRUTH ARIA 22.10: detail said "▲ BULL СИГНАЛ · Score 13/15
+//    Екстремно јак" from the 1m card while SETUP said ▼ SHORT from 1h+4h -- read as a contradiction,
+//    and a SETUP with status WATCH was taken as an entry).
+//    - Detail: the big badge and the Score line name their TF ("▲ BULL СИГНАЛ · 1m").
+//    - Detail: new TF ALIGNMENT row under the TF cards: every TF ▲/▼/◆ + verdict. The trading
+//      verdict uses 15m · 1h · 4h: all three the same = aligned; ▲ and ▼ mixed = CONFLICT.
+//    - WATCH: per coin 1h/4h/1d directions (once per 15m bar, reused by SETUPS, so 1h/4h cost
+//      nothing extra; 1d = one analysis per 15 min) + the same alignment line; event when
+//      15m·1h·4h become aligned or fall into conflict.
+//    - WATCH: SETUP WATCH is no longer drawn as a long/short option. It shows "⏸ ЧЕКАЈ — не е
+//      влез", the wait reasons first and the levels as "план ако се исполни". Only CLEAN15 A/B
+//      and SETUP GO are entry options; with neither, "⏳ Нема влез" is always shown. A CLEAN15
+//      entry in a TF conflict carries a ⚠ line.
+//    - analyzeSetup reuses tfData['1h'] / ['4h'] whenever present (before: only if s.tf matched).
 //  2026-10-22-d  WATCH copy: tap any Entry/SL/TP price = copied at the exchange tick precision
 //    (PRICE_FILTER tickSize, no thousands separator) for the Binance order form or a TV line's
 //    price field. Per option: 📋 TV Pine (Pine script with hline Entry/SL/TP1/TP2 -> Pine Editor,
@@ -1183,7 +1198,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-22-d';
+const APP_BUILD='2026-10-22-e';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3202,6 +3217,31 @@ async function refreshDetail(){
   btn.classList.remove('spin');toast(`↻ ${coin} освежен`);
 }
 
+// 2026-10-22-e: TF alignment. map = {tf: 'bull'|'bear'|'neutral'|null}. Trading verdict on 15m·1h·4h.
+const TF_TRADE=['15m','1h','4h'];
+function tfArrow(d){return d==='bull'?'▲':d==='bear'?'▼':d?'◆':'·';}
+function tfAlignInfo(map,order){
+  order=order||Object.keys(map);
+  const chips=order.filter(t=>t in map).map(t=>({tf:t,d:map[t]}));
+  const tr=TF_TRADE.map(t=>map[t]),ar=TF_TRADE.map(t=>tfArrow(map[t])).join('/');
+  const known=tr.filter(d=>d==='bull'||d==='bear');
+  let v,cls;
+  if(tr.some(d=>d===undefined))      {v='15m·1h·4h '+ar+' — уште се вчитува';cls='neu';}
+  else if(known.length===3&&known.every(d=>d===known[0])){v='✅ 15m·1h·4h усогласени '+(known[0]==='bull'?'▲':'▼');cls=known[0]==='bull'?'up':'dn';}
+  else if(known.includes('bull')&&known.includes('bear')){v='⚠ КОНФЛИКТ 15m·1h·4h '+ar+' — нема трејд по насока';cls='or';}
+  else{v='◆ делумно 15m·1h·4h '+ar+' — насоката не е потврдена';cls='neu';}
+  return{chips,verdict:v,cls,aligned:cls==='up'?'bull':cls==='dn'?'bear':null,conflict:cls==='or'};
+}
+let _tfDir={},_tfDirCoin=null;
+function renderTfAlign(){
+  const el=document.getElementById('tfAlign');if(!el)return;
+  const a=tfAlignInfo(_tfDir,TFS_FULL);
+  const col=d=>d==='bull'?'var(--green)':d==='bear'?'var(--red)':'var(--muted)';
+  el.innerHTML=`<span style="color:var(--text2)">TF УСОГЛАСЕНОСТ</span> `
+    +a.chips.map(c=>`<span style="color:${col(c.d)};margin-right:6px">${tfArrow(c.d)}${c.tf}</span>`).join('')
+    +`<br><b class="${a.cls}">${a.verdict}</b>`;
+}
+
 function populateDetail(s){
   const coin=s.coin;
   document.getElementById('dpSym').textContent=coin;
@@ -3224,7 +3264,7 @@ function populateDetail(s){
   else if(s.dir==='bull'){bbTxt='▲ BULL СИГНАЛ';bbBg='rgba(0,255,136,.1)';bbCol='var(--green)';bbBrd='rgba(0,255,136,.3)';}
   else if(s.dir==='bear'){bbTxt='▼ BEAR СИГНАЛ';bbBg='rgba(255,34,68,.1)';bbCol='var(--red)';bbBrd='rgba(255,34,68,.3)';}
   else{bbTxt='>> NEUTRAL';bbBg='rgba(255,208,0,.07)';bbCol='var(--yellow)';bbBrd='rgba(255,208,0,.2)';}
-  bb.textContent=bbTxt;bb.style.cssText=`background:${bbBg};color:${bbCol};border:1px solid ${bbBrd}`;
+  bb.textContent=bbTxt+(s.tf?' · '+s.tf:'');bb.style.cssText=`background:${bbBg};color:${bbCol};border:1px solid ${bbBrd}`;
   const cvdC=s.cvdDelta>=0?'up':'dn',oiC=s.oiChange>=0?'up':'dn',frC=s.fr>0.05?'dn':s.fr<-0.05?'up':'neu';
   const lsC=s.lsRatio?s.lsRatio>1.5?'dn':s.lsRatio<0.67?'up':'neu':'neu';
   const flowC=s.netInflow?'up':s.netOutflow?'dn':'neu';
@@ -3256,12 +3296,13 @@ function populateDetail(s){
   document.getElementById('dpSigs').innerHTML=tags||`<span style="color:var(--muted);font-family:var(--mono);font-size:12px">Нема активни сигнали</span>`;
 
   const sc=s.score>=6?'var(--green)':s.score>=4?'var(--yellow)':'var(--accent)';
-  document.getElementById('scN').textContent=`Score: ${s.score}/15`;document.getElementById('scN').style.color=sc;
+  document.getElementById('scN').textContent=`Score: ${s.score}/15${s.tf?' · '+s.tf:''}`;document.getElementById('scN').style.color=sc;
   document.getElementById('scD').textContent=s.score>=9?'⚡ Екстремно јак':s.score>=6?'Јак сигнал':s.score>=4?'Умерен':'Слаб сигнал';
   document.getElementById('scF').style.cssText=`width:${Math.min((s.score/15)*100,100)}%;background:${sc}`;
 }
 
 async function loadAllTFCards(coin,coinData){
+  _tfDir={};_tfDirCoin=coin;renderTfAlign();
   document.getElementById('tfGrid').innerHTML=TFS_FULL.map(tf=>`<div class="tf-card tf-none" id="tfc-${tf}"><div class="tf-loading">${tf}...</div></div>`).join('');
   await Promise.all(TFS_FULL.map(async tf=>{
     let r=coinData?.tfData?.[tf];
@@ -3271,6 +3312,8 @@ async function loadAllTFCards(coin,coinData){
 }
 
 function renderTFCard(tf,r,coin){
+  if(_tfDirCoin!==coin){_tfDir={};_tfDirCoin=coin;}
+  _tfDir[tf]=r?(r.dir||'neutral'):null;renderTfAlign();
   const card=document.getElementById(`tfc-${tf}`);if(!card)return;
   const lnk=`<span class="tf-bnlink" style="cursor:pointer" onclick="event.stopPropagation();openTV('${coin}','${tf}')" title="TradingView">TV↗</span>`;
   if(!r){card.className='tf-card tf-none';card.onclick=()=>openBinance(coin,tf);card.innerHTML=`<div class="tf-card-header"><span class="tf-label">${tf}${lnk}</span><span class="tf-dir-badge tdb-none">—</span></div><div style="font-family:var(--mono);font-size:10px;color:var(--text2)">Нема сигнал</div>`;return;}
@@ -3362,7 +3405,7 @@ async function switchChartTF(coin,tf,btn){
     else if(r.dir==='bull'){bbTxt='▲ BULL СИГНАЛ';bbBg='rgba(0,255,136,.1)';bbCol='var(--green)';bbBrd='rgba(0,255,136,.3)';}
     else if(r.dir==='bear'){bbTxt='▼ BEAR СИГНАЛ';bbBg='rgba(255,34,68,.1)';bbCol='var(--red)';bbBrd='rgba(255,34,68,.3)';}
     else{bbTxt='>> NEUTRAL';bbBg='rgba(255,208,0,.07)';bbCol='var(--yellow)';bbBrd='rgba(255,208,0,.2)';}
-    bb.textContent=bbTxt;bb.style.cssText=`background:${bbBg};color:${bbCol};border:1px solid ${bbBrd}`;
+    bb.textContent=bbTxt+' · '+tf;bb.style.cssText=`background:${bbBg};color:${bbCol};border:1px solid ${bbBrd}`;
     // Update sub label
     document.getElementById('dpSub').textContent=`${coin}USDT PERP . TF: ${tf} . ${r.ts}`;
   }
@@ -4281,8 +4324,8 @@ async function analyzeSetup(s) {
 
   // Fetch 1h and 4h simultaneously
   const [r1h, r4h] = await Promise.all([
-    (s.tf === '1h' && s.tfData && s.tfData['1h']) ? Promise.resolve(s.tfData['1h']) : analyzeOneTF(coin, ticker, fr, '1h'),
-    (s.tf === '4h' && s.tfData && s.tfData['4h']) ? Promise.resolve(s.tfData['4h']) : analyzeOneTF(coin, ticker, fr, '4h')
+    (s.tfData && s.tfData['1h']) ? Promise.resolve(s.tfData['1h']) : analyzeOneTF(coin, ticker, fr, '1h'),
+    (s.tfData && s.tfData['4h']) ? Promise.resolve(s.tfData['4h']) : analyzeOneTF(coin, ticker, fr, '4h')
   ]);
 
   if (!r1h && !r4h) return null;
@@ -7582,15 +7625,22 @@ async function wCheck(c){
   // SETUPS needs 1h + 4h: once per 15m bar is enough
   const bar=Math.floor(Date.now()/CLEAN_BAR_MS);let su=_wSetup[c];
   if(!su||su.bar!==bar){
+    // 2026-10-22-e: 1h/4h/1d rows once per 15m bar; SETUPS reuses 1h/4h (no extra requests there)
+    const hi=['1h','4h','1d'].filter(x=>x!==WT.tf);
+    const rr=await Promise.all(hi.map(x=>analyzeOneTF(c,t,fr,x).catch(()=>null)));
+    const td={};if(r)td[WT.tf]=r;hi.forEach((x,i)=>{td[x]=rr[i];});
     let s=null;
-    try{s=await analyzeSetup({coin:c,volume:parseFloat(t.quoteVolume)||0,tf:WT.tf,tfData:r?{[WT.tf]:r}:{},isAlpha:isAlpha(c)});}catch(e){s=null;}
-    su={bar,s};_wSetup[c]=su;
+    try{s=await analyzeSetup({coin:c,volume:parseFloat(t.quoteVolume)||0,tf:WT.tf,tfData:td,isAlpha:isAlpha(c)});}catch(e){s=null;}
+    const dirs={};hi.forEach((x,i)=>{dirs[x]=rr[i]?(rr[i].dir||'neutral'):'neutral';});
+    su={bar,s,dirs};_wSetup[c]=su;
   }
-  Object.assign(out,{px:+t.lastPrice,chg:+t.priceChangePercent,vol:+t.quoteVolume,fr,r,c15,su:su.s,chase:chaseInfo(+t.priceChangePercent)});
+  const tfd=Object.assign({},su.dirs||{});tfd[WT.tf]=r?(r.dir||'neutral'):'neutral';
+  const al=tfAlignInfo(tfd,['5m','15m','1h','4h','1d'].filter(x=>x in tfd));
+  Object.assign(out,{px:+t.lastPrice,chg:+t.priceChangePercent,vol:+t.quoteVolume,fr,r,c15,su:su.s,chase:chaseInfo(+t.priceChangePercent),al});
 
   // state + changes since the last check
   const st={grade:c15?c15.grade:null,best:c15?c15.best:null,dir:r?r.dir:'none',score:r?r.score:0,
-    su:su.s?su.s.status+(su.s.finalDir==='bull'?'▲':'▼'):null,tags:wTagSet(r),chase:out.chase?out.chase.lvl:0};
+    su:su.s?su.s.status+(su.s.finalDir==='bull'?'▲':'▼'):null,tags:wTagSet(r),chase:out.chase?out.chase.lvl:0,al:al.aligned||(al.conflict?'conflict':'')};
   const p=WT.prev[c],E=(lvl,txt)=>out.events.push({lvl,txt});
   const gTxt=x=>x.grade+(x.best==='L'?'▲':'▼');
   if(!p){
@@ -7610,6 +7660,7 @@ async function wCheck(c){
     const nt=st.tags.filter(x=>W_IMP.test(x)&&!(p.tags||[]).includes(x));
     if(nt.length)E(1,'Нов таг: '+nt.join(', '));
     if(st.chase>(p.chase||0))E(1,'⚠ '+out.chase.tag+' — без нов лонг');
+    if(p.al!==undefined&&st.al!==p.al){if(st.al==='bull'||st.al==='bear')E(1,'TF 15m·1h·4h усогласени '+(st.al==='bull'?'▲':'▼'));else if(st.al==='conflict')E(1,'TF конфликт 15m·1h·4h');}
   }
   WT.prev[c]=st;
   return out;
@@ -7671,19 +7722,27 @@ function wOptions(o){
     if(sd.flags&&sd.flags.length)warn+=`<br><span style="color:var(--yellow)">флаг: ${wEsc(sd.flags.join(' · '))}</span>`;
     out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ ${up?'▲ ЛОНГ':'▼ ШОРТ'} · CLEAN15 ${c15.grade}</b><br>${wLv(sd,o.coin,up?'L':'S')}${warn}</div>`);
   }
-  const s=o.su;
-  if(s){
-    const up=s.finalDir==='bull',why=(s.gate&&s.gate.why)||[];
-    out.push(`<div class="w-opt ${up?'long':'short'}" style="${s.status==='GO'?'':'opacity:.85'}"><b>📊 СЕТАП ${s.status} ${up?'▲ ЛОНГ':'▼ ШОРТ'}</b>${s.levelSrc?' <span style="color:var(--muted)">· '+wEsc(s.levelSrc)+'</span>':''}${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}<br>`
-      +(s.entry!=null?wLv(s,o.coin,up?'L':'S'):'<span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
-      +(s.status!=='GO'&&why.length?`<br><span style="color:var(--yellow)">чекај: ${wEsc(why.join(' · '))}</span>`:'')
+  const s=o.su,al=o.al;
+  if(out.length&&al&&al.conflict)out[out.length-1]=out[out.length-1].replace(/<\/div>$/,`<br><span style="color:var(--yellow)">⚠ ${wEsc(al.verdict)}</span></div>`);
+  if(s&&s.status==='GO'){
+    const up=s.finalDir==='bull';
+    out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ СЕТАП GO ${up?'▲ ЛОНГ':'▼ ШОРТ'}</b>${s.levelSrc?' <span style="color:var(--muted)">· '+wEsc(s.levelSrc)+'</span>':''}${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}<br>`
+      +(s.entry!=null?wLv(s,o.coin,up?'L':'S'):'')
       +(up&&o.chase?`<br><span style="color:var(--yellow)">⚠ ${wEsc(o.chase.tag)}: без нов лонг</span>`:'')+`</div>`);
   }
-  if(!out.length){
+  const entries=out.length;
+  if(!entries){
     let g='CLEAN15 n/a';
     if(c15){const fl=wGates(c15.L),fs=wGates(c15.S);
       g=`▲ ${10-fl.length}/10${fl.length?' · фали '+fl.map(x=>x.id).join(' '):''}<br>▼ ${10-fs.length}/10${fs.length?' · фали '+fs.map(x=>x.id).join(' '):''}`;}
     out.push(`<div class="w-opt none"><b>⏳ Нема влез</b><br>${g}</div>`);
+  }
+  if(s&&s.status!=='GO'){
+    const up=s.finalDir==='bull',why=(s.gate&&s.gate.why)||[];
+    out.push(`<div class="w-opt none"><b style="color:var(--yellow)">⏸ СЕТАП WATCH ${up?'▲':'▼'} — ЧЕКАЈ, не е влез</b>${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}`
+      +(why.length?`<br><span style="color:var(--yellow)">чека: ${wEsc(why.join(' · '))}</span>`:'')
+      +(s.entry!=null?`<br><span style="color:var(--muted)">план ако се исполни (${wEsc(s.levelSrc||'')}):</span><br>`+wLv(s,o.coin,up?'L':'S'):'<br><span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
+      +`</div>`);
   }
   return out.join('');
 }
@@ -7694,7 +7753,7 @@ function wCardHTML(o){
   const go=(c15&&c15.grade!=='WAIT')||(o.su&&o.su.status==='GO');
   const dir=r?r.dir:'—',dc=dir==='bull'?'var(--green)':dir==='bear'?'var(--red)':'var(--text2)';
   const tr=st?(st.trend==='UP'?'▲UP':st.trend==='DOWN'?'▼DN':'↔RNG')+(st.votes>0?'+':'')+st.votes+'·'+(st.loc==='AT-S'?'@S':st.loc==='AT-R'?'@R':'mid')+(st.ext?'·EXT':''):'';
-  const m=r?`SCORE ${r.score} <b style="color:${dc}">${wEsc(dir)}</b> · OI◆ ${wSgn(r.oiCoinsChg)}% ${wEsc(r.oiDom||'')} ${wEsc(r.oiShape||'')} · CVDt ${r.cvdNewLow?'LOW':r.cvdNewHigh?'HIGH':'--'} · taker ${r.takerBuyPct!=null?(+r.takerBuyPct).toFixed(0):'—'}% · FR ${wSgn(o.fr,4)}% · L/S ${r.lsRatio!=null?(+r.lsRatio).toFixed(2):'—'}`
+  const m=r?`SCORE ${r.score} <b style="color:${dc}">${wEsc(dir)}</b> <span style="color:var(--muted)">(${wEsc(WT.tf)})</span> · OI◆ ${wSgn(r.oiCoinsChg)}% ${wEsc(r.oiDom||'')} ${wEsc(r.oiShape||'')} · CVDt ${r.cvdNewLow?'LOW':r.cvdNewHigh?'HIGH':'--'} · taker ${r.takerBuyPct!=null?(+r.takerBuyPct).toFixed(0):'—'}% · FR ${wSgn(o.fr,4)}% · L/S ${r.lsRatio!=null?(+r.lsRatio).toFixed(2):'—'}`
     :'<span style="color:var(--muted)">SCORE 0 — нема сигнали на '+wEsc(WT.tf)+'</span>';
   const tags=r&&r.sigs?r.sigs.slice(0,12).map(x=>`<span class="w-tag">${wEsc(x.l)}</span>`).join(''):'';
   return`<div class="w-card${go?' go':ev.length?' ch':''}">
@@ -7705,6 +7764,7 @@ function wCardHTML(o){
     </div>
     <div style="font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:4px;line-height:1.6">${m}</div>
     ${tags?`<div>${tags}</div>`:''}
+    ${o.al?`<div style="font-family:var(--mono);font-size:11px;margin-top:6px">${o.al.chips.map(x=>`<span style="margin-right:6px;color:${x.d==='bull'?'var(--green)':x.d==='bear'?'var(--red)':'var(--muted)'}">${tfArrow(x.d)}${x.tf}</span>`).join('')} <b class="${o.al.cls}">${wEsc(o.al.verdict)}</b></div>`:''}
     ${ev.map(e=>`<div class="w-ev${e.lvl===2?' l2':''}">● ${wEsc(e.txt)}</div>`).join('')}
     ${wOptions(o)}
     <div class="w-row" style="margin-top:8px">
@@ -7727,7 +7787,7 @@ function wShowPop(res,ev){
       <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${wHMS(_wLast||Date.now())}</span>
     </div>
     ${sorted.map(wCardHTML).join('')}
-    <div class="w-note" style="color:var(--muted);margin-top:10px">Опциите се од CLEAN15 (затворена 15m) и СЕТАПИ (1h+4h) — истата логика како скенерот. Провери DIGEST пред влез.</div>
+    <div class="w-note" style="color:var(--muted);margin-top:10px">Влез = само ✅ (CLEAN15 A/B или СЕТАП GO). ⏸ СЕТАП WATCH е план што чека услов, не влез. Провери DIGEST и pre-entry checklist пред влез.</div>
     <div class="w-row" style="margin-top:10px">
       <button class="w-btn" onclick="wCopy()">📋 КОПИРАЈ</button>
       <button class="w-btn" onclick="wToggle('mute')">${WT.mute?'🔊 ВКЛ. ЗВУК':'🔇 МУТИРАЈ'}</button>
@@ -7746,8 +7806,9 @@ function wText(){
     const r=o.r;
     L.push(`${o.coin} | PX ${wF(o.px)} | 24h ${wSgn(o.chg,1)}%${o.chase?' | '+o.chase.tag:''} | `+(r?`SCORE ${r.score} ${r.dir} | OI◆ ${wSgn(r.oiCoinsChg)}% ${r.oiDom||''} ${r.oiShape||''} | CVDt ${r.cvdNewLow?'LOW':r.cvdNewHigh?'HIGH':'--'} | taker ${r.takerBuyPct!=null?(+r.takerBuyPct).toFixed(0):'—'}%B | FR ${wSgn(o.fr,4)}% | L/S ${r.lsRatio!=null?(+r.lsRatio).toFixed(2):'—'}`:'SCORE 0')
       +(r&&r.sigs&&r.sigs.length?`\n  TAGS ${r.sigs.map(x=>x.l).join(';')}`:''));
+    if(o.al)L.push('  TFDIR '+o.al.chips.map(x=>x.tf+':'+(x.d||'n/a')).join(' ')+' | '+o.al.verdict);
     if(o.c15&&typeof cleanDigestLine==='function')L.push('  CLEAN15 '+cleanDigestLine(o.c15));
-    if(o.su){const s=o.su;L.push(`  SETUP ${s.status} ${s.finalDir==='bull'?'LONG':'SHORT'} ${s.tfConf||''} | entry ${wF(s.entry)} ${s.entryType||''} | SL ${wF(s.sl)} | TP1 ${wF(s.tp1)} | TP2 ${wF(s.tp2)} | R:R ${s.rr!=null?(+s.rr).toFixed(2):'—'} | ${s.levelSrc||''}${s.gate&&s.gate.why&&s.gate.why.length?' | wait: '+s.gate.why.join(' · '):''}`);}
+    if(o.su){const s=o.su;L.push(`  SETUP ${s.status}${s.status==='GO'?'':' (= WAIT, not an entry)'} ${s.finalDir==='bull'?'LONG':'SHORT'} ${s.tfConf||''} | entry ${wF(s.entry)} ${s.entryType||''} | SL ${wF(s.sl)} | TP1 ${wF(s.tp1)} | TP2 ${wF(s.tp2)} | R:R ${s.rr!=null?(+s.rr).toFixed(2):'—'} | ${s.levelSrc||''}${s.gate&&s.gate.why&&s.gate.why.length?' | wait: '+s.gate.why.join(' · '):''}`);}
     else L.push('  SETUP none (no 1h+4h confluence)');
     (o.events||[]).forEach(e=>L.push('  CHANGE '+e.txt));
   });
