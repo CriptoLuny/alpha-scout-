@@ -1136,6 +1136,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
 //    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
 //    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-26-b  TRUTH 26.10 13:03 (first 26-a run): (1) the LAB report printed LOCAL time and the
+//    CSV printed UTC -> the same IOST 4h ARM read 22:00 vs 20:00. All LAB/CSV/TRACK times are now
+//    UTC (Binance time), labelled. (2) TRACK started the forward window at the RUN time but used
+//    the close of the last closed bar as the entry -> on 1d the entry price was up to 24h old.
+//    Now: entry = close of the ARM bar, window starts at that bar's close (same as the LAB).
+//    Snapshots from 26-a are moved to their bar close automatically (floor to the TF boundary).
+//    (3) VARIANTS: the 26-a CASE lines showed the user's examples failing mostly on BBW (no
+//    squeeze yet) and SPIKE < +80%. Instead of tuning to 6 examples, 6 ARM variants run on the
+//    WHOLE universe against the same RANDOM: base / BBW<=50% / no BBW / spike>=60% /
+//    spike>=60%+no BBW / retrace>=70%. Edge counts only if the 2SE band clears zero on BOTH
+//    TFs (6 variants x 2 TFs = many tries: a single-TF "hit" is expected by chance).
+//    EV R = TP +50% / SL -20% on "which came first" (2.5R win, 1R loss, none = 0).
+//    CASE hits per variant list which of the case coins each variant would have caught.
+//    X-window lookup is cached per bar so the extra variants cost little time.
 //  2026-10-26-a  PUMP LAB v6 first run (26.10): RE-PUMP ARM has NO pump edge vs RANDOM
 //    (1d P(+50%/30d) +2.7pp ±4.6, 4h -1.9pp ±5.1) but 4h ARM carries MORE dump risk
 //    (P(-20%/14d) 34.9% vs 17.2%, +17.7pp ±8.0). Goal of this build: better data per coin.
@@ -1217,7 +1231,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-26-a';
+const APP_BUILD='2026-10-26-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -7007,7 +7021,7 @@ function rpMed(a){if(!a.length)return null;const s=Array.from(a).sort((x,y)=>x-y
 function rpPrep(S,cfg){
   const ma=lbSMA(S.c,20),sd=lbSTD(S.c,20,ma),bbw=new Array(S.n).fill(null);
   for(let i=0;i<S.n;i++)if(ma[i]>0&&sd[i]!=null)bbw[i]=4*sd[i]/ma[i];
-  S.bbw=bbw;S.baseCache=new Map();
+  S.bbw=bbw;S.baseCache=new Map();S.xc=new Array(S.n);   // 2026-10-26-b: X lookup cache per bar
   S.start=Math.max(cfg.ageMax+cfg.ign+cfg.base+1,cfg.bbw+20);
 }
 function rpBase(S,cfg,x){
@@ -7016,24 +7030,31 @@ function rpBase(S,cfg,x){
   if(s>=0){const cs=[],vs=[];for(let j=s;j<e;j++){cs.push(S.c[j]);vs.push(S.v[j]);}r={px:rpMed(cs),vol:rpMed(vs)};}
   S.baseCache.set(x,r);return r;
 }
-function rpArm(S,cfg,i){
+function rpArm(S,cfg,i,P){
+  P=P||RP;
   if(i<S.start||i>S.n-1)return null;
-  let x=-1,xh=0;for(let j=i-cfg.ageMax;j<=i-cfg.ageMin;j++)if(S.h[j]>xh){xh=S.h[j];x=j;}
-  if(x<0)return null;
-  for(let j=x+1;j<=i;j++)if(S.h[j]>=xh)return null;
+  let xc=S.xc?S.xc[i]:undefined;
+  if(xc===undefined){
+    let x=-1,xh=0;for(let j=i-cfg.ageMax;j<=i-cfg.ageMin;j++)if(S.h[j]>xh){xh=S.h[j];x=j;}
+    xc=null;
+    if(x>=0){let newer=false;for(let j=x+1;j<=i;j++)if(S.h[j]>=xh){newer=true;break;}if(!newer)xc={x,xh};}
+    if(S.xc)S.xc[i]=xc;
+  }
+  if(!xc)return null;
+  const x=xc.x,xh=xc.xh;
   const b=rpBase(S,cfg,x);if(!b||!(b.px>0))return null;
-  const spike=xh/b.px-1;if(spike<RP.IGN)return null;
+  const spike=xh/b.px-1;if(spike<P.IGN)return null;
   let vmax=0;for(let j=x-cfg.ign;j<=x;j++)if(S.v[j]>vmax)vmax=S.v[j];
-  if(!(b.vol>0))return null;const volx=vmax/b.vol;if(volx<RP.VOLX)return null;
+  if(!(b.vol>0))return null;const volx=vmax/b.vol;if(volx<P.VOLX)return null;
   let prevMin=Infinity,recMin=Infinity;
   for(let j=x+1;j<=i-cfg.hold;j++)if(S.l[j]<prevMin)prevMin=S.l[j];
   for(let j=i-cfg.hold+1;j<=i;j++)if(S.l[j]<recMin)recMin=S.l[j];
   if(!isFinite(prevMin)||!(prevMin>0))return null;
   if(recMin<prevMin*0.97)return null;
   const al=Math.min(prevMin,recMin),retr=(xh-al)/(xh-b.px);
-  if(retr<RP.RETR)return null;
-  const zone=(S.c[i]-al)/(xh-al);if(!(zone<=RP.ZONE))return null;
-  const rk=lbRank(S.bbw,i,cfg.bbw);if(rk==null||rk>RP.BBW)return null;
+  if(retr<P.RETR)return null;
+  const zone=(S.c[i]-al)/(xh-al);if(!(zone<=P.ZONE))return null;
+  const rk=lbRank(S.bbw,i,cfg.bbw);if(P.BBW<1&&(rk==null||rk>P.BBW))return null;   // BBW >= 1 = gate off
   return{x,xh,tx:S.T[x],base:b.px,spike,volx,al,retr,zone,rk};
 }
 function rpQuiet(S,cfg,i){
@@ -7125,7 +7146,7 @@ function rpCaseDiag(S,cfg){
 function rpCsv(R,onlyCoins){
   const iso=t=>t?new Date(t).toISOString().slice(0,16).replace('T',' '):'';
   const n=(v,d)=>v==null||!isFinite(v)?'':(+v).toFixed(d);
-  const rows=['tf,group,coin,x_time,x_price,base,spike_pct,vol_x,a_low,retr_pct,arm_time,entry,zone_pct,bbw_rank_pct,fwd_bars,max_gain_pct,max_dd_pct,first,bars_to_max,reach_x,status'];
+  const rows=['tf,group,coin,x_time_utc,x_price,base,spike_pct,vol_x,a_low,retr_pct,arm_time_utc,entry,zone_pct,bbw_rank_pct,fwd_bars,max_gain_pct,max_dd_pct,first,bars_to_max,reach_x,status'];
   for(const tf of ['1d','4h']){
     const r=R.res[tf],fw=RP.TF[tf].fwd;
     const add=(g,e)=>{
@@ -7149,6 +7170,65 @@ function labCsvExport(caseOnly){
   toast(`⬇ CSV ${txt.split('\n').length-1} реда · и во полето за копирање`);
 }
 
+// ── VARIANTS (26-b): same data, same RANDOM, ARM gates loosened one at a time ──
+const RP_VARIANTS=[
+  {id:'BASE',   lab:'base: spike>=80 BBW<=30 retr>=80',IGN:0.8,BBW:0.30,RETR:0.8},
+  {id:'BBW50',  lab:'BBW <= 50%',                      IGN:0.8,BBW:0.50,RETR:0.8},
+  {id:'NOBBW',  lab:'no BBW gate',                     IGN:0.8,BBW:1.01,RETR:0.8},
+  {id:'SPK60',  lab:'spike >= 60%',                    IGN:0.6,BBW:0.30,RETR:0.8},
+  {id:'SPK60NB',lab:'spike >= 60% + no BBW',           IGN:0.6,BBW:1.01,RETR:0.8},
+  {id:'RET70',  lab:'retrace >= 70%',                  IGN:0.8,BBW:0.30,RETR:0.7}];
+function rpEdgeNum(A,B,f){
+  const a=A.filter(x=>x.out),b=B.filter(x=>x.out);if(a.length<5||b.length<5)return null;
+  const p1=a.filter(f).length/a.length,p2=b.filter(f).length/b.length;
+  return{d:(p1-p2)*100,se2:2*Math.sqrt(p1*(1-p1)/a.length+p2*(1-p2)/b.length)*100};
+}
+function rpEV(evs){const e=evs.filter(x=>x.out);if(!e.length)return null;return(e.filter(x=>x.out.first==='W').length*2.5-e.filter(x=>x.out.first==='L').length)/e.length;}
+async function rpVariants(data,res,caseList){
+  const out={};
+  for(const tf of ['1d','4h']){
+    const cfg=RP.TF[tf],coins=Object.keys(data[tf]);out[tf]=[];
+    for(let vi=0;vi<RP_VARIANTS.length;vi++){
+      const V=Object.assign({},RP,RP_VARIANTS[vi]),ev=[];
+      for(let k=0;k<coins.length;k++){
+        const c=coins[k],S=data[tf][c],used=new Set();
+        for(let i=S.start;i<S.n;i++){const a=rpArm(S,cfg,i,V);if(a&&!used.has(a.x)){used.add(a.x);ev.push({coin:c,t:S.T[i],px:S.c[i],spike:a.spike,out:rpOut(S,i,cfg.fwd,a.xh)});}}
+        if(k%40===0){labSetProg(`🧪 v6 VARIANTS · ${tf} · ${RP_VARIANTS[vi].id} · ${k+1}/${coins.length}`);await sleep(0);}
+      }
+      out[tf].push({V:RP_VARIANTS[vi],ev,case:ev.filter(e=>caseList.includes(e.coin))});
+    }
+  }
+  return out;
+}
+function rpVariantReport(VR,res){
+  if(!VR)return '';
+  if(VR.err)return `\n══ VARIANTS ══\n⚠ ${VR.err}\n`;
+  const pad=x=>String(x).padStart(2,'0'),dU=(t,tf)=>{const x=new Date(t);return `${pad(x.getUTCDate())}.${pad(x.getUTCMonth()+1)}${tf==='4h'?' '+pad(x.getUTCHours())+'h':''}`;};
+  const pp=v=>(v*100).toFixed(1)+'%',ed=e=>e?`${e.d>=0?'+':''}${e.d.toFixed(1)}pp ±${e.se2.toFixed(1)}${e.d-e.se2>0?' ▲':e.d+e.se2<0?' ▼':''}`:'n<5';
+  let o=`\n══ VARIANTS · same data, same RANDOM, one gate loosened at a time · times UTC ══\n`;
+  o+=`EV R = TP +50% / SL -20% on "which came first" (win 2.5R, loss 1R, neither 0). ▲/▼ = 2SE band clears zero. A variant counts only with ▲ on P(+50%) on BOTH TFs.\n`;
+  const pass={};
+  for(const tf of ['1d','4h']){
+    const rnd=res[tf].rnd,evR=rpEV(rnd);
+    o+=`── ${tf} · forward ${RP.TF[tf].fwd} bars · RANDOM n ${rnd.filter(x=>x.out).length} · EV ${evR==null?'—':evR.toFixed(2)}R ──\n`;
+    o+=`variant|n|P(+50%)|P(-20%)|first +50 / -20|EV R|EDGE P(+50%) vs RANDOM|EDGE P(-20%) vs RANDOM\n`;
+    VR[tf].forEach(r=>{
+      const e=r.ev.filter(x=>x.out),n=e.length,p=f=>n?e.filter(f).length/n:0,ev=rpEV(r.ev);
+      const e50=rpEdgeNum(r.ev,rnd,x=>x.out.up50),e20=rpEdgeNum(r.ev,rnd,x=>x.out.dn20);
+      if(e50&&e50.d-e50.se2>0)pass[r.V.id]=(pass[r.V.id]||0)+1;
+      o+=`${r.V.id} (${r.V.lab})|${n}|${n?pp(p(x=>x.out.up50)):'—'}|${n?pp(p(x=>x.out.dn20)):'—'}|${n?pp(p(x=>x.out.first==='W'))+' / '+pp(p(x=>x.out.first==='L')):'—'}|${ev==null?'—':ev.toFixed(2)+'R'}|${ed(e50)}|${ed(e20)}\n`;
+    });
+    o+=`CASE hits (${tf}):\n`;
+    VR[tf].forEach(r=>{
+      const h=r.case.map(e=>`${e.coin} ${dU(e.t,tf)} `+(e.out?`max ${(e.out.gain>=0?'+':'')+(e.out.gain*100).toFixed(0)}% ${({W:'+50 first',L:'-20 first',T:'neither'})[e.out.first]}`:'pending'));
+      o+=` ${r.V.id}: ${h.length?h.join(' | '):'—'}\n`;
+    });
+  }
+  const ok=RP_VARIANTS.filter(v=>pass[v.id]===2).map(v=>v.id);
+  o+=`VERDICT: ${ok.length?'pump edge on BOTH TFs: '+ok.join(', ')+' -> worth a forward check, not a trade signal yet':'no variant has a pump edge on both TFs'}\n`;
+  return o;
+}
+
 // ── TRACK: LIVE ARM snapshot with OI, scored forward ──
 const RP_TRACK_KEY='rpTrack',RP_TRACK_MAX=400;
 function rpTrackLoad(){try{const a=JSON.parse(localStorage.getItem(RP_TRACK_KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return[];}}
@@ -7166,10 +7246,12 @@ async function rpOiCtx(coin){
 }
 async function rpTrackUpdate(res){
   const tr=rpTrackLoad(),have=new Set(tr.map(x=>x.k)),fr={},add=[];
+  // 26-b: 26-a snapshots started at the run time with the last CLOSED bar as entry -> move them to that bar's close
+  tr.forEach(x=>{if(!x.tb&&RP.TF[x.tf]){const ms=RP.TF[x.tf].ms;x.t=Math.floor(x.t/ms)*ms;x.tb=1;['gain','dd','first','last','days','reachX','done'].forEach(k=>delete x[k]);}});
   try{const p=await labFetch(FAPI+'/premiumIndex',10000);(p||[]).forEach(x=>{if(x.symbol&&x.symbol.endsWith('USDT'))fr[x.symbol.replace(/USDT$/,'')]=parseFloat(x.lastFundingRate||0)*100;});}catch(e){}
   for(const tf of ['1d','4h'])(res[tf].live||[]).forEach(e=>{
     const k=e.coin+'|'+tf+'|'+e.tx;if(have.has(k))return;have.add(k);
-    add.push({k,coin:e.coin,tf,t:Date.now(),px:e.px,xh:e.xh,al:e.al,spike:e.spike,retr:e.retr,zone:e.zone,rk:e.rk,fr:fr[e.coin]!=null?fr[e.coin]:null});
+    add.push({k,coin:e.coin,tf,t:e.tb||Date.now(),tb:1,px:e.px,xh:e.xh,al:e.al,spike:e.spike,retr:e.retr,zone:e.zone,rk:e.rk,fr:fr[e.coin]!=null?fr[e.coin]:null});
   });
   for(let i=0;i<add.length;i+=3){
     if(LAB.abort)break;labSetProg(`🧪 v6 TRACK · OI снимка ${Math.min(i+3,add.length)}/${add.length}`);
@@ -7198,16 +7280,16 @@ function rpTrackReport(all){
   let o=`\n══ TRACK · forward from the LIVE ARM snapshot, with OI ══\n`;
   if(!all||!all.length)return o+'нема снимки (LIVE ARM беше празен)\n';
   const pc=v=>v==null||!isFinite(v)?'—':(v>=0?'+':'')+(v*100).toFixed(0)+'%';
-  o+=`snapshots ${all.length} · done ${all.filter(x=>x.done).length} | snapshot = first LAB run that saw the coin in LIVE ARM: PX, OI coins 30d (1d hist) + 24h (1h hist), FR. Outcome on closed 1h bars, same window as the LAB (1d 30 days / 4h 14 days). BLEED = OI coins 30d <= -10% (the falling-OI leg v6 could not test).\n`;
+  o+=`snapshots ${all.length} · done ${all.filter(x=>x.done).length} | snapshot = first LAB run that saw the coin in LIVE ARM: entry = close of the ARM bar (window starts there, like the LAB); OI coins 30d (1d hist) + 24h (1h hist) and FR at the run. Outcome on closed 1h bars, same window as the LAB (1d 30 days / 4h 14 days). BLEED = OI coins 30d <= -10% (the falling-OI leg v6 could not test).\n`;
   o+=`GROUP|snapshots|done|P(+50%)|P(-20%)|first +50 / first -20   (done only)\n`;
   const grp=(name,a)=>{const d=a.filter(x=>x.done),n=d.length,p=f=>n?Math.round(d.filter(f).length/n*100)+'%':'—';
     return `${name}|${a.length}|${n}|${p(x=>x.gain>=0.5)}|${p(x=>x.dd<=-0.2)}|${p(x=>x.first==='W')} / ${p(x=>x.first==='L')}\n`;};
   for(const tf of ['1d','4h']){const a=all.filter(x=>x.tf===tf);if(!a.length)continue;
     o+=grp(` ${tf} all`,a)+grp(` ${tf} BLEED OI30<=-10%`,a.filter(x=>x.oi30!=null&&x.oi30<=-0.1))+grp(` ${tf} OI30>-10%`,a.filter(x=>x.oi30!=null&&x.oi30>-0.1))+grp(` ${tf} OI n/a`,a.filter(x=>x.oi30==null));}
-  o+=`ROWS newest 40: coin|tf|snap|PX|OI30◆|OI24◆|FR|days|max|dd|first|status\n`;
+  o+=`ROWS newest 40: coin|tf|entry = ARM bar close (UTC)|PX|OI30◆|OI24◆|FR|days|max|dd|first|status\n`;
   const pad=v=>String(v).padStart(2,'0');
   all.slice(-40).reverse().forEach(x=>{const d=new Date(x.t);
-    o+=` ${x.coin}|${x.tf}|${pad(d.getDate())}.${pad(d.getMonth()+1)}|${fmt(x.px)}|${pc(x.oi30)}${x.fix?'*':''}|${pc(x.oi24)}|${x.fr==null?'—':(x.fr>=0?'+':'')+x.fr.toFixed(4)+'%'}|${x.days!=null?x.days.toFixed(1):'0.0'}|${pc(x.gain)}|${pc(x.dd)}|${x.first?({W:'+50',L:'-20',T:'—'}[x.first]):'—'}|${x.done?'done':'open'}\n`;});
+    o+=` ${x.coin}|${x.tf}|${pad(d.getUTCDate())}.${pad(d.getUTCMonth()+1)} ${pad(d.getUTCHours())}h|${fmt(x.px)}|${pc(x.oi30)}${x.fix?'*':''}|${pc(x.oi24)}|${x.fr==null?'—':(x.fr>=0?'+':'')+x.fr.toFixed(4)+'%'}|${x.days!=null?x.days.toFixed(1):'0.0'}|${pc(x.gain)}|${pc(x.dd)}|${x.first?({W:'+50',L:'-20',T:'—'}[x.first]):'—'}|${x.done?'done':'open'}\n`;});
   o+=`Read the group lines only when done >= 30 per group; until then they are anecdotes.\n`;
   return o;
 }
@@ -7278,7 +7360,7 @@ async function runLabV6(){
       for(let k=0;k<coins.length;k++){
         const c=coins[k],r=rpScan(data[tf][c],cfg,c);
         arm.push(...r.arm);quiet.push(...r.quiet);
-        if(r.live)live.push({coin:c,...r.live,px:data[tf][c].c[data[tf][c].n-1],age:data[tf][c].n-1-r.live.x});
+        if(r.live){const SS=data[tf][c];live.push({coin:c,...r.live,px:SS.c[SS.n-1],age:SS.n-1-r.live.x,tb:SS.T[SS.n-1]+cfg.ms});}   // tb = ARM bar close (26-b)
         if(k%25===0){labSetProg(`🧪 v6 ФАЗА 2/2 · ${tf} · барам форми · ${k+1}/${coins.length}`);await sleep(0);}
       }
       const done=arm.filter(e=>e.out).length;
@@ -7287,18 +7369,19 @@ async function runLabV6(){
     }
     // 2026-10-26-a: the whole 4h universe was just evaluated -> fill the ⚠RP4h cache
     {const b=rp4Bar();for(const c in data['4h'])_rp4[c]={b,arm:null};res['4h'].live.forEach(e=>{_rp4[e.coin]={b,arm:e};});}
+    let variants=null;if(!LAB.abort){try{variants=await rpVariants(data,res,caseList);}catch(e){variants={err:String(e&&e.message||e)};}}
     let track=null;if(!LAB.abort){try{track=await rpTrackUpdate(res);}catch(e){track=null;}}
     LAB.v6={res,caseList};
-    LAB.out=rpReport({uni,skipped,fail,res,data,caseList,t0,aborted:LAB.abort,track});
+    LAB.out=rpReport({uni,skipped,fail,res,data,caseList,t0,aborted:LAB.abort,track,variants});
   }catch(err){LAB.out='⚠️ PUMP LAB v6 грешка: '+(err&&err.stack||err);}
   finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 PUMP LAB v6 готов — КОПИРАЈ':'🧪 прекинат');}
 }
 
 function rpReport(R){
   const d=new Date(),pad=x=>String(x).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const dt=(t,tf)=>{const x=new Date(t);return tf==='4h'?`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())} ${pad(x.getHours())}:00`:`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;};
+  const dt=(t,tf)=>{const x=new Date(t);return tf==='4h'?`${x.getUTCFullYear()}-${pad(x.getUTCMonth()+1)}-${pad(x.getUTCDate())} ${pad(x.getUTCHours())}:00`:`${x.getUTCFullYear()}-${pad(x.getUTCMonth()+1)}-${pad(x.getUTCDate())}`;};   // 26-b: UTC = Binance
   const pc=v=>(v>=0?'+':'')+(v*100).toFixed(0)+'%';
-  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v6 · RE-PUMP | ${stamp} | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PUMP LAB v6 · RE-PUMP | ${stamp} local | all bar times below UTC (Binance) | ${Math.round((Date.now()-R.t0)/1000)}s${R.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
   o+=`DATA: universe ${R.uni.length} (skipped ${R.skipped} exchangeInfo symbols: non-USDT / non-perp / not trading / stable / TradFi / blocked) | 1d ${R.res['1d'].coins} coins x <=${RP.TF['1d'].lim} bars | 4h ${R.res['4h'].coins} coins x <=${RP.TF['4h'].lim} bars | short history 1d ${R.fail['1d']} / 4h ${R.fail['4h']} | rate-limit hits ${LAB.rateHit}\n`;
   o+=`ARM: X = top high ${RP.TF['1d'].ageMin}-${RP.TF['1d'].ageMax} bars back (1d) / ${RP.TF['4h'].ageMin}-${RP.TF['4h'].ageMax} (4h), >= +${RP.IGN*100}% over base median, spike vol >= ${RP.VOLX}x base | A retrace >= ${RP.RETR*100}% | base held (no low > 3% under it in last ${RP.TF['1d'].hold}/${RP.TF['4h'].hold} bars) | close in lower ${RP.ZONE*100}% of A..X | BBW(20,2) rank <= ${RP.BBW*100}% of ${RP.TF['1d'].bbw} bars | 1 event per X, entry = close\n`;
   o+=`CONTROLS: QUIET = same SQZ + lower-${RP.ZONE*100}% zone, no +${RP.IGN*100}% range in the X window | RANDOM = random bars, same coins/period (n = max(${RP.RAND_MIN}, ${RP.RAND}x ARM))\n`;
@@ -7330,6 +7413,7 @@ function rpReport(R){
     o+=`LIVE ARM now (${lv.length}):${lv.length?'':' —'}\n`;
     lv.slice(0,25).forEach(e=>{o+=` ${e.coin}|X ${dt(e.tx,tf)} ${fmt(e.xh)} ${pc(e.spike)}|A ${fmt(e.al)} retr ${(e.retr*100).toFixed(0)}%|PX ${fmt(e.px)} zone ${(e.zone*100).toFixed(0)}%|BBW ${(e.rk*100).toFixed(0)}%|X age ${e.age} bars\n`;});
   }
+  o+=rpVariantReport(R.variants,R.res);
   o+=rpTrackReport(R.track);
   o+=`\nEXPORT: ⬇ CSV = every ARM / QUIET / RANDOM event; ⬇ CSV случај = only the coins in the "случај" field. Both also fill this box for copy.\n`;
   o+=`\nNOTES: entry at the close of the first ARM bar per X. Events cluster in market-wide pumps, so the 2SE bands are too narrow (bars are not independent). QUIET coins have a smaller range = lower volatility, so QUIET vs ARM mixes "prior spike" with "volatility"; RANDOM is the base rate. Survivorship: delisted coins missing. No OI in v6 (openInterestHist = 30 days only). Nothing votes in SCORE.\n`;
