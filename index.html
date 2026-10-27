@@ -568,6 +568,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-poc"         onclick="setFil('poc',this)">📊 POC</div>
     <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
     <div class="ftab"               onclick="setFil('clean',this)" style="border-color:rgba(0,255,136,.45);color:var(--green);font-weight:800">✅ CLEAN15</div>
+    <div class="ftab"               onclick="setFil('patm',this)" style="border-color:rgba(0,229,255,.4);color:var(--accent);font-weight:700" title="M2 структура потврдена во последните 5 свеќи (врат / QML / BOS-CHoCH)">🔷 ФОРМИ</div>
+    <div class="ftab"               onclick="setFil('patc',this)" style="border-color:rgba(255,208,0,.35);color:var(--yellow)" title="Насочена свеќна форма на последната затворена свеќа">🕯 СВЕЌИ</div>
     <div class="ftab f-btcfree"     onclick="setFil('btcfree',this)">🆓 BTC FREE</div>
     <div class="ftab"               onclick="setFil('obvdiv',this)" title="OBV расте при рамна цена (1h, 48h) — помал ризик за лонг, не сигнал за пумпа">📈 OBV DIV</div>
     <div class="ftab f-sqz"       onclick="setFil('sqz',this)">🎯 SQZMOM</div>
@@ -634,7 +636,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
     · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
     · палење ≥<input id="labIgn" class="thresh-input" type="number" value="10" min="3" max="50" step="1" style="width:44px">%
-    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v6" selected>v6 RE-PUMP 4h+1d</option><option value="v5">v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
+    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v6" selected>v6 RE-PUMP 4h+1d</option><option value="pat">PAT свеќи+форми 1h+4h</option><option value="v5">v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
     · случај <input id="labCase" class="thresh-input" type="text" value="US,OGN" style="width:110px;text-transform:uppercase">
     <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
     <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
@@ -784,6 +786,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="dp-clean" id="dpClean" style="display:none">
       <div class="flow-title">// CLEAN15 · ЧИСТ ВЛЕЗ 15m</div>
       <div id="cleanContent"></div>
+    </div>
+    <!-- PATTERNS PANEL (2026-10-27-a) -->
+    <div class="dp-clean" id="dpPat" style="display:none">
+      <div class="flow-title">// ФОРМИ · M1 СВЕЌИ + M2 СТРУКТУРИ · 15m 1h 4h 1d</div>
+      <div id="patContent"></div>
     </div>
     <!-- MONEY FLOW PANEL -->
     <div class="dp-flow" id="dpFlow" style="display:none">
@@ -1136,6 +1143,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    🔓 unlock, 🤝 partnership/listing. Row tags, detail section with quick links
 //    (X live $TICKER, CryptoPanic, Binance Square), digest TAGS + NEWS block.
 //    Free sources only: CryptoPanic API is paid, CoinDesk Data retired its free tier.
+//  2026-10-27-a  PATTERNS M1 + M2 (observation only: no SCORE vote, no CLEAN15/SETUP gate, no Telegram).
+//    M1 = 47 candlestick patterns on CLOSED bars, ATR(14)-normalised (doji family, hammer / hanging man /
+//    inverted hammer / shooting star / takuri / pin, marubozu, belt hold, spinning top, high wave, engulfing,
+//    harami (+cross), piercing / dark cloud, tweezers, matching low/high, inside / outside, on-neck, thrusting,
+//    morning / evening (doji) star, 3 soldiers / 3 crows, 3 inside / 3 outside, advance block, deliberation,
+//    3 stars in the south, 3-bar play, rising / falling 3 methods, mat hold, tower bottom/top, ladder bottom/top,
+//    hikkake). Context: prior trend (close vs 6 bars back >= 1 ATR) and @LOW/@HIGH (pattern extreme within
+//    0.35 ATR of the 20-bar extreme). Gap patterns (abandoned baby, kicker, tasuki, windows, separating lines,
+//    breakaway) are not implemented: perps trade 24/7, open ~= previous close, the gap never forms.
+//    M2 = structures from a CAUSAL ATR zigzag (pivot exists from the bar that confirmed it, swing >= 1.5 ATR):
+//    double / triple top+bottom, Adam & Eve, H&S + inverse (sloped neckline), Quasimodo (QML touch), V top /
+//    bottom, dead cat bounce, BOS / CHoCH. Events = first close through the neckline / QML touch / BOS close.
+//    Scan: computed from the klines analyzeOneTF already fetched (0 extra requests) -> s.pat, row tags 🕯/🔷,
+//    filters 🕯 СВЕЌИ / 🔷 ФОРМИ, PAT[TF] tags + legend in the digest. Detail: new // ФОРМИ panel on 15m/1h/4h/1d
+//    (300 bars, cached per bar) with levels (neck, SLref, measured target), forming structures (distance in
+//    ATR) and an OI fit from the last 3 OI periods (HOLD / DRIVE / ABSORB / FLUSH / SQUEEZE / UNWIND).
+//    PAT LAB (🧪 study "PAT"): every pattern x context on 1h (1000 bars) + 4h (1000 bars), whole universe,
+//    TP +2 ATR / SL -1 ATR first touch vs RANDOM in the same direction; @EXT rows vs RANDOM at the same
+//    location. ✔ only when the 2SE band clears zero on BOTH TFs -> ★ on the tag for 30 days.
+//    Sanity run on a synthetic random walk (no edge by construction): 0 directional ✔ = no look-ahead leak.
 //  2026-10-26-b  TRUTH 26.10 13:03 (first 26-a run): (1) the LAB report printed LOCAL time and the
 //    CSV printed UTC -> the same IOST 4h ARM read 22:00 vs 20:00. All LAB/CSV/TRACK times are now
 //    UTC (Binance time), labelled. (2) TRACK started the forward window at the RUN time but used
@@ -1231,7 +1258,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-26-b';
+const APP_BUILD='2026-10-27-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2701,6 +2728,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   let oiTs=null,oiBaseChg=null,oiBaseUsdtChg=null,oiBaseTs=null,oiBasePts=0,oiFix=0,oiFixFlag=null;
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
   let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null,liqPx3=null;
+  let pat=null;   // 2026-10-27-a PATTERNS M1+M2 (observation only)
 
   // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
   try{
@@ -2727,6 +2755,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     const klFull=await apiFetch(`/klines?symbol=${coin}USDT&interval=${tf}&limit=${klLimit}`);
     const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
+    if(klFull&&typeof patScan==='function'){try{pat=patScan(klFull,tf);}catch(e){pat=null;}}   // 2026-10-27-a: same klines, no extra request
     const kl=klFull?(hiTF?klFull:klFull.slice(-20)):null; // legacy пресметки остануваат на стариот број барови
     if(kl&&kl.length>=10){
       const h=Math.floor(kl.length/2);let eB=0,eT=0,lB=0,lT=0;
@@ -3023,7 +3052,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
     oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,oiFix,oiFixFlag,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
-    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,obvDiv,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+    volChange,cls:assetClass(coin),fr,lsRatio,lsExtreme,netInflow,netOutflow,netFlowPct,isUsdtProtocol,liqHunt,liqType,sqz,sqzFired:!!(sqz&&(sqz.bullSignal||sqz.bearSignal||sqz.bullAdxBrk||sqz.bearAdxBrk||sqz.diCrossUp||sqz.diCrossDown)),squeezeActivation,maSqueeze,maSqueezeDir,maSqueezeWidth,coil,coilRangePct,coilVolRatio,closes,jmaDwma,fibo,poc,confScore,confDir,confLabel,confVotes:cvotes,btcCorr,obvDiv,cciObvCross1100,cciObvCross2650,score,sigs,dir,tf,pat,tsMs:Date.now(),ts:new Date().toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
 }
 
 // -- RENDER LIST -------------------------------------------
@@ -3128,6 +3157,7 @@ function rowHTML(s){
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
+  if(!blk&&typeof patTagHTML==='function'){const pt=patTagHTML(s);if(pt)tags.push(pt);}   // 2026-10-27-a PATTERNS
   // CONFLUENCE tag — always first if present
   if(s.confLabel){
     const ccls=s.confDir==='bull'?'ct-conf-bull':'ct-conf-bear';
@@ -3230,6 +3260,7 @@ function openDetail(coin){
   else fetchAndShowDetail(coin);
   loadCciObvCross(coin);
   loadCleanDetail(coin);
+  if(typeof loadPatDetail==='function')loadPatDetail(coin);   // 2026-10-27-a
   if(typeof renderNewsDetail==='function')renderNewsDetail(coin);
 }
 
@@ -3248,6 +3279,7 @@ async function refreshDetail(){
   TFS_FULL.forEach((tf,i)=>renderTFCard(tf,results[i],coin));
   loadCciObvCross(coin);
   loadCleanDetail(coin,true);
+  if(typeof loadPatDetail==='function')loadPatDetail(coin,true);   // 2026-10-27-a
   btn.classList.remove('spin');toast(`↻ ${coin} освежен`);
 }
 
@@ -3888,6 +3920,7 @@ function buildDigest(){
   o+='FR% = last funding rate PER INTERVAL, /Nh = interval (Binance fundingInfo, default 8h). Cost per hour = FR/N; on a 1h coin -0.60% = 0.60% of notional EVERY hour. FR@CAP = within 10% of the adjusted cap/floor. SCORE/tag FR thresholds are still per interval.\n';
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   o+='RP4h = RE-PUMP ARM on the last closed 4h bar (spike >= +80% 4-60 days back, retrace >= 80%, base held, close in lower 35%, BBW squeeze). PUMP LAB v6 26.10: P(+50%/14d) no edge vs RANDOM; P(-20%/14d) 34.9% vs 17.2% -> no new long. Checked for the shown rows (max 30) once per 4h bar; a LAB v6 run covers the universe.\n';
+  if(typeof patLegend==='function')o+=patLegend();   // 2026-10-27-a
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
   if(S.srch&&S.srchList.length>1){
@@ -3989,6 +4022,7 @@ function buildDigest(){
     if(s.src&&s.src.tags&&s.src.tags.length)s.src.tags.forEach(t=>tl.push(t));
     {const fi=frIv(s.coin),lim=(s.fr||0)<0?fi.floor:fi.cap;if(lim!=null&&lim!==0&&Math.abs(s.fr||0)>=0.9*Math.abs(lim))tl.push('FR@CAP '+(lim>0?'+':'')+lim.toFixed(2)+'%');}
     if(s.obvDiv&&s.obvDiv.on)tl.push('OBV_DIV[1h] flow '+(s.obvDiv.flow*100).toFixed(0)+'% px48 '+(s.obvDiv.px*100).toFixed(1)+'%');
+    if(typeof patDigestTags==='function')patDigestTags(s).forEach(t=>tl.push(t));   // 2026-10-27-a
     const tags=tl.join(';');
     o+=[
       s.coin,
@@ -5676,7 +5710,7 @@ function toggleHelp(){
   const val=v=>typeof v==='function'?v():v;
   let html='<input id="hlpQ" placeholder="🔍 Барај кратенка (пр. REVAL, FLIP, OI◆)..." oninput="helpFilter(this.value)" autocomplete="off" autocorrect="off" spellcheck="false" '
     +'style="width:100%;box-sizing:border-box;margin-bottom:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px">';
-  helpSections().forEach(function(sec){
+  helpSections().concat(typeof patHelpSections==='function'?patHelpSections():[]).forEach(function(sec){   // 2026-10-27-a
     html+='<div class="hlp-sec" style="margin-bottom:18px">'
       +'<div style="font-family:var(--mono);font-size:12px;font-weight:bold;color:var(--accent);margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">'+esc(sec.h)+'</div>'
       +'<div style="display:flex;flex-direction:column;gap:8px">';
@@ -6512,7 +6546,7 @@ async function runLabV3(){
   }
 }
 
-function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v6';return m==='v6'?runLabV6():m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
+function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v6';if(m==='pat'&&typeof runLabPat==='function')return runLabPat();return m==='v6'?runLabV6():m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
 function labIgnRow(name,arr){
   const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
   const p=f=>arr.filter(f).length/n;
@@ -6600,6 +6634,11 @@ function openLab(){
   document.getElementById('dgTtl').textContent='// 🧪 PUMP LAB · v'+APP_VER+' '+APP_CODENAME;
   document.getElementById('dgTa').value=LAB.running?(LAB.prog||''):LAB.out||
 `🧪 PUMP LAB — избери студија во редот горе:
+
+ PAT свеќи+форми (2026-10-27-a): секоја свеќна форма (M1) и структура (M2)
+    на 1h (~41 ден) и 4h (~166 дена), целиот универзум. Влез на затворањето,
+    TP +2 ATR / SL −1 ATR. Наспроти RANDOM во иста насока; @EXT формите
+    наспроти RANDOM на истата локација. ✔ = edge на 1h И 4h → ★ на тагот. ~6–8 мин.
 
  v6 RE-PUMP (стандардно): прв бркч X → речиси целосен retrace до базата (A)
     → базата држи (C ≈ A) → компресија. Дали претходниот бркч го прави
@@ -8203,6 +8242,620 @@ function wTest(){
 
 wBtnUpd();wSchedule();
 if(WT.on)setTimeout(()=>{if(!_wLast)wRun();},6000);
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// PATTERNS M1 + M2 (2026-10-27-a) — candlestick patterns and pivot structures.
+// Observation only: no vote in SCORE, no CLEAN15 gate, no SETUP gate, no Telegram alert.
+//  M1 = candles on CLOSED bars, ATR(14)-normalised. Context: prior trend = close vs close 6 bars
+//       earlier >= 1 ATR; @LOW/@HIGH = the pattern's low/high within 0.35 ATR of the 20-bar low/high.
+//  M2 = structures from an ATR zigzag (swing >= 1.5 ATR, causal: a pivot exists only from the bar
+//       that confirmed it). Double/triple top/bottom, Adam & Eve, H&S + inverse, Quasimodo,
+//       V top/bottom, dead cat bounce, BOS / CHoCH. Equal = within 0.6 ATR.
+//  Gap patterns (abandoned baby, kicker, tasuki, windows, separating lines, breakaway) are NOT
+//  implemented: on 24/7 perps open ~= previous close, so the gap they need does not exist.
+//  The scan uses the klines analyzeOneTF already fetched (no extra request). The detail panel
+//  fetches 15m/1h/4h/1d (300 bars, cached per bar). PAT LAB (🧪) tests every pattern vs RANDOM.
+// ══════════════════════════════════════════════════════════════
+const PAT={ATR:14,TRN:6,TRA:1.0,EXTN:20,EXTA:0.35,MINR:0.5,ZZ:1.5,TOL:0.6,WARM:20,FRESH1:2,FRESH2:5,
+  TP:2,SL:1,RAND_PER:6,SEED:20261027,LAB_MIN:30,EDGE_TTL:30*86400e3,
+  LAB_TF:{'1h':{iv:'1h',lim:1000,fwd:24},'4h':{iv:'4h',lim:1000,fwd:12}},
+  DTF:['15m','1h','4h','1d']};
+
+// key -> [short label, full name, group, one-line MK description]
+const PDEF={
+  DOJI:['DOJI','Doji','M1','Тело ≤10% од опсегот — неодлучност. Сама по себе нема насока.'],
+  DRAGON:['DRAGONFLY','Dragonfly doji','M1','Doji со долг долен фитил, без горен — одбиена продажба. Bullish на дно.'],
+  GRAVE:['GRAVESTONE','Gravestone doji','M1','Doji со долг горен фитил, без долен — одбиено купување. Bearish на врв.'],
+  LLDOJI:['LL DOJI','Long-legged doji','M1','Doji со два долги фитили (опсег ≥1.2 ATR) — силна неодлучност.'],
+  HWAVE:['HIGH WAVE','High wave','M1','Мало тело, двата фитила ≥30%, опсег ≥1.5 ATR — хаос, често пред пресврт.'],
+  SPIN:['SPIN TOP','Spinning top','M1','Мало тело (10–30%) со фитили од двете страни, нормален опсег — пауза.'],
+  HAMMER:['HAMMER','Hammer','M1','По пад: долен фитил ≥60%, мало тело горе. Bullish пресврт.'],
+  HANG:['HANG MAN','Hanging man','M1','Иста форма како hammer, но по раст. Bearish предупредување.'],
+  INVHAM:['INV HAMMER','Inverted hammer','M1','По пад: горен фитил ≥60%, мало тело долу. Bullish, бара потврда.'],
+  STAR:['SHOOT STAR','Shooting star','M1','По раст: горен фитил ≥60%, мало тело долу. Bearish пресврт.'],
+  TAKURI:['TAKURI','Takuri','M1','Dragonfly по пад со долен фитил ≥75% од опсегот. Bullish.'],
+  PIN:['PIN','Pin bar','M1','Нос ≥60% што штрчи над/под последните 3 свеќи, без јасен тренд пред тоа.'],
+  MARU:['MARUBOZU','Marubozu','M1','Тело ≥90% од опсегот, опсег ≥1 ATR — моментум во насоката на свеќата.'],
+  BELT:['BELT HOLD','Belt hold','M1','Силна свеќа што отвора на својот екстрем, против трендот пред неа. Пресврт.'],
+  ENGULF:['ENGULF','Engulfing','M1','Телото ја голтa телото на претходната спротивна свеќа (≥0.6 ATR).'],
+  HARAMI:['HARAMI','Harami','M1','Мало тело внатре во големо спротивно тело (≥0.8 ATR) по тренд. Застој.'],
+  HARAMIX:['HARAMI X','Harami cross','M1','Harami каде втората свеќа е doji. Посилен знак на застој.'],
+  PIERCE:['PIERCING','Piercing line','M1','По пад: bull свеќа затвора над средината на големата bear свеќа. Bullish.'],
+  DARKC:['DARK CLOUD','Dark cloud cover','M1','По раст: bear свеќа затвора под средината на големата bull свеќа. Bearish.'],
+  TWZB:['TWEEZER BOT','Tweezer bottom','M1','Две свеќи со ист дол (±0.1 ATR) на 20-бар дно, bear па bull. Bullish.'],
+  TWZT:['TWEEZER TOP','Tweezer top','M1','Две свеќи со ист врв (±0.1 ATR) на 20-бар врв, bull па bear. Bearish.'],
+  MATCHL:['MATCH LOW','Matching low','M1','По пад: две bear свеќи со исто затворање — продажбата застанува. Bullish.'],
+  MATCHH:['MATCH HIGH','Matching high','M1','По раст: две bull свеќи со исто затворање — купувањето застанува. Bearish.'],
+  INSIDE:['INSIDE','Inside bar','M1','Целиот опсег внатре во претходната свеќа (≥0.8 ATR). Компресија, насока од пробивот.'],
+  OUTSIDE:['OUTSIDE','Outside bar','M1','Опсегот ја покрива претходната свеќа, тело ≥50%, опсег ≥1 ATR.'],
+  ONNECK:['ON-NECK','On-neck','M1','По пад: bull свеќа под дното на големата bear свеќа затвора на нејзиниот дол. Bearish продолжение.'],
+  THRUST:['THRUSTING','Thrusting','M1','Како on-neck, но затвора во телото под средината. Bearish продолжение.'],
+  MSTAR:['MORN STAR','Morning star','M1','Голема bear, мала свеќа долу, bull што затвора над средината на првата. Bullish.'],
+  MDSTAR:['MORN DOJI★','Morning doji star','M1','Morning star каде средната свеќа е doji.'],
+  ESTAR:['EVE STAR','Evening star','M1','Голема bull, мала свеќа горе, bear што затвора под средината на првата. Bearish.'],
+  EDSTAR:['EVE DOJI★','Evening doji star','M1','Evening star каде средната свеќа е doji.'],
+  WS3:['3 SOLDIERS','Three white soldiers','M1','Три bull свеќи (≥0.5 ATR) со повисоки затворања и мали горни фитили.'],
+  BC3:['3 CROWS','Three black crows','M1','Три bear свеќи (≥0.5 ATR) со пониски затворања и мали долни фитили.'],
+  IN3:['3 INSIDE','Three inside up/down','M1','Harami + трета свеќа што затвора зад отворањето на првата. Потврден пресврт.'],
+  OUT3:['3 OUTSIDE','Three outside up/down','M1','Engulfing + трета свеќа што продолжува. Потврден пресврт.'],
+  ADVB:['ADV BLOCK','Advance block','M1','Три bull свеќи со смалени тела и растечки горни фитили по раст. Bearish предупредување.'],
+  DELIB:['DELIBERATION','Deliberation','M1','Две силни bull свеќи па мала на врвот. Купувачите застануваат. Bearish.'],
+  SS3:['3 STARS S','Three stars in the south','M1','По пад: три bear свеќи што се смалуваат, со повисоки долови. Ретко, bullish.'],
+  BAR3:['3-BAR PLAY','Three bar play','M1','Широка свеќа (≥1.5 ATR), мала пауза во нејзината горна/долна половина, пробив. Продолжение.'],
+  R3M:['RISING 3','Rising three methods','M1','Голема bull, три мали свеќи во нејзиниот опсег, bull што затвора над сите. Продолжение.'],
+  F3M:['FALLING 3','Falling three methods','M1','Огледално на rising three methods. Bearish продолжение.'],
+  MATHOLD:['MAT HOLD','Mat hold','M1','Rising/falling 3 каде паузата држи во половината на првата свеќа. Посилно продолжение.'],
+  TOWERB:['TOWER BOT','Tower bottom','M1','Голема bear, 2–4 мали свеќи, голема bull. Пресврт на дно.'],
+  TOWERT:['TOWER TOP','Tower top','M1','Голема bull, 2–4 мали свеќи, голема bear. Пресврт на врв.'],
+  LADB:['LADDER BOT','Ladder bottom','M1','Три bear со пониски затворања, четврта со горен фитил, bull над телото на четвртата. Bullish.'],
+  LADT:['LADDER TOP','Ladder top','M1','Огледално на ladder bottom. Bearish.'],
+  HIKK:['HIKKAKE','Hikkake','M1','Inside bar, лажен пробив на едната страна, па затворање зад другата страна (≤3 бара). Замка.'],
+  DTOP:['DTOP','Double top','M2','Два врва еднакви во 0.6 ATR, длабочина ≥1.5 ATR, по раст. Потврда = затворање под вратот.'],
+  DBOT:['DBOT','Double bottom','M2','Два дола еднакви во 0.6 ATR, по пад. Потврда = затворање над вратот.'],
+  TTOP:['TTOP','Triple top','M2','Три врва во опсег 0.9 ATR. Врат = понискиот од двата дола меѓу нив.'],
+  TBOT:['TBOT','Triple bottom','M2','Три дола во опсег 0.9 ATR. Врат = повисокиот од двата врва меѓу нив.'],
+  AETOP:['A&E TOP','Adam & Eve top','M2','Double top: првиот врв остар (≤3 свеќи), вториот заоблен (≥2× поширок).'],
+  AEBOT:['A&E BOT','Adam & Eve bottom','M2','Double bottom: првото дно остро (Adam), второто заоблено (Eve).'],
+  HS:['H&S','Head & shoulders','M2','Рамо–глава–рамо по раст; вратот низ двата дола (може коса линија).'],
+  IHS:['iH&S','Inverse head & shoulders','M2','Огледално по пад. Потврда = затворање над вратот.'],
+  QMB:['QM','Quasimodo (bearish)','M2','H1, L1, повисок H2, понизок L2 (CHoCH). Ниво QML = H1; настан = враќање до QML.'],
+  QMU:['QM','Quasimodo (bullish)','M2','L1, H1, понизок L2, повисок H2. QML = L1; настан = враќање до QML.'],
+  VBOT:['V-BOT','V bottom','M2','Пад ≥4 ATR за ≤12 свеќи, па враќање ≥60% од падот исто толку брзо.'],
+  VTOP:['V-TOP','V top','M2','Раст ≥4 ATR за ≤12 свеќи, па враќање ≥60% исто толку брзо.'],
+  DCAT:['DEAD CAT','Dead cat bounce','M2','Пад ≥5 ATR, отскок 20–55% од падот, па затворање под дното на падот. Bearish продолжение.'],
+  BOS:['BOS','Break of structure','M2','Во HH/HL тренд затворање над последниот врв (или во LH/LL под последното дно).'],
+  CHOCH:['CHoCH','Change of character','M2','Во HH/HL тренд затворање под последниот HL (или во LH/LL над последниот LH).']
+};
+// directional names where the bull / bear version has its own name in the literature
+function patName(k,d){const x=PDEF[k];if(!x)return k;
+  if(k==='IN3')return d==='bull'?'Three inside up':'Three inside down';
+  if(k==='OUT3')return d==='bull'?'Three outside up':'Three outside down';
+  if(['ENGULF','HARAMI','HARAMIX','PIN','MARU','BELT','OUTSIDE','BAR3','MATHOLD','HIKK','BOS','CHOCH'].includes(k))return(d==='bull'?'Bullish ':d==='bear'?'Bearish ':'')+x[1].replace(/^./,c=>c.toLowerCase());
+  return x[1];}
+function patArr(d){return d==='bull'?'▲':d==='bear'?'▼':'◆';}
+
+// ── SERIES ──────────────────────────────────────────────────────
+function patSer(kl){
+  let k=kl||[];if(k.length&&+k[k.length-1][6]>Date.now())k=k.slice(0,-1);   // closed bars only
+  const n=k.length,O=new Float64Array(n),H=new Float64Array(n),L=new Float64Array(n),C=new Float64Array(n),atr=new Float64Array(n),T=new Array(n);
+  let s=0;
+  for(let i=0;i<n;i++){const r=k[i];O[i]=+r[1];H[i]=+r[2];L[i]=+r[3];C[i]=+r[4];T[i]=+r[0];
+    const tr=i?Math.max(H[i]-L[i],Math.abs(H[i]-C[i-1]),Math.abs(L[i]-C[i-1])):H[i]-L[i];
+    if(i<PAT.ATR){s+=tr;atr[i]=s/(i+1);}else atr[i]=(atr[i-1]*(PAT.ATR-1)+tr)/PAT.ATR;}
+  return{n,O,H,L,C,T,atr,tc:n?+k[n-1][6]:0};
+}
+function patC(S,i){const o=S.O[i],c=S.C[i],h=S.H[i],l=S.L[i];
+  return{o,c,h,l,r:h-l,b:Math.abs(c-o),up:h-Math.max(o,c),lo:Math.min(o,c)-l,bu:c>o,be:c<o,top:Math.max(o,c),bot:Math.min(o,c)};}
+function patTrend(S,j){if(j-PAT.TRN<0||!(S.atr[j]>0))return '';const m=(S.C[j]-S.C[j-PAT.TRN])/S.atr[j];return m<=-PAT.TRA?'dn':m>=PAT.TRA?'up':'';}
+// pattern low (bull) / high (bear) over its own bars within EXTA ATR of the EXTN-bar extreme
+function patExt(S,i,span,d){
+  if(i-PAT.EXTN+1<0)return false;const a=S.atr[i];
+  if(d==='bull'){let lo=Infinity,pl=Infinity;for(let j=i-PAT.EXTN+1;j<=i;j++)if(S.L[j]<lo)lo=S.L[j];for(let j=i-span+1;j<=i;j++)if(S.L[j]<pl)pl=S.L[j];return pl-lo<=PAT.EXTA*a;}
+  let hi=-Infinity,ph=-Infinity;for(let j=i-PAT.EXTN+1;j<=i;j++)if(S.H[j]>hi)hi=S.H[j];for(let j=i-span+1;j<=i;j++)if(S.H[j]>ph)ph=S.H[j];return hi-ph<=PAT.EXTA*a;
+}
+
+// ── M1: candles completing on bar i ─────────────────────────────
+function patM1At(S,i){
+  const out=[],A=S.atr[i];if(!(A>0)||i<PAT.TRN+2)return out;
+  const add=(k,d,span)=>out.push({k,d,span});
+  const z=patC(S,i),R=z.r,tb=patTrend(S,i-1);
+  // single bar (one class per bar)
+  if(R>=PAT.MINR*A){
+    const pLo=i>=3&&z.l<Math.min(S.L[i-1],S.L[i-2],S.L[i-3]),pHi=i>=3&&z.h>Math.max(S.H[i-1],S.H[i-2],S.H[i-3]);
+    if(z.b<=0.1*R){
+      if(z.up<=0.1*R&&z.lo>=0.6*R)add(tb==='dn'&&z.lo>=0.75*R?'TAKURI':'DRAGON','bull',1);
+      else if(z.lo<=0.1*R&&z.up>=0.6*R)add('GRAVE','bear',1);
+      else if(z.up>=0.3*R&&z.lo>=0.3*R&&R>=1.2*A)add('LLDOJI','neu',1);
+      else add('DOJI','neu',1);
+    }else if(z.lo>=0.6*R&&z.up<=0.15*R&&z.b<=0.35*R){
+      if(tb==='dn')add('HAMMER','bull',1);else if(tb==='up')add('HANG','bear',1);else if(pLo)add('PIN','bull',1);
+    }else if(z.up>=0.6*R&&z.lo<=0.15*R&&z.b<=0.35*R){
+      if(tb==='dn')add('INVHAM','bull',1);else if(tb==='up')add('STAR','bear',1);else if(pHi)add('PIN','bear',1);
+    }else if(z.b>=0.9*R&&R>=A)add('MARU',z.bu?'bull':'bear',1);
+    else if(z.b>=0.6*R&&R>=A&&z.bu&&z.lo<=0.05*R&&tb==='dn')add('BELT','bull',1);
+    else if(z.b>=0.6*R&&R>=A&&z.be&&z.up<=0.05*R&&tb==='up')add('BELT','bear',1);
+    else if(z.b<=0.25*R&&z.up>=0.3*R&&z.lo>=0.3*R&&R>=1.5*A)add('HWAVE','neu',1);
+    else if(z.b<=0.3*R&&z.up>=0.25*R&&z.lo>=0.25*R)add('SPIN','neu',1);
+  }
+  // two bars
+  const a=patC(S,i-1),b=z,t2=patTrend(S,i-2);
+  const eB=a.be&&a.b>=0.25*A&&b.bu&&b.c>=a.o&&b.o<=a.c&&b.b>a.b&&b.b>=0.6*A;
+  const eS=a.bu&&a.b>=0.25*A&&b.be&&b.c<=a.o&&b.o>=a.c&&b.b>a.b&&b.b>=0.6*A;
+  if(eB)add('ENGULF','bull',2);if(eS)add('ENGULF','bear',2);
+  const isDoji=x=>x.r>0&&x.b<=0.1*x.r;
+  let har=false;
+  if(t2==='dn'&&a.be&&a.b>=0.8*A&&b.top<=a.o&&b.bot>=a.c&&b.b<=0.5*a.b){add(isDoji(b)?'HARAMIX':'HARAMI','bull',2);har=true;}
+  if(t2==='up'&&a.bu&&a.b>=0.8*A&&b.top<=a.c&&b.bot>=a.o&&b.b<=0.5*a.b){add(isDoji(b)?'HARAMIX':'HARAMI','bear',2);har=true;}
+  if(t2==='dn'&&a.be&&a.b>=0.8*A&&b.bu&&b.o<=a.c+0.05*A&&b.c>a.c+0.5*a.b&&b.c<a.o)add('PIERCE','bull',2);
+  if(t2==='up'&&a.bu&&a.b>=0.8*A&&b.be&&b.o>=a.c-0.05*A&&b.c<a.c-0.5*a.b&&b.c>a.o)add('DARKC','bear',2);
+  if(a.be&&b.bu&&Math.abs(a.l-b.l)<=0.1*A&&a.r>=0.5*A&&b.r>=0.5*A&&patExt(S,i,2,'bull'))add('TWZB','bull',2);
+  if(a.bu&&b.be&&Math.abs(a.h-b.h)<=0.1*A&&a.r>=0.5*A&&b.r>=0.5*A&&patExt(S,i,2,'bear'))add('TWZT','bear',2);
+  if(t2==='dn'&&a.be&&b.be&&a.b>=0.5*A&&b.b>=0.5*A&&Math.abs(a.c-b.c)<=0.05*A)add('MATCHL','bull',2);
+  if(t2==='up'&&a.bu&&b.bu&&a.b>=0.5*A&&b.b>=0.5*A&&Math.abs(a.c-b.c)<=0.05*A)add('MATCHH','bear',2);
+  if(!har&&b.h<a.h&&b.l>a.l&&a.r>=0.8*A)add('INSIDE','neu',2);
+  if(b.h>a.h&&b.l<a.l&&b.r>0&&b.b>=0.5*b.r&&b.r>=A&&!(b.bu?eB:eS))add('OUTSIDE',b.bu?'bull':'bear',2);
+  if(t2==='dn'&&a.be&&a.b>=A&&b.bu&&b.l<a.l){
+    if(Math.abs(b.c-a.l)<=0.1*A)add('ONNECK','bear',2);
+    else if(b.c>a.c+0.1*A&&b.c<a.c+0.5*a.b)add('THRUST','bear',2);
+  }
+  // three bars
+  if(i>=PAT.TRN+3){
+    const x=patC(S,i-2),y=a,t3=patTrend(S,i-3);
+    if(t3==='dn'&&x.be&&x.b>=0.8*A&&y.b<=0.35*x.b&&y.top<=x.c+0.25*x.b&&z.bu&&z.c>=x.c+0.5*x.b&&z.b>=0.5*x.b)add(isDoji(y)?'MDSTAR':'MSTAR','bull',3);
+    if(t3==='up'&&x.bu&&x.b>=0.8*A&&y.b<=0.35*x.b&&y.bot>=x.c-0.25*x.b&&z.be&&z.c<=x.c-0.5*x.b&&z.b>=0.5*x.b)add(isDoji(y)?'EDSTAR':'ESTAR','bear',3);
+    const ws=[x,y,z].every(q=>q.bu&&q.b>=0.5*A&&q.up<=0.35*q.b)&&y.c>x.c&&z.c>y.c&&y.o>=x.o-0.05*A&&y.o<=x.c+0.05*A&&z.o>=y.o-0.05*A&&z.o<=y.c+0.05*A;
+    const bc=[x,y,z].every(q=>q.be&&q.b>=0.5*A&&q.lo<=0.35*q.b)&&y.c<x.c&&z.c<y.c&&y.o<=x.o+0.05*A&&y.o>=x.c-0.05*A&&z.o<=y.o+0.05*A&&z.o>=y.c-0.05*A;
+    const adv=t3==='up'&&x.bu&&y.bu&&z.bu&&x.b>=0.6*A&&y.c>x.c&&z.c>y.c&&y.b<x.b&&z.b<y.b&&(z.up>=0.5*z.b||y.up>=0.5*y.b);
+    if(adv)add('ADVB','bear',3);else if(ws)add('WS3','bull',3);
+    if(bc)add('BC3','bear',3);
+    if(t3==='dn'&&x.be&&x.b>=0.8*A&&y.bu&&y.top<=x.o&&y.bot>=x.c-0.05*A&&y.b<=0.6*x.b&&z.bu&&z.c>x.o)add('IN3','bull',3);
+    if(t3==='up'&&x.bu&&x.b>=0.8*A&&y.be&&y.bot>=x.o&&y.top<=x.c+0.05*A&&y.b<=0.6*x.b&&z.be&&z.c<x.o)add('IN3','bear',3);
+    if(t3==='dn'&&x.be&&x.b>=0.25*A&&y.bu&&y.c>=x.o&&y.o<=x.c+0.05*A&&y.b>x.b&&y.b>=0.6*A&&z.bu&&z.c>y.c)add('OUT3','bull',3);
+    if(t3==='up'&&x.bu&&x.b>=0.25*A&&y.be&&y.c<=x.o&&y.o>=x.c-0.05*A&&y.b>x.b&&y.b>=0.6*A&&z.be&&z.c<y.c)add('OUT3','bear',3);
+    if(t3==='up'&&x.bu&&y.bu&&x.b>=0.8*A&&y.b>=0.8*A&&y.c>x.c&&z.b<=0.35*y.b&&z.bot>=y.c-0.15*A&&!adv)add('DELIB','bear',3);
+    if(t3==='dn'&&x.be&&y.be&&z.be&&x.b>=0.6*A&&x.lo>=0.4*x.r&&y.b<x.b&&y.l>x.l&&y.lo>=0.25*y.r&&z.b<y.b&&z.r>0&&z.up<=0.1*z.r&&z.lo<=0.1*z.r&&z.h<=y.h&&z.l>=y.l)add('SS3','bull',3);
+    if(x.bu&&x.r>=1.5*A&&x.b>=0.6*x.r&&y.r<=0.5*x.r&&y.l>=x.l+0.5*x.r&&y.h<=x.h+0.1*A&&z.bu&&z.c>x.h)add('BAR3','bull',3);
+    if(x.be&&x.r>=1.5*A&&x.b>=0.6*x.r&&y.r<=0.5*x.r&&y.h<=x.h-0.5*x.r&&y.l>=x.l-0.1*A&&z.be&&z.c<x.l)add('BAR3','bear',3);
+  }
+  // five bars: rising / falling three methods, mat hold, ladder
+  if(i>=PAT.TRN+5){
+    const f=patC(S,i-4),m=[patC(S,i-3),patC(S,i-2),patC(S,i-1)];
+    const mh=Math.max(...m.map(q=>q.h)),ml=Math.min(...m.map(q=>q.l));
+    if(f.bu&&f.b>=A&&m.every(q=>q.b<=0.5*f.b&&q.h<=f.h+0.1*A&&q.l>=f.l)&&m.filter(q=>q.be).length>=2&&z.bu&&z.c>Math.max(f.c,mh))
+      add(m.every(q=>q.l>=f.l+0.5*f.r)?'MATHOLD':'R3M','bull',5);
+    if(f.be&&f.b>=A&&m.every(q=>q.b<=0.5*f.b&&q.l>=f.l-0.1*A&&q.h<=f.h)&&m.filter(q=>q.bu).length>=2&&z.be&&z.c<Math.min(f.c,ml))
+      add(m.every(q=>q.h<=f.h-0.5*f.r)?'MATHOLD':'F3M','bear',5);
+    const q1=f,q2=m[0],q3=m[1],q4=m[2];
+    if([q1,q2,q3].every(q=>q.be&&q.b>=0.4*A)&&q2.c<q1.c&&q3.c<q2.c&&q4.be&&q4.up>=q4.b&&z.bu&&z.c>q4.o)add('LADB','bull',5);
+    if([q1,q2,q3].every(q=>q.bu&&q.b>=0.4*A)&&q2.c>q1.c&&q3.c>q2.c&&q4.bu&&q4.lo>=q4.b&&z.be&&z.c<q4.o)add('LADT','bear',5);
+  }
+  // tower bottom / top: big bar, 2-4 small bars, big opposite bar
+  for(let mm=2;mm<=4;mm++){
+    const ia=i-mm-1;if(ia<PAT.TRN+1)break;
+    const f=patC(S,ia),mid=[];for(let j=ia+1;j<i;j++)mid.push(patC(S,j));
+    const tf0=patTrend(S,ia-1);
+    if(tf0==='dn'&&f.be&&f.b>=A&&mid.every(q=>q.b<=0.4*f.b)&&z.bu&&z.b>=0.7*f.b&&z.c>Math.max(...mid.map(q=>q.h))){add('TOWERB','bull',mm+2);break;}
+    if(tf0==='up'&&f.bu&&f.b>=A&&mid.every(q=>q.b<=0.4*f.b)&&z.be&&z.b>=0.7*f.b&&z.c<Math.min(...mid.map(q=>q.l))){add('TOWERT','bear',mm+2);break;}
+  }
+  // hikkake: inside bar j, false break on j+1, close beyond the other side of j within 3 bars
+  for(let j=i-4;j<=i-2;j++){
+    if(j<1)continue;
+    if(!(S.H[j]<S.H[j-1]&&S.L[j]>S.L[j-1]))continue;
+    const k=j+1;
+    if(S.H[k]<S.H[j]&&S.L[k]<S.L[j]&&S.C[i]>S.H[j]){let ok=true;for(let q=j+2;q<i;q++)if(S.C[q]>S.H[j])ok=false;if(ok){add('HIKK','bull',i-j+2);break;}}
+    if(S.H[k]>S.H[j]&&S.L[k]>S.L[j]&&S.C[i]<S.L[j]){let ok=true;for(let q=j+2;q<i;q++)if(S.C[q]<S.L[j])ok=false;if(ok){add('HIKK','bear',i-j+2);break;}}
+  }
+  out.forEach(h=>{h.ext=h.d==='neu'?(patExt(S,i,h.span,'bull')?'@LOW':patExt(S,i,h.span,'bear')?'@HIGH':''):(patExt(S,i,h.span,h.d)?(h.d==='bull'?'@LOW':'@HIGH'):'');});
+  return out;
+}
+
+// ── M2: ATR zigzag (causal) ─────────────────────────────────────
+function patZZ(S,mult){
+  const n=S.n,H=S.H,L=S.L,piv=[];if(n<3)return{piv,ext:null};
+  let dir=0,hi=0,lo=0,ex=0;
+  for(let i=1;i<n;i++){
+    const th=mult*S.atr[i];
+    if(dir===0){
+      if(H[i]>H[hi])hi=i;if(L[i]<L[lo])lo=i;
+      if(hi<i&&H[hi]-L[i]>=th){piv.push({i:hi,p:H[hi],t:'H',ci:i});dir=-1;ex=hi+1;for(let j=hi+1;j<=i;j++)if(L[j]<=L[ex])ex=j;}
+      else if(lo<i&&H[i]-L[lo]>=th){piv.push({i:lo,p:L[lo],t:'L',ci:i});dir=1;ex=lo+1;for(let j=lo+1;j<=i;j++)if(H[j]>=H[ex])ex=j;}
+      continue;
+    }
+    if(dir>0){if(H[i]>=H[ex])ex=i;else if(H[ex]-L[i]>=th){piv.push({i:ex,p:H[ex],t:'H',ci:i});dir=-1;ex=i;}}
+    else{if(L[i]<=L[ex])ex=i;else if(H[i]-L[ex]>=th){piv.push({i:ex,p:L[ex],t:'L',ci:i});dir=1;ex=i;}}
+  }
+  return{piv,ext:dir?{i:ex,p:dir>0?H[ex]:L[ex],t:dir>0?'H':'L'}:null};
+}
+function patWidth(S,pv,dep,top){
+  const thr=top?pv.p-0.3*dep:pv.p+0.3*dep,ok=j=>top?S.H[j]>=thr:S.L[j]<=thr;let w=1;
+  for(let j=pv.i-1;j>=Math.max(0,pv.i-30)&&ok(j);j--)w++;
+  for(let j=pv.i+1;j<=Math.min(S.n-1,pv.i+30)&&ok(j);j++)w++;
+  return w;
+}
+// structures that the newest confirmed pivot completes (P = pivots confirmed up to bar i)
+function patM2Build(S,P,i){
+  const out=[],m=P.length,a=S.atr[i],tol=PAT.TOL*a,g=k=>P[m-k];if(m<2||!(a>0))return out;
+  const last=g(1),ky=(k,arr)=>k+'@'+arr.map(p=>p.i).join('.');
+  const age=(p0,p1)=>Math.max(20,2*(p1.i-p0.i));
+  if(m>=4){
+    const L0=g(4),X1=g(3),N1=g(2),X2=g(1);   // tops when last = H, bottoms when last = L
+    const top=last.t==='H',d=top?'bear':'bull';
+    const ext=top?Math.max(X1.p,X2.p):Math.min(X1.p,X2.p),dep=top?Math.min(X1.p,X2.p)-N1.p:N1.p-Math.max(X1.p,X2.p);
+    if(Math.abs(X1.p-X2.p)<=tol&&X2.i-X1.i>=5&&dep>=PAT.ZZ*a&&(top?X1.p-L0.p:L0.p-X1.p)>=dep){
+      const w1=patWidth(S,X1,dep,top),w2=patWidth(S,X2,dep,top),ae=w1<=3&&w2>=Math.max(4,2*w1);
+      const k=ae?(top?'AETOP':'AEBOT'):(top?'DTOP':'DBOT');
+      out.push({k,d,key:ky(top?'DTOP':'DBOT',[X1,N1,X2]),kind:'brk',from:i,iL:X2.i,maxAge:age(X1,X2),neck:N1.p,inv:ext+(top?tol:-tol),sl:ext,tgt:N1.p+(top?-1:1)*dep,pv:[X1,N1,X2]});
+    }
+  }
+  if(m>=6){
+    const L0=g(6),X1=g(5),N1=g(4),X2=g(3),N2=g(2),X3=g(1),top=last.t==='H',d=top?'bear':'bull';
+    const xs=[X1.p,X2.p,X3.p],ext=top?Math.max(...xs):Math.min(...xs);
+    const neck=top?Math.min(N1.p,N2.p):Math.max(N1.p,N2.p),dep=top?Math.min(...xs)-neck:neck-Math.max(...xs);
+    if(Math.max(...xs)-Math.min(...xs)<=1.5*tol&&dep>=PAT.ZZ*a&&(top?X1.p-L0.p:L0.p-X1.p)>=dep)
+      out.push({k:top?'TTOP':'TBOT',d,key:ky(top?'TTOP':'TBOT',[X1,X2,X3]),kind:'brk',from:i,iL:X3.i,maxAge:age(X1,X3),neck,inv:ext+(top?tol:-tol),sl:ext,tgt:neck+(top?-1:1)*dep,pv:[X1,N1,X2,N2,X3]});
+    // head & shoulders / inverse
+    const LS=X1,HD=X2,RS=X3,sh=top?Math.max(LS.p,RS.p):Math.min(LS.p,RS.p);
+    const headOk=top?HD.p>sh+tol:HD.p<sh-tol;
+    const nkMid=(N1.p+N2.p)/2,hgt=top?HD.p-nkMid:nkMid-HD.p;
+    const shOk=Math.abs(LS.p-RS.p)<=Math.max(1.5*tol,0.3*hgt);
+    const above=top?Math.min(LS.p,RS.p)>Math.max(N1.p,N2.p):Math.max(LS.p,RS.p)<Math.min(N1.p,N2.p);
+    const prior=top?L0.p<Math.min(N1.p,N2.p):L0.p>Math.max(N1.p,N2.p);
+    if(headOk&&shOk&&above&&prior&&Math.abs(N2.p-N1.p)<=0.5*hgt){
+      const sl=(N2.p-N1.p)/(N2.i-N1.i),nk={p0:N1.p,i0:N1.i,m:sl};
+      out.push({k:top?'HS':'IHS',d,key:ky(top?'HS':'IHS',[LS,HD,RS]),kind:'brk',from:i,iL:RS.i,maxAge:age(LS,RS),nk,inv:HD.p,sl:RS.p,hgt,pv:[LS,N1,HD,N2,RS]});
+    }
+  }
+  // a triple top/bottom also contains a double on its last two peaks -> keep the triple only
+  if(out.some(s=>s.k==='TTOP'||s.k==='TBOT')){for(let q=out.length-1;q>=0;q--)if(['DTOP','DBOT','AETOP','AEBOT'].includes(out[q].k))out.splice(q,1);}
+  // quasimodo: H1 L1 H2(HH) L2(LL) -> bearish QML at H1 ; L1 H1 L2(LL) H2(HH) -> bullish QML at L1
+  if(m>=4){
+    const X1=g(4),N1=g(3),X2=g(2),N2=g(1);
+    if(last.t==='L'&&X2.p>X1.p+0.25*tol&&N2.p<N1.p-0.25*tol)
+      out.push({k:'QMB',d:'bear',key:ky('QMB',[X1,N1,X2,N2]),kind:'touch',from:i,iL:N2.i,maxAge:age(X1,N2),lvl:X1.p,inv:X2.p,sl:X2.p,tgt:N2.p,pv:[X1,N1,X2,N2]});
+    if(last.t==='H'&&X2.p<X1.p-0.25*tol&&N2.p>N1.p+0.25*tol)
+      out.push({k:'QMU',d:'bull',key:ky('QMU',[X1,N1,X2,N2]),kind:'touch',from:i,iL:N2.i,maxAge:age(X1,N2),lvl:X1.p,inv:X2.p,sl:X2.p,tgt:N2.p,pv:[X1,N1,X2,N2]});
+  }
+  // V bottom / top
+  {const P0=g(2),P1=g(1),D=Math.abs(P0.p-P1.p),bars=P1.i-P0.i;
+   if(D>=4*a&&bars<=12){
+     if(P1.t==='L')out.push({k:'VBOT',d:'bull',key:ky('VBOT',[P0,P1]),kind:'v',from:i,iL:P1.i,maxAge:bars+3,lvl:P1.p+0.6*D,inv:P1.p,sl:P1.p,tgt:P0.p,pv:[P0,P1]});
+     else out.push({k:'VTOP',d:'bear',key:ky('VTOP',[P0,P1]),kind:'v',from:i,iL:P1.i,maxAge:bars+3,lvl:P1.p-0.6*D,inv:P1.p,sl:P1.p,tgt:P0.p,pv:[P0,P1]});
+   }}
+  // dead cat bounce: H0 -> L1 (>= 5 ATR, <= 20 bars) -> H1 bounce 20-55% -> close under L1
+  if(m>=3&&last.t==='H'){
+    const H0=g(3),L1=g(2),H1=g(1),D=H0.p-L1.p,bn=D>0?(H1.p-L1.p)/D:0;
+    if(D>=5*a&&L1.i-H0.i<=20&&bn>=0.2&&bn<=0.55)
+      out.push({k:'DCAT',d:'bear',key:ky('DCAT',[H0,L1,H1]),kind:'brk',from:i,iL:H1.i,maxAge:age(H0,H1),neck:L1.p,inv:H1.p,sl:H1.p,tgt:L1.p-(H1.p-L1.p),pv:[H0,L1,H1]});
+  }
+  // structure: BOS / CHoCH levels from the last two highs and two lows
+  {let hs=[],ls=[];for(let q=m-1;q>=0&&(hs.length<2||ls.length<2);q--){const p=P[q];if(p.t==='H'&&hs.length<2)hs.push(p);if(p.t==='L'&&ls.length<2)ls.push(p);}
+   if(hs.length===2&&ls.length===2){
+     const up=hs[0].p>hs[1].p&&ls[0].p>ls[1].p,dn=hs[0].p<hs[1].p&&ls[0].p<ls[1].p;
+     if(up){out.push({k:'BOS',d:'bull',key:'BOS@'+hs[0].i,kind:'bos',up:true,from:i,iL:last.i,maxAge:9999,lvl:hs[0].p,sl:ls[0].p,pv:[ls[1],hs[1],ls[0],hs[0]]});
+            out.push({k:'CHOCH',d:'bear',key:'CHOCH@'+ls[0].i,kind:'bos',up:false,from:i,iL:last.i,maxAge:9999,lvl:ls[0].p,sl:hs[0].p,pv:[ls[1],hs[1],ls[0],hs[0]]});}
+     if(dn){out.push({k:'BOS',d:'bear',key:'BOS@'+ls[0].i,kind:'bos',up:false,from:i,iL:last.i,maxAge:9999,lvl:ls[0].p,sl:hs[0].p,pv:[hs[1],ls[1],hs[0],ls[0]]});
+            out.push({k:'CHOCH',d:'bull',key:'CHOCH@'+hs[0].i,kind:'bos',up:true,from:i,iL:last.i,maxAge:9999,lvl:hs[0].p,sl:ls[0].p,pv:[hs[1],ls[1],hs[0],ls[0]]});}
+   }}
+  return out;
+}
+function patNeck(s,j){return s.nk?s.nk.p0+s.nk.m*(j-s.nk.i0):s.neck;}
+function patLevels(S,s,j){
+  const lv={sl:s.sl};
+  if(s.kind==='brk'){lv.neck=patNeck(s,j);lv.tgt=s.hgt!=null?lv.neck+(s.d==='bear'?-s.hgt:s.hgt):s.tgt;}
+  else if(s.kind==='touch'){lv.qml=s.lvl;lv.tgt=s.tgt;}
+  else if(s.kind==='v'){lv.lvl=s.lvl;lv.tgt=s.tgt;}
+  else lv.lvl=s.lvl;
+  return lv;
+}
+// walk bars from..n-1; fire each structure at most once; returns events + still-open structures
+function patM2Run(S,zz,from){
+  const piv=zz.piv,ev=[],P=[];let p=0,act=[];
+  for(let j=Math.max(PAT.ATR+1,1);j<S.n;j++){
+    while(p<piv.length&&piv[p].ci<=j){
+      P.push(piv[p]);p++;
+      act.forEach(s=>{if(s.kind==='bos'&&!s.fired)s.dead=true;});
+      patM2Build(S,P,j).forEach(s=>{if(!act.some(x=>x.key===s.key&&!x.dead))act.push(s);});
+    }
+    const a=S.atr[j];
+    for(const s of act){
+      if(s.dead||s.fired||j<s.from)continue;
+      if(j-s.iL>s.maxAge){s.dead=true;continue;}
+      const bear=s.d==='bear',C=S.C[j];let hit=false;
+      if(s.kind==='brk'){if(bear?C>s.inv:C<s.inv){s.dead=true;continue;}hit=bear?C<patNeck(s,j):C>patNeck(s,j);}
+      else if(s.kind==='touch'){if(bear?C>s.inv:C<s.inv){s.dead=true;continue;}hit=bear?S.H[j]>=s.lvl-0.25*a:S.L[j]<=s.lvl+0.25*a;}
+      else if(s.kind==='v'){if(bear?C>s.inv:C<s.inv){s.dead=true;continue;}hit=bear?C<=s.lvl:C>=s.lvl;}
+      else hit=s.up?C>s.lvl:C<s.lvl;
+      if(hit){s.fired=true;if(j>=from)ev.push({k:s.k,d:s.d,i:j,st:s.kind==='touch'?'AT':s.kind==='bos'?'BRK':'CONF',lv:patLevels(S,s,j),key:s.key});}
+    }
+    if(act.length>60)act=act.filter(s=>!s.dead&&!s.fired);
+  }
+  return{ev,open:act.filter(s=>!s.dead&&!s.fired)};
+}
+
+// ── LIVE SCAN of one kline array ────────────────────────────────
+function patScan(kl,tf){
+  const S=patSer(kl);if(S.n<40)return null;
+  const n=S.n,zz=patZZ(S,PAT.ZZ),m2=patM2Run(S,zz,n-1-PAT.FRESH2),m1=[];
+  for(let i=Math.max(0,n-1-PAT.FRESH1);i<n;i++)patM1At(S,i).forEach(h=>m1.push({...h,ago:n-1-i}));
+  const ev=[],evk=new Set();   // newest first, one per pattern + direction
+  m2.ev.slice().reverse().forEach(e=>{const q=e.k+'|'+e.d;if(evk.has(q))return;evk.add(q);ev.push({k:e.k,d:e.d,st:e.st,ago:n-1-e.i,lv:e.lv});});
+  // FORM = open structure (brk / touch kinds), newest per pattern key only
+  const form=[],seen=new Set();
+  m2.open.slice().reverse().forEach(s=>{
+    if(s.kind==='bos'||s.kind==='v'||seen.has(s.k))return;seen.add(s.k);
+    const lv=patLevels(S,s,n-1),ref=s.kind==='touch'?s.lvl:lv.neck;
+    const dist=S.atr[n-1]>0?(S.C[n-1]-ref)/S.atr[n-1]:null;
+    if(dist!=null&&Math.abs(dist)<=3)form.push({k:s.k,d:s.d,st:'FORM',lv,dist});   // only structures within 3 ATR of their trigger level
+  });
+  const pdel=n>=4&&S.atr[n-1]>0?(S.C[n-1]-S.C[n-4])/S.atr[n-1]:null;
+  return{tf,n,tc:S.tc,px:S.C[n-1],atr:S.atr[n-1],pdel,m1,ev,form,piv:zz.piv.slice(-6).map(p=>({t:p.t,p:p.p,ago:n-1-p.i}))};
+}
+
+// ── ROW TAGS / FILTERS / DIGEST ─────────────────────────────────
+function patEdgeLoad(){try{const r=JSON.parse(localStorage.getItem('patLab')||'null');if(r&&r.v&&Date.now()-r.t<PAT.EDGE_TTL)return r;}catch(e){}return null;}
+let _patEdge=patEdgeLoad();
+function patEdge(k,d,ctx){if(!_patEdge)return null;return _patEdge.v[k+'|'+d+'|'+(ctx||'ALL')]||null;}
+function patStar(k,d,ext){const v=patEdge(k,d,ext?'@EXT':'ALL');return v==='✔'?'★':'';}
+// ordered hits for the row TF: fresh M2 events, then M1 on the last closed bar
+function patPick(r){
+  if(!r)return[];const o=[];
+  r.ev.forEach(e=>o.push({...e,g:'M2',pr:e.st==='BRK'?2:1}));
+  r.m1.filter(h=>h.ago===0).forEach(h=>o.push({...h,g:'M1',pr:h.d==='neu'?5:h.ext?3:4}));
+  return o.sort((a,b)=>a.pr-b.pr||(a.ago||0)-(b.ago||0)||(b.span||0)-(a.span||0));
+}
+function patLbl(h){
+  const x=PDEF[h.k],sh=x?x[0]:h.k;
+  if(h.g==='M2')return '🔷'+sh+patArr(h.d)+(h.st==='CONF'?'✓':h.st==='AT'?'@QML':'')+(h.ago?'·'+h.ago:'')+patStar(h.k,h.d,false);
+  return '🕯'+sh+patArr(h.d)+(h.ext?'@':'')+patStar(h.k,h.d,!!h.ext);
+}
+function patTagHTML(s){
+  const L=patPick(s&&s.pat).slice(0,2);if(!L.length)return '';
+  return L.map(h=>{
+    const c=h.d==='bull'?'var(--green)':h.d==='bear'?'var(--red)':'var(--yellow)',bg=h.d==='bull'?'rgba(0,255,136,.10)':h.d==='bear'?'rgba(255,34,68,.10)':'rgba(255,208,0,.08)';
+    return `<span class="ctag" style="background:${bg};color:${c};border:1px ${h.g==='M2'?'solid':'dashed'} ${c};font-weight:${h.g==='M2'?700:600}">${patLbl(h)}</span>`;
+  }).join('');
+}
+FILTER_MAP.patc=s=>!!(s.pat&&s.pat.m1.some(h=>h.ago===0&&h.d!=='neu'));
+FILTER_MAP.patm=s=>!!(s.pat&&s.pat.ev.length);
+function patLvTxt(lv){
+  if(!lv)return '';const p=[];
+  if(lv.neck!=null)p.push('neck '+fmt(lv.neck));if(lv.qml!=null)p.push('QML '+fmt(lv.qml));if(lv.lvl!=null&&lv.neck==null&&lv.qml==null)p.push('lvl '+fmt(lv.lvl));
+  if(lv.sl!=null)p.push('SLref '+fmt(lv.sl));if(lv.tgt!=null)p.push('tgt '+fmt(lv.tgt));
+  return p.join(' ');
+}
+function patDigestTags(s){
+  const r=s&&s.pat;if(!r)return[];
+  return patPick(r).slice(0,3).map(h=>{
+    const x=PDEF[h.k],sh=x?x[0]:h.k,st=patStar(h.k,h.d,h.g==='M1'&&!!h.ext)?' LAB★':'';
+    if(h.g==='M2')return 'PAT['+r.tf+'] '+sh+patArr(h.d)+(h.st==='CONF'?'✓':' '+h.st)+(h.ago?'+'+h.ago:'')+' '+patLvTxt(h.lv)+st;
+    return 'PAT['+r.tf+'] '+sh+patArr(h.d)+(h.ext?h.ext:'')+st;
+  });
+}
+function patLegend(){
+  return 'PAT[TF] (2026-10-27-a, observation only: no SCORE vote, no gate) = M1 candle on the LAST CLOSED bar of the row TF, @LOW/@HIGH = pattern low/high within 0.35 ATR of the 20-bar low/high | '
+    +'M2 = structure from an ATR zigzag (swings >= 1.5 ATR): ✓ = close through the neckline, AT = touch of the QML, BRK = BOS/CHoCH close, +n = bars ago (<= 5). '
+    +'neck = neckline at that bar, SLref = structure invalidation, tgt = measured move. LAB★ = PAT LAB edge on BOTH 1h and 4h (last run, 30d). Detail panel: 15m/1h/4h/1d + OI fit.\n';
+}
+
+// ── DETAIL PANEL ────────────────────────────────────────────────
+const _patDet={};
+async function patFetch(coin,tf,force){
+  const ms=(TF_MIN[tf]||60)*60000,b=Math.floor(Date.now()/ms),key=coin+'|'+tf,hit=_patDet[key];
+  if(!force&&hit&&hit.b===b)return hit.r;
+  const kl=await apiFetch(`/klines?symbol=${coin}USDT&interval=${tf}&limit=300`);
+  if(!kl||!kl.length)return null;
+  const r=patScan(kl,tf);_patDet[key]={b,r};return r;
+}
+function patOiState(oh,pdel){
+  if(!oh||pdel==null||oh.oiCoinsChg3==null)return null;
+  const o=oh.oiCoinsChg3;let s;
+  if(Math.abs(o)<=1)s='HOLD';
+  else if(o>1)s=pdel>=0.3?'DRIVE▲':pdel<=-0.3?'DRIVE▼':'ABSORB';
+  else s=pdel>=0.3?'SQUEEZE▲':pdel<=-0.3?'FLUSH▼':'UNWIND';
+  return{s,o,ts:oh.ts};
+}
+function patOiFit(d,st){
+  if(!st||d==='neu')return '';
+  const ok=d==='bull'?['DRIVE▲','HOLD']:['DRIVE▼','HOLD'],bad=d==='bull'?['DRIVE▼','ABSORB']:['DRIVE▲','ABSORB'];
+  return ok.includes(st.s)?'✔':bad.includes(st.s)?'✗':'~';
+}
+function patAgoTxt(a){return a===0?'последна затворена':a===1?'пред 1 свеќа':'пред '+a+' свеќи';}
+function patLabTxt(k,d,ctx){const v=patEdge(k,d,ctx);return v==null?'LAB: нема':v==='✔'?'LAB ★ edge':v==='✗'?'LAB ✗ полошо од RANDOM':v==='·'?'LAB: мал n':'LAB: без edge';}
+function patHitHTML(h,oi){
+  const c=h.d==='bull'?'var(--green)':h.d==='bear'?'var(--red)':'var(--yellow)';
+  const fit=h.st==='FORM'?'':patOiFit(h.d,oi),fc=fit==='✔'?'var(--green)':fit==='✗'?'var(--red)':'var(--text2)';
+  const x=PDEF[h.k],nm=patName(h.k,h.d);
+  let head,sub;
+  if(h.g==='M1'){head='🕯 '+nm+' '+patArr(h.d)+(h.ext?' '+h.ext:'');sub=patAgoTxt(h.ago)+' · '+patLabTxt(h.k,h.d,h.ext?'@EXT':'ALL');}
+  else if(h.st==='FORM'){head='◇ '+nm+' '+patArr(h.d)+' — се формира';
+    const ref=h.lv.neck!=null?'вратот':'QML';sub=(h.dist!=null?'цена '+(h.dist>=0?'+':'')+h.dist.toFixed(1)+' ATR од '+ref+' · ':'')+patLvTxt(h.lv);}
+  else{head='🔷 '+nm+' '+patArr(h.d)+' '+(h.st==='CONF'?'✓ потврдена':h.st==='AT'?'@ QML':'пробив');sub=patAgoTxt(h.ago)+' · '+patLvTxt(h.lv)+' · '+patLabTxt(h.k,h.d,'ALL');}
+  return `<div style="padding:5px 0;border-top:1px dashed var(--border)"><div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${c}">${head}${fit?` <span style="color:${fc}">OI ${fit}</span>`:''}</div>`
+    +`<div style="font-family:var(--mono);font-size:10px;color:var(--text2);line-height:1.5">${sub}</div>`
+    +(x?`<div style="font-size:10px;color:var(--muted);line-height:1.4">${x[3]}</div>`:'')+`</div>`;
+}
+function patDetailHTML(res){
+  const hm=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+  let h='';
+  res.forEach(({tf,r,oh})=>{
+    if(!r){h+=`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px 0">${tf}: нема доволно свеќи или Binance не одговара</div>`;return;}
+    const oi=patOiState(oh,r.pdel);
+    const hits=[...r.ev.map(e=>({...e,g:'M2'})),...r.form.map(f=>({...f,g:'M2'})),...r.m1.map(m=>({...m,g:'M1'}))];
+    h+=`<div style="margin:8px 0 4px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px">`
+      +`<div style="font-family:var(--mono);font-size:11px;color:var(--text2)"><b style="color:var(--text);font-size:13px">${tf}</b> · затворена до ${hm(r.tc+1)} · ATR ${fmt(r.atr)}`
+      +(oi?` · OI◆3п ${(oi.o>=0?'+':'')+oi.o.toFixed(1)}% · цена3 ${(r.pdel>=0?'+':'')+r.pdel.toFixed(1)} ATR → <b>${oi.s}</b>`:' · OI n/a')+`</div>`
+      +(hits.length?hits.map(x=>patHitHTML(x,oi)).join(''):`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:4px">Нема форма на последните 3 затворени свеќи / 5 бара за M2.</div>`)
+      +`</div>`;
+  });
+  h+=`<div style="font-size:10px;color:var(--muted);line-height:1.5;margin-top:6px">Само опис: не гласа во SCORE, не е CLEAN15 гејт, не праќа Telegram. `
+    +`OI = промена на OI во коини за последните 3 OI периоди (заостанува до 1 период) спрема цената за последните 3 затворени свеќи: `
+    +`HOLD = |OI| ≤ 1% · DRIVE = OI ↑ и цена ≥ 0.3 ATR · ABSORB = OI ↑ без цена · FLUSH / SQUEEZE = OI ↓ со цена · UNWIND = OI ↓ без цена. `
+    +`OI ✔ = DRIVE во насоката или HOLD · ~ = FLUSH / SQUEEZE / UNWIND (чекај HOLD) · ✗ = ABSORB или DRIVE против. ★ = PAT LAB edge на 1h и 4h.</div>`;
+  return h;
+}
+async function loadPatDetail(coin,force){
+  const box=document.getElementById('dpPat'),ct=document.getElementById('patContent');if(!box||!ct)return;
+  box.style.display='block';
+  ct.innerHTML='<span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Барам форми на 15m · 1h · 4h · 1d...</span>';
+  const res=await Promise.all(PAT.DTF.map(async tf=>{
+    let r=null,oh=null;try{r=await patFetch(coin,tf,force);}catch(e){}
+    try{oh=await fetchOiHist(coin,tf);}catch(e){}
+    return{tf,r,oh};
+  }));
+  if(S.detailCoin!==coin)return;
+  ct.innerHTML=patDetailHTML(res);
+}
+
+// ── PAT LAB: every pattern vs RANDOM on 1h + 4h ─────────────────
+function patRng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+// entry = close of bar i, TP +2 ATR / SL -1 ATR, first touch within fwd bars, both on one bar = SL, none = 0R
+function patOut(S,i,d,fwd){
+  if(i+fwd>=S.n)return null;const a=S.atr[i],e=S.C[i];if(!(a>0))return null;
+  const tp=e+d*PAT.TP*a,sl=e-d*PAT.SL*a;let r=0;
+  for(let j=i+1;j<=i+fwd;j++){
+    if(d>0?S.L[j]<=sl:S.H[j]>=sl){r=-PAT.SL;break;}
+    if(d>0?S.H[j]>=tp:S.L[j]<=tp){r=PAT.TP;break;}
+  }
+  return{r,m:d*(S.C[i+fwd]-e)/a};
+}
+// neutral patterns: does price reach +-2 ATR from the close within fwd bars?
+function patExp(S,i,fwd){
+  if(i+fwd>=S.n)return null;const a=S.atr[i],e=S.C[i];if(!(a>0))return null;
+  for(let j=i+1;j<=i+fwd;j++)if(S.H[j]-e>=2*a||e-S.L[j]>=2*a)return 1;
+  return 0;
+}
+function patZ(){return{n:0,s:0,ss:0,w:0,l:0,m:0,x:0};}
+function patAdd(t,o){if(!o)return;t.n++;t.s+=o.r;t.ss+=o.r*o.r;t.m+=o.m;if(o.r>0)t.w++;else if(o.r<0)t.l++;}
+function patAddX(t,x){if(x==null)return;t.n++;t.x+=x;}
+function patSeriesLab(S,cfg,A,R,rng){
+  const n=S.n,fwd=cfg.fwd,last=n-1-fwd,acc=k=>(A[k]=A[k]||patZ());
+  if(last<=PAT.WARM)return;
+  for(let i=PAT.WARM;i<=last;i++){
+    const hs=patM1At(S,i);
+    for(const h of hs){
+      if(h.d==='neu'){const x=patExp(S,i,fwd);patAddX(acc(h.k+'|neu|ALL'),x);if(h.ext)patAddX(acc(h.k+'|neu|@EXT'),x);continue;}
+      const o=patOut(S,i,h.d==='bull'?1:-1,fwd);patAdd(acc(h.k+'|'+h.d+'|ALL'),o);if(h.ext)patAdd(acc(h.k+'|'+h.d+'|@EXT'),o);
+    }
+  }
+  const m2=patM2Run(S,patZZ(S,PAT.ZZ),PAT.WARM);
+  m2.ev.forEach(e=>{if(e.i<=last)patAdd(acc(e.k+'|'+e.d+'|ALL'),patOut(S,e.i,e.d==='bull'?1:-1,fwd));});
+  const span=last-PAT.WARM+1,lowC=[],highC=[];
+  for(let q=0;q<PAT.RAND_PER;q++){
+    const i=PAT.WARM+Math.floor(rng()*span);
+    patAdd(R.L,patOut(S,i,1,fwd));patAdd(R.S,patOut(S,i,-1,fwd));patAddX(R.N,patExp(S,i,fwd));
+  }
+  for(let i=PAT.WARM;i<=last;i++){if(patExt(S,i,1,'bull'))lowC.push(i);if(patExt(S,i,1,'bear'))highC.push(i);}
+  for(let q=0;q<PAT.RAND_PER;q++){
+    if(lowC.length){const i=lowC[Math.floor(rng()*lowC.length)];patAdd(R.LX,patOut(S,i,1,fwd));patAddX(R.NX,patExp(S,i,fwd));}
+    if(highC.length){const i=highC[Math.floor(rng()*highC.length)];patAdd(R.SX,patOut(S,i,-1,fwd));patAddX(R.NX,patExp(S,i,fwd));}
+  }
+}
+function patEV(t){if(!t||!t.n)return null;const mu=t.s/t.n,v=Math.max(0,t.ss/t.n-mu*mu);return{mu,se:Math.sqrt(v/t.n),n:t.n,w:t.w/t.n,m:t.m/t.n};}
+function patPX(t){if(!t||!t.n)return null;const p=t.x/t.n;return{mu:p,se:Math.sqrt(p*(1-p)/t.n),n:t.n};}
+function patCmp(a,b){if(!a||!b)return null;const e=a.mu-b.mu,se=Math.sqrt(a.se*a.se+b.se*b.se);return{e,lo:e-2*se,hi:e+2*se};}
+function patVerdict(c1,c4,n1,n4){
+  if(!c1||!c4||n1<PAT.LAB_MIN||n4<PAT.LAB_MIN)return '·';
+  if(c1.lo>0&&c4.lo>0)return '✔';
+  if(c1.hi<0&&c4.hi<0)return '✗';
+  return '—';
+}
+async function runLabPat(){
+  LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
+  const t0=Date.now(),TFS=['1h','4h'];
+  try{
+    labSetProg('🧪 PAT LAB · exchangeInfo...');
+    const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(ei)buildClassMaps(ei);
+    const uni=[];let skipped=0;
+    (ei?.symbols||[]).forEach(s=>{if(!s.symbol.endsWith('USDT')||s.symbol.includes('_')||!(s.contractType||'').includes('PERPETUAL'))return;
+      const c=s.symbol.replace(/USDT$/,'');if((s.status||'TRADING')!=='TRADING'||LAB_STABLE.has(c)||isTradFi(c)||blockReason(c,1)){skipped++;return;}uni.push(c);});
+    if(!uni.length){labSetProg('⚠️ Нема универзум');return;}
+    const A={},R={},I={},rng=patRng(PAT.SEED);
+    TFS.forEach(tf=>{A[tf]={};R[tf]={L:patZ(),S:patZ(),LX:patZ(),SX:patZ(),N:patZ(),NX:patZ()};I[tf]={coins:0,bars:0,fail:0};});
+    for(let i=0;i<uni.length;i+=4){
+      if(LAB.abort)break;
+      const chunk=uni.slice(i,i+4);
+      await Promise.all(chunk.map(async coin=>{
+        for(const tf of TFS){
+          const cfg=PAT.LAB_TF[tf];
+          const kl=await labFetch(`${FAPI}/klines?symbol=${coin}USDT&interval=${cfg.iv}&limit=${cfg.lim}`);
+          if(!kl){I[tf].fail++;continue;}
+          const S=patSer(kl);
+          if(S.n<PAT.WARM+cfg.fwd+60){I[tf].fail++;continue;}
+          patSeriesLab(S,cfg,A[tf],R[tf],rng);I[tf].coins++;I[tf].bars+=S.n;
+        }
+      }));
+      labSetProg(`🧪 PAT LAB · 1h + 4h · ${Math.min(i+4,uni.length)}/${uni.length} коини · кратка историја 1h ${I['1h'].fail} / 4h ${I['4h'].fail} · ${Math.round((Date.now()-t0)/1000)}s${LAB.rateHit?' · rate limit '+LAB.rateHit:''}`);
+      await sleep(900);
+    }
+    const rep=patLabReport({uni,skipped,A,R,I,t0,aborted:LAB.abort});
+    LAB.out=rep.txt;
+    if(!LAB.abort&&I['1h'].coins>=100&&I['4h'].coins>=100){
+      _patEdge={t:Date.now(),build:APP_BUILD,v:rep.v};
+      try{localStorage.setItem('patLab',JSON.stringify(_patEdge));}catch(e){}
+      if(typeof renderList==='function')renderList();
+    }
+  }catch(err){LAB.out='⚠️ PAT LAB грешка: '+(err&&err.stack||err);}
+  finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 PAT LAB готов — КОПИРАЈ':'🧪 прекинат');}
+}
+function patLabReport(X){
+  const d=new Date(),pad=v=>String(v).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const f2=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(2),pc=v=>v==null?'—':(v*100).toFixed(1)+'%';
+  const band=c=>c?`${f2(c.e)} [${f2(c.lo)}..${f2(c.hi)}]`:'—',bandP=c=>c?`${(c.e>=0?'+':'')+(c.e*100).toFixed(1)}pp [${(c.lo*100).toFixed(1)}..${(c.hi*100).toFixed(1)}]`:'—';
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | PAT LAB · M1 свеќи + M2 форми | ${stamp} local | ${Math.round((Date.now()-X.t0)/1000)}s${X.aborted?' | ⚠️ ПРЕКИНАТ (делумно, LAB★ не е зачуван)':''}\n`;
+  o+=`DATA: universe ${X.uni.length} (skipped ${X.skipped}) | 1h ${X.I['1h'].coins} coins, ${X.I['1h'].bars} bars (<=${PAT.LAB_TF['1h'].lim}/coin ≈ 41 days) | 4h ${X.I['4h'].coins} coins, ${X.I['4h'].bars} bars (≈ 166 days) | short history 1h ${X.I['1h'].fail} / 4h ${X.I['4h'].fail}\n`;
+  o+=`TRADE: entry = close of the pattern bar (M2 = bar of the confirming close / QML touch / BOS-CHoCH close). TP +${PAT.TP} ATR / SL -${PAT.SL} ATR (ATR14 of that bar), first touch within ${PAT.LAB_TF['1h'].fwd} bars (1h) / ${PAT.LAB_TF['4h'].fwd} bars (4h); both on one bar = SL; neither = 0R. EV in R; breakeven win rate 33.3%. MTM = mean close move at the end of the window, ATR, in the pattern direction.\n`;
+  o+=`CONTROL: RANDOM = random bars, same coins + period, same direction (L for ▲, S for ▼), ${PAT.RAND_PER}/coin. @EXT rows vs RANDOM@EXT (bar low at the 20-bar low for ▲ / bar high at the 20-bar high for ▼): separates the PATTERN from the LOCATION. ◆ neutral = P(±2 ATR reached within the window) vs RANDOM (volatility expansion, not direction).\n`;
+  o+=`EDGE = pattern − RANDOM ± 2SE. ✔ = edge > 0 and band clears 0 on BOTH 1h and 4h · ✗ = worse than RANDOM on both · — = no edge · · = n < ${PAT.LAB_MIN} on a TF. Only ✔ rows get ★ in the scanner (saved 30 days).\n`;
+  ['1h','4h'].forEach(tf=>{const r=X.R[tf],q=k=>patEV(r[k]),qx=k=>patPX(r[k]);
+    const s=(nm,e)=>e?`${nm} n${e.n} EV ${f2(e.mu)} win ${pc(e.w)} MTM ${f2(e.m)}`:`${nm} —`;
+    o+=`RANDOM ${tf}: ${s('L',q('L'))} | ${s('S',q('S'))} | ${s('L@LOW',q('LX'))} | ${s('S@HIGH',q('SX'))} | ◆ ±2ATR ${qx('N')?pc(qx('N').mu):'—'} (@EXT ${qx('NX')?pc(qx('NX').mu):'—'})\n`;});
+  const keys=new Set();['1h','4h'].forEach(tf=>Object.keys(X.A[tf]).forEach(k=>keys.add(k)));
+  const rows=[],v={};
+  keys.forEach(key=>{
+    const [k,dd,ctx]=key.split('|'),neu=dd==='neu',cell={};
+    ['1h','4h'].forEach(tf=>{
+      const t=X.A[tf][key];
+      if(neu){const a=patPX(t),b=patPX(X.R[tf][ctx==='@EXT'?'NX':'N']);cell[tf]={a,c:patCmp(a,b),n:t?t.n:0};}
+      else{const a=patEV(t),b=patEV(X.R[tf][dd==='bull'?(ctx==='@EXT'?'LX':'L'):(ctx==='@EXT'?'SX':'S')]);cell[tf]={a,c:patCmp(a,b),n:t?t.n:0};}
+    });
+    const vd=patVerdict(cell['1h'].c,cell['4h'].c,cell['1h'].n,cell['4h'].n);v[key]=vd;
+    const g=PDEF[k]?PDEF[k][2]:'?';
+    const txt=tf=>{const c=cell[tf];if(!c.a)return `${tf} n0`;return neu?`${tf} n${c.n} P±2ATR ${pc(c.a.mu)} edge ${bandP(c.c)}`:`${tf} n${c.n} win ${pc(c.a.w)} EV ${f2(c.a.mu)} MTM ${f2(c.a.m)} edge ${band(c.c)}`;};
+    const sc=Math.min(cell['1h'].c?cell['1h'].c.e:-9,cell['4h'].c?cell['4h'].c.e:-9);
+    rows.push({vd,g,sc,line:`${vd} ${g} ${(PDEF[k]?PDEF[k][0]:k)}${patArr(dd)} ${ctx} | ${txt('1h')} | ${txt('4h')}`});
+  });
+  const ord={'✔':0,'—':1,'✗':2,'·':3};
+  rows.sort((a,b)=>ord[a.vd]-ord[b.vd]||(a.g<b.g?1:a.g>b.g?-1:0)||b.sc-a.sc);
+  o+=`\nVERDICT|GROUP|PATTERN|CTX | 1h n · win · EV R · MTM ATR · edge vs RANDOM [±2SE] | 4h same\n`;
+  rows.forEach(r=>{o+=r.line+'\n';});
+  const cnt=k=>rows.filter(r=>r.vd===k).length;
+  o+=`\nSUMMARY: ✔ ${cnt('✔')} · — ${cnt('—')} · ✗ ${cnt('✗')} · · ${cnt('·')} (of ${rows.length} pattern × context rows)\n`;
+  o+=`NOTES: ~${rows.length} tests, so a few ✔ / ✗ are expected by chance even with the both-TF rule; events cluster in market-wide moves and overlapping windows are not independent, so the 2SE bands are too narrow. `
+    +`OI is NOT in this test (openInterestHist reaches only ~30 days back) — the OI fit in the detail panel stays a manual check. A ✔ makes a pattern a candidate for a SCORE / gate discussion, not an entry by itself.\n`;
+  return{txt:o,v};
+}
+
+// ── HELP ❓ ─────────────────────────────────────────────────────
+function patHelpSections(){
+  const g='var(--green)',r='var(--red)',y='var(--yellow)',a='var(--accent)',m='var(--muted)';
+  const gen={h:'🕯🔷 ФОРМИ — M1 свеќи + M2 структури (2026-10-27-a)',items:[
+    {tag:'🕯 / 🔷 таг',col:a,what:'🕯 = свеќна форма (M1) на ПОСЛЕДНАТА ЗАТВОРЕНА свеќа на TF на редот. 🔷 = структура (M2) потврдена во последните 5 свеќи: ✓ = затворање низ вратот, @QML = допир на Quasimodo нивото, BOS/CHoCH = пробив на структурата, ·n = пред n свеќи. Најмногу 2 тага по ред.',action:'Само опис — не гласа во SCORE, не е гејт, не оди на Telegram. Влез и понатаму само преку CLEAN15 / checklist.'},
+    {tag:'@ / @LOW / @HIGH',col:y,what:'Формата е на локација: нејзиниот дол (▲) или врв (▼) е во 0.35 ATR од 20-бар дното / врвот. Без @ = формата е „во празно“.',action:'Свеќна форма без локација речиси ништо не значи — гледај ја само на ниво.'},
+    {tag:'★',col:g,what:'PAT LAB (🧪, студија PAT) покажал edge за таа форма (и контекст) на 1h И на 4h наспроти RANDOM. Важи 30 дена од последното пуштање. ★ на ◆ (неутрална форма) = поголем потег (±2 ATR) од RANDOM, не насока.',action:'Без ★ = формата е непроверена или нема edge. ★ не е влез — го прави кандидат за дискусија.'},
+    {tag:'🕯 СВЕЌИ / 🔷 ФОРМИ филтер',col:a,what:'СВЕЌИ = насочена свеќна форма на последната затворена свеќа. ФОРМИ = свежо M2 настан (≤5 свеќи).'},
+    {tag:'// ФОРМИ панел (детал)',col:a,what:'15m · 1h · 4h · 1d (300 свеќи, кеш по свеќа): M1 на последните 3 затворени, M2 настани ≤5 свеќи, ◇ = структура што се формира, цената е во 3 ATR од вратот/QML (уште не е допрен) + растојание во ATR.',action:'OI ✔ = DRIVE во насоката или HOLD · ~ = FLUSH / SQUEEZE / UNWIND (чекај HOLD) · ✗ = ABSORB или DRIVE против. OI = 3 OI периоди, цена = 3 затворени свеќи.'},
+    {tag:'M2 zigzag',col:m,what:'Пивот постои дури кога цената се вратила ≥1.5 ATR од екстремот (без поглед напред). „Еднакво“ = во 0.6 ATR. Врат = дол меѓу врвовите (H&S: коса линија низ двата дола). Цел = мерен потег (висина од врат). SLref = точка на поништување.'},
+    {tag:'Gap форми — исклучени',col:m,what:'Abandoned baby, kicker, tasuki gap, rising/falling window, separating lines, breakaway бараат празнина меѓу свеќите. На 24/7 перпови Open ≈ претходен Close, па не се детектираат.'},
+    {tag:'🧪 PAT LAB',col:y,what:'Секоја форма × контекст (ALL / @EXT) на 1h (≈41 ден) и 4h (≈166 дена), целиот универзум. Влез на затворањето, TP +2 ATR / SL −1 ATR, што прво. Наспроти RANDOM во иста насока; @EXT наспроти RANDOM на истата локација. ✔ = edge на двата TF. ~6–8 мин.',action:'🧪 LAB → студија „PAT свеќи+форми“ → START. Копирај и прати.'}
+  ]};
+  const it=k=>{const x=PDEF[k];return{tag:(x[2]==='M1'?'🕯 ':'🔷 ')+x[0]+' · '+x[1],col:x[2]==='M1'?y:a,what:x[3]};};
+  const m1={h:'🕯 M1 СВЕЌИ — речник',items:Object.keys(PDEF).filter(k=>PDEF[k][2]==='M1').map(it)};
+  const m2={h:'🔷 M2 СТРУКТУРИ — речник',items:Object.keys(PDEF).filter(k=>PDEF[k][2]==='M2').map(it)};
+  return[gen,m1,m2];
+}
+
 </script>
 
 </body>
