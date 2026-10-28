@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.0 - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.2 (quiet hours, /why gate diagnostics, /near) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -24,15 +24,17 @@ const CFG = {
   delaySec: +(process.env.DELAY_SEC || 15),       // CLEAN15 runs this many sec after the close
   cooldownMin: +(process.env.COOLDOWN_MIN || 60), // same coin+side silence
   scanTimeoutMin: +(process.env.SCAN_TIMEOUT_MIN || 12),
+  quiet: process.env.QUIET ?? 'off',               // e.g. 01:00-08:30 (Europe/Skopje) = no alerts in that window
 };
 if (!CFG.token) { console.error('BOT_TOKEN missing in .env'); process.exit(1); }
 const BAR = 15 * 60e3;
 
 // ---------- STATE ----------
 const STATE_FILE = path.join(DIR, 'state.json');
-const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, sent: {}, lastFull: null, lastClean: null, errNotified: false },
+const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, sent: {}, nearSent: {}, diag: [], lastFull: null, lastClean: null, errNotified: false },
   (() => { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } })());
 if (CFG.chatId) state.chatId = CFG.chatId;
+if (state.quiet === undefined) state.quiet = /^off$/i.test(CFG.quiet) ? null : CFG.quiet;
 const save = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify(state)); } catch (e) { console.error('state', e.message); } };
 
 // ---------- UTILS ----------
@@ -40,6 +42,22 @@ const sleep = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const hhmm = (ts = Date.now()) => new Date(ts).toLocaleTimeString('mk-MK', { timeZone: 'Europe/Skopje', hour: '2-digit', minute: '2-digit' });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+// quiet hours, local Europe/Skopje time, window may cross midnight
+function skMin(ts = Date.now()) {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Skopje', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(ts);
+  return +p.find(x => x.type === 'hour').value * 60 + +p.find(x => x.type === 'minute').value;
+}
+function parseQuiet(q) {
+  const m = /^(\d{1,2}):?(\d{2})\s*-\s*(\d{1,2}):?(\d{2})$/.exec(String(q || '').trim());
+  if (!m) return null;
+  const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+  return (a < 1440 && b < 1440 && a !== b) ? { a, b } : null;
+}
+function inQuiet(ts = Date.now()) {
+  const w = parseQuiet(state.quiet); if (!w) return false;
+  const t = skMin(ts);
+  return w.a < w.b ? (t >= w.a && t < w.b) : (t >= w.a || t < w.b);
+}
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ' timeout')), ms))]);
 
 // one page job at a time (scan, clean, commands never overlap inside the page)
@@ -108,12 +126,74 @@ async function cleanCycle() {
       trend: r.st?.trend || '', votes: r.st?.votes ?? '', loc: r.st?.loc || '', closeT: r.barT + 15 * 60e3,
       score: sig?.score ?? null, alpha: isAlpha(r.coin), fav: isFav(r.coin) });
   }
-  return { rows, k: cleanCounts() };
+  // gate diagnostics for every evaluated coin and side (WAIT included)
+  const diag = [];
+  for (const r of Object.values(_clean)) {
+    for (const sd of [r.L, r.S]) {
+      if (!sd || !sd.gates) continue;
+      diag.push({ coin: r.coin, side: sd.dir === 'long' ? 'L' : 'S', mode: sd.mode || null,
+        ok: sd.gates.map(g => g.ok ? 1 : 0),
+        na: sd.gates.filter(g => /n\/a/.test(g.note || '')).map(g => g.id),
+        fails: sd.gates.filter(g => !g.ok).map(g => ({ id: g.id, note: String(g.note || '').slice(0, 70) })) });
+    }
+  }
+  return { rows, k: cleanCounts(), diag };
   }), 5 * 60e3, 'CLEAN15');
   r.rows.sort((a, b) => (a.go === 'GO' ? 0 : 1) - (b.go === 'GO' ? 0 : 1) || a.grade.localeCompare(b.grade) || b.rr - a.rr);
-  state.lastClean = { ts: Date.now(), dur: Date.now() - t0, ...r.k }; save();
+  state.lastClean = { ts: Date.now(), dur: Date.now() - t0, ...r.k };
+  recordDiag(r);
+  save();
   log('clean', state.lastClean);
   return r;
+}
+
+// ---------- DIAGNOSTICS ----------
+const GNAME = ['Тренд 1h', 'Локација', 'Тригер', 'OI◆', 'CVD/Taker', 'Моментум', 'Компресија', 'Crowding', 'Ризик', 'Замка'];
+function recordDiag(r) {
+  const closeT = r.rows[0]?.closeT || Math.floor(Date.now() / BAR) * BAR;
+  const fail = Array(10).fill(0), single = Array(10).fill(0), na = Array(10).fill(0), pc = Array(11).fill(0);
+  const near = [];
+  for (const d of r.diag || []) {
+    const pass = d.ok.reduce((a, b) => a + b, 0);
+    pc[pass]++;
+    d.ok.forEach((v, j) => { if (!v) fail[j]++; });
+    d.na.forEach(id => { const j = +id.slice(1) - 1; if (j >= 0 && j < 10) na[j]++; });
+    if (pass === 9) single[d.ok.indexOf(0)]++;
+    if (pass >= 8) near.push({ coin: d.coin, side: d.side, mode: d.mode, pass, fails: d.fails });
+  }
+  near.sort((a, b) => b.pass - a.pass);
+  state.diag.push({ t: closeT, n: (r.diag || []).length, A: r.k.A, B: r.k.B, fail, single, na, pc, near: near.slice(0, 12) });
+  const cut = Date.now() - 72 * 3600e3;
+  state.diag = state.diag.filter(x => x.t >= cut);
+  r.near9 = near.filter(x => x.pass === 9);
+}
+function whyReport(hours) {
+  const cut = Date.now() - hours * 3600e3, D = state.diag.filter(x => x.t >= cut);
+  if (!D.length) return 'Уште нема податоци. Дијагнозата собира од ажурирањето наваму (секоја 15m свеќа).';
+  const fail = Array(10).fill(0), single = Array(10).fill(0), na = Array(10).fill(0), pc = Array(11).fill(0);
+  let n = 0, A = 0, B = 0; const near = [];
+  for (const x of D) {
+    n += x.n; A += x.A; B += x.B;
+    x.fail.forEach((v, j) => fail[j] += v); x.single.forEach((v, j) => single[j] += v);
+    x.na.forEach((v, j) => na[j] += v); (x.pc || []).forEach((v, j) => pc[j] += v);
+    x.near.forEach(z => near.push({ ...z, t: x.t }));
+  }
+  const pct = v => n ? Math.round(v / n * 100) : 0;
+  const order = [...Array(10).keys()].sort((a, b) => fail[b] - fail[a]);
+  let t = `<b>🔎 CLEAN15 дијагноза · ${hours}h</b>\n${D.length} свеќи · ${n} проверки (коин×страна) · A${A} B${B}\n\n`;
+  t += '<b>Колку често паѓа секој гејт</b>\n' + order.map(j => `G${j + 1} ${GNAME[j]} ${pct(fail[j])}%`).join('\n');
+  t += '\n\n<b>Колку гејтови поминуваат</b>\n' + [10, 9, 8, 7, 6].map(k => `${k}/10: ${pc[k]}`).join(' · ') + ` · ≤5: ${pc.slice(0, 6).reduce((a, b) => a + b, 0)}`;
+  const sg = order.filter(j => single[j]).map(j => `G${j + 1}×${single[j]}`);
+  t += '\n\n<b>9/10 — единствен блокер</b>\n' + (sg.length ? sg.join(' · ') : 'нема');
+  const nas = [...Array(10).keys()].filter(j => na[j]).map(j => `G${j + 1} ${pct(na[j])}%`);
+  t += '\n\n<b>Податоци n/a</b> ' + (nas.length ? '⚠️ ' + nas.join(' · ') : '✅ нема');
+  const top = near.filter(z => z.pass === 9).sort((a, b) => b.t - a.t).slice(0, 8);
+  if (top.length) t += '\n\n<b>Најблиску (9/10)</b>\n' + top.map(z =>
+    `${hhmm(z.t)} ${esc(z.coin)} ${z.side === 'L' ? '▲' : '▼'} ✗${esc(z.fails[0].id)} ${esc(z.fails[0].note)}`).join('\n');
+  return t;
+}
+function nearCard(z) {
+  return `👀 9/10 · ${esc(z.coin)}.P ${z.side === 'L' ? '▲ LONG' : '▼ SHORT'}${z.mode ? ' · ' + esc(z.mode) : ''}\n✗ ${esc(z.fails[0].id)} ${esc(z.fails[0].note)}`;
 }
 
 // ---------- FORMAT ----------
@@ -175,7 +255,10 @@ const HELP = [
   '/digest — DIGEST како .txt',
   '/fav XYZ — додај/тргни favorite · /favs — листа',
   '/strict — само 🟢GO (on/off)',
+  '/why 48 — зошто нема сигнали (статистика по гејт)',
+  '/near — 👀 9/10 известувања (on/off, не е влез)',
   '/mute 60 · /unmute',
+  '/quiet 01:00-08:30 · /quiet off — ноќна тишина',
   '/status',
 ].join('\n');
 
@@ -230,15 +313,27 @@ async function handle(text) {
       return send(l.length ? '⭐ ' + esc(l.join(', ')) : 'Нема favorites');
     }
     case '/strict': state.strict = !state.strict; save(); return send(`Само 🟢GO: ${state.strict ? 'ON' : 'OFF'}`);
+    case '/why': { const h = Math.min(72, Math.max(1, parseInt(argRaw) || 24)); return send(whyReport(h)); }
+    case '/near': state.near = !state.near; save(); return send(`👀 9/10 известувања: ${state.near ? 'ON' : 'OFF'}\n(само за следење, влез е само ✅A/B)`);
     case '/mute': { const m = parseInt(argRaw) || 60; state.muteUntil = Date.now() + m * 60e3; save(); return send(`🔕 Тишина до ${hhmm(state.muteUntil)}`); }
     case '/unmute': state.muteUntil = 0; save(); return send('🔔 Алармите се вклучени');
+    case '/quiet': {
+      if (argRaw && /^off$/i.test(argRaw)) { state.quiet = null; save(); return send('🌙 Ноќна тишина: OFF'); }
+      if (argRaw) {
+        const q = text.slice(cmdRaw.length).trim();
+        if (!parseQuiet(q)) return send('Формат: /quiet 01:00-08:30 или /quiet off');
+        state.quiet = q.replace(/\s+/g, ''); save();
+      }
+      return send(state.quiet ? `🌙 Ноќна тишина: ${esc(state.quiet)} (без аларми)${inQuiet() ? ' · сега активна' : ''}` : '🌙 Ноќна тишина: OFF');
+    }
     case '/status': {
       const f = state.lastFull, c = state.lastClean;
       return send([
         f ? `Build ${esc(f.ver)} ${esc(f.code)} · ${esc(f.build)}` : 'Build: уште не е вчитан',
         f ? `Цел скен ${hhmm(f.ts)} · ${f.uni} коини · ${f.n} сигнали · ${(f.dur / 1000).toFixed(0)}s` : 'Цел скен: —',
         c ? `CLEAN15 ${hhmm(c.ts)} · A${c.A} B${c.B} WAIT${c.W} · ${(c.dur / 1000).toFixed(0)}s` : 'CLEAN15: —',
-        `Strict ${state.strict ? 'ON' : 'OFF'} · ${state.muteUntil > Date.now() ? '🔕 до ' + hhmm(state.muteUntil) : '🔔 активен'} · ред ${queueLen}`,
+        `Strict ${state.strict ? 'ON' : 'OFF'} · 9/10 ${state.near ? 'ON' : 'OFF'} · ${state.muteUntil > Date.now() ? '🔕 до ' + hhmm(state.muteUntil) : '🔔 активен'} · ред ${queueLen}`,
+        `🌙 Тишина ${state.quiet ? esc(state.quiet) + (inQuiet() ? ' (сега)' : '') : 'OFF'}`,
       ].join('\n'));
     }
   }
@@ -275,7 +370,7 @@ function nextEvent() {
 }
 async function onError(e) {
   log('ERR', e.message);
-  if (!state.errNotified) { state.errNotified = true; save(); await send('⚠️ αSCOUT грешка: ' + esc(e.message)); }
+  if (!state.errNotified && !inQuiet()) { state.errNotified = true; save(); await send('⚠️ αSCOUT грешка: ' + esc(e.message)); }
 }
 async function schedLoop() {
   for (;;) {
@@ -287,8 +382,19 @@ async function schedLoop() {
       else {
         const r = await job(cleanCycle);
         state.errNotified = false;
+        if (inQuiet() || Date.now() < state.muteUntil) continue;   // silent: nothing marked as sent
         const out = fresh(r.rows); save();
-        if (out.length && Date.now() >= state.muteUntil) await send(head(r) + '\n\n' + out.map(card).join('\n\n'));
+        if (out.length) await send(head(r) + '\n\n' + out.map(card).join('\n\n'));
+        if (state.near && r.near9?.length) {
+          const now = Date.now(), nn = r.near9.filter(z => {
+            const k = z.coin + ':' + z.side, p = state.nearSent[k];
+            if (p && now - p < CFG.cooldownMin * 60e3) return false;
+            state.nearSent[k] = now; return true;
+          }).slice(0, 5);
+          for (const k in state.nearSent) if (now - state.nearSent[k] > 24 * 3600e3) delete state.nearSent[k];
+          save();
+          if (nn.length) await send(nn.map(nearCard).join('\n\n'));
+        }
       }
     } catch (e) { await onError(e); page = null; }
   }
