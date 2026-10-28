@@ -1163,6 +1163,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    TP +2 ATR / SL -1 ATR first touch vs RANDOM in the same direction; @EXT rows vs RANDOM at the same
 //    location. ✔ only when the 2SE band clears zero on BOTH TFs -> ★ on the tag for 30 days.
 //    Sanity run on a synthetic random walk (no edge by construction): 0 directional ✔ = no look-ahead leak.
+//  2026-10-28-a  CLEAN15 G9 partial TP1. Bot /why over 4h (600 coin x side checks, 10 closed 15m bars):
+//    G9 failed in 100% -- every case that had a trigger (~21%) failed on R:R, because TP1 = the NEAREST
+//    structure (any pivot / POC / range edge / 24h high) and in chop it sits 1-2 ATR away while the risk
+//    is 1.0-1.5 ATR. Example BREV long 14:00: SL 0.99 ATR, R:R 1.23 -> 9/10. Now TP1 between 1.0R and
+//    2.0R passes when a REAL TP2 structure (not the synthetic 2x target) is >= 2R; graded B with the flag
+//    "TP1 x.xR делумно -> TP2 y.yR" (scale out at TP1, SL to BE). R:R >= 2 to TP1 is unchanged (A/B as before).
+//    CLEAN_RR_MIN, SL rules and every other gate are untouched.
 //  2026-10-26-b  TRUTH 26.10 13:03 (first 26-a run): (1) the LAB report printed LOCAL time and the
 //    CSV printed UTC -> the same IOST 4h ARM read 22:00 vs 20:00. All LAB/CSV/TRACK times are now
 //    UTC (Binance time), labelled. (2) TRACK started the forward window at the RUN time but used
@@ -1258,7 +1265,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-10-27-a';
+const APP_BUILD='2026-10-28-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -4744,7 +4751,8 @@ const CLEAN_PREM_OI=1.0;       // ... while OI coins rose more than this over 8 
 const CLEAN_SL_ATR=1.0;        // G9 TREND: SL 1 ATR beyond the level -- behind the obvious stops
 const CLEAN_SL_SWEEP_BUF=0.3;  // G9 SWEEP: SL 0.3 ATR beyond the sweep wick (that liquidity is already taken)
 const CLEAN_SL_MAX_ATR=1.5;    // G9: max entry->SL distance, ATR
-const CLEAN_RR_MIN=2.0;        // G9: min R:R to TP1
+const CLEAN_RR_MIN=2.0;        // G9: min R:R to TP1 (or to TP2 on a partial TP1, see below)
+const CLEAN_RR_TP1_MIN=1.0;    // G9 partial: TP1 at the first structure may be 1.0-2.0R when a REAL TP2 is >= CLEAN_RR_MIN
 const CLEAN_TP_GAP_ATR=0.3;    // TP candidates must clear the entry by this, ATR
 const CLEAN_TRAP_BARS=8, CLEAN_TRAP_MAXBARS=24;  // G10: range length, bars
 const CLEAN_TRAP_ATR=2.0;      // G10: range width ceiling, ATR
@@ -5081,9 +5089,15 @@ function clnSide(c){
     else{tp1=entry+CLEAN_RR_MIN*risk;tp2=entry+3*risk;flags.push('TP1=2R (нема структура)');}
     rr=risk>0?(tp1-entry)/risk:0;
     maxLev=Math.max(1,Math.min(CLEAN_LEV_CAP,Math.floor(1/(1.5*(risk/Math.abs(entry))+CLEAN_MMR))));
-    const ok9=slAtr<=CLEAN_SL_MAX_ATR&&rr>=CLEAN_RR_MIN;
-    add('G9','Ризик',ok9,'SL '+slAtr.toFixed(2)+' ATR · R:R '+rr.toFixed(2)
-      +(slAtr>CLEAN_SL_MAX_ATR?' (SL > '+CLEAN_SL_MAX_ATR+' ATR)':'')+(rr<CLEAN_RR_MIN?' (< '+CLEAN_RR_MIN+')':''));
+    // 2026-10-28-a: partial TP1. The nearest structure (TP1) is a scale-out, not the whole trade:
+    // TP1 1.0-2.0R passes only when a REAL second structure (TP2, not the synthetic 2x target) is >= 2R.
+    // Such a setup is graded B through the flag (take part at TP1, SL to BE, rest to TP2).
+    const rr2=risk>0?(tp2-entry)/risk:0,tp2Real=tc.some(v=>v>tp1+CLEAN_TP_GAP_ATR*atr);
+    const part9=rr<CLEAN_RR_MIN&&rr>=CLEAN_RR_TP1_MIN&&tp2Real&&rr2>=CLEAN_RR_MIN;
+    const ok9=slAtr<=CLEAN_SL_MAX_ATR&&(rr>=CLEAN_RR_MIN||part9);
+    if(ok9&&part9)flags.push('TP1 '+rr.toFixed(1)+'R делумно → TP2 '+rr2.toFixed(1)+'R');
+    add('G9','Ризик',ok9,'SL '+slAtr.toFixed(2)+' ATR · R:R '+rr.toFixed(2)+' · TP2 '+rr2.toFixed(2)+'R'
+      +(slAtr>CLEAN_SL_MAX_ATR?' (SL > '+CLEAN_SL_MAX_ATR+' ATR)':'')+(!ok9&&rr<CLEAN_RR_MIN?' (< '+CLEAN_RR_MIN+')':''));
   }else add('G9','Ризик',false,'—');
 
   // G10 -- liquidity trap: stacked OI in a tight range + crowd on our side
