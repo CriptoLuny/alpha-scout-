@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.2 (quiet hours, /why gate diagnostics, /near) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.3 (quiet hours, /why, /near, /nearstats forward tracking) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -24,6 +24,7 @@ const CFG = {
   delaySec: +(process.env.DELAY_SEC || 15),       // CLEAN15 runs this many sec after the close
   cooldownMin: +(process.env.COOLDOWN_MIN || 60), // same coin+side silence
   scanTimeoutMin: +(process.env.SCAN_TIMEOUT_MIN || 12),
+  trackBars: +(process.env.TRACK_BARS || 16),     // forward window for 9/10 + A/B tracking (16 x 15m = 4h)
   quiet: process.env.QUIET ?? 'off',               // e.g. 01:00-08:30 (Europe/Skopje) = no alerts in that window
 };
 if (!CFG.token) { console.error('BOT_TOKEN missing in .env'); process.exit(1); }
@@ -31,7 +32,7 @@ const BAR = 15 * 60e3;
 
 // ---------- STATE ----------
 const STATE_FILE = path.join(DIR, 'state.json');
-const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, sent: {}, nearSent: {}, diag: [], lastFull: null, lastClean: null, errNotified: false },
+const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, sent: {}, nearSent: {}, diag: [], track: [], trackSeen: {}, lastFull: null, lastClean: null, errNotified: false },
   (() => { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } })());
 if (CFG.chatId) state.chatId = CFG.chatId;
 if (state.quiet === undefined) state.quiet = /^off$/i.test(CFG.quiet) ? null : CFG.quiet;
@@ -131,7 +132,9 @@ async function cleanCycle() {
   for (const r of Object.values(_clean)) {
     for (const sd of [r.L, r.S]) {
       if (!sd || !sd.gates) continue;
-      diag.push({ coin: r.coin, side: sd.dir === 'long' ? 'L' : 'S', mode: sd.mode || null,
+      diag.push({ coin: r.coin, side: sd.dir === 'long' ? 'L' : 'S', mode: sd.mode || null, closeT: r.barT + 15 * 60e3,
+        entry: sd.entry ?? null, et: sd.entryType || null, sl: sd.sl ?? null, tp1: sd.tp1 ?? null, tp2: sd.tp2 ?? null,
+        rr: sd.rr ?? null, nflags: (sd.flags || []).length,
         ok: sd.gates.map(g => g.ok ? 1 : 0),
         na: sd.gates.filter(g => /n\/a/.test(g.note || '')).map(g => g.id),
         fails: sd.gates.filter(g => !g.ok).map(g => ({ id: g.id, note: String(g.note || '').slice(0, 70) })) });
@@ -162,6 +165,22 @@ function recordDiag(r) {
     if (pass >= 8) near.push({ coin: d.coin, side: d.side, mode: d.mode, pass, fails: d.fails });
   }
   near.sort((a, b) => b.pass - a.pass);
+  // forward tracking: every 9/10 and every A/B side with a complete geometry
+  const now = Date.now();
+  for (const d of r.diag || []) {
+    const pass = d.ok.reduce((a, b) => a + b, 0);
+    if (pass < 9 || d.entry == null || d.sl == null || d.tp1 == null) continue;
+    const L = d.side === 'L';
+    if (L ? !(d.sl < d.entry && d.tp1 > d.entry) : !(d.sl > d.entry && d.tp1 < d.entry)) continue;
+    const k = d.coin + ':' + d.side, p = state.trackSeen[k];
+    if (p && now - p < CFG.cooldownMin * 60e3) continue;
+    state.trackSeen[k] = now;
+    const gate = pass === 10 ? (d.nflags ? 'B' : 'A') : d.fails[0].id;
+    state.track.push({ coin: d.coin, side: d.side, mode: d.mode || '—', gate, note: pass === 10 ? '' : d.fails[0].note,
+      t0: d.closeT, entry: d.entry, et: d.et, sl: d.sl, tp1: d.tp1, tp2: d.tp2, rr: d.rr, res: null });
+  }
+  for (const k in state.trackSeen) if (now - state.trackSeen[k] > 24 * 3600e3) delete state.trackSeen[k];
+  state.track = state.track.filter(x => now - x.t0 < 7 * 24 * 3600e3);
   state.diag.push({ t: closeT, n: (r.diag || []).length, A: r.k.A, B: r.k.B, fail, single, na, pc, near: near.slice(0, 12) });
   const cut = Date.now() - 72 * 3600e3;
   state.diag = state.diag.filter(x => x.t >= cut);
@@ -194,6 +213,75 @@ function whyReport(hours) {
 }
 function nearCard(z) {
   return `👀 9/10 · ${esc(z.coin)}.P ${z.side === 'L' ? '▲ LONG' : '▼ SHORT'}${z.mode ? ' · ' + esc(z.mode) : ''}\n✗ ${esc(z.fails[0].id)} ${esc(z.fails[0].note)}`;
+}
+
+// ---------- FORWARD TRACKING ----------
+async function bklines(sym, start, limit) {
+  try {
+    const r = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=15m&startTime=${start}&limit=${limit}`, { signal: AbortSignal.timeout(10000) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+// first touch inside the window; a bar that touches both SL and TP counts as SL (conservative)
+function judge(x, kl) {
+  const L = x.side === 'L', risk = Math.abs(x.entry - x.sl);
+  let filled = x.et !== 'LIMIT', res = 'NONE', tp2 = false, mfe = 0, mae = 0, last = null;
+  for (const k of kl) {
+    const hi = +k[2], lo = +k[3], cl = +k[4];
+    if (!filled) { if (L ? lo <= x.entry : hi >= x.entry) filled = true; else continue; }
+    mfe = Math.max(mfe, (L ? hi - x.entry : x.entry - lo) / risk);
+    mae = Math.max(mae, (L ? x.entry - lo : hi - x.entry) / risk);
+    last = cl;
+    const hitSL = L ? lo <= x.sl : hi >= x.sl, hitTP1 = L ? hi >= x.tp1 : lo <= x.tp1;
+    const hitTP2 = x.tp2 != null && (L ? hi >= x.tp2 : lo <= x.tp2);
+    if (res === 'NONE') { if (hitSL) { res = 'SL'; break; } if (hitTP1) { res = 'TP1'; if (hitTP2) { tp2 = true; break; } continue; } }
+    if (res === 'TP1') { if (hitTP2) { tp2 = true; break; } if (L ? lo <= x.entry : hi >= x.entry) break; }   // back to BE after TP1
+  }
+  if (!filled) return { res: 'NOFILL', tp2: false, mfe: 0, mae: 0, R: 0 };
+  const endR = last == null ? 0 : (L ? last - x.entry : x.entry - last) / risk;
+  const R = res === 'SL' ? -1 : res === 'TP1' ? (tp2 ? (Math.abs(x.tp2 - x.entry) / risk) : (x.rr || 1)) : endR;
+  return { res, tp2, mfe: +mfe.toFixed(2), mae: +mae.toFixed(2), R: +R.toFixed(2) };
+}
+let tracking = false;
+async function resolveTracks() {
+  if (tracking) return; tracking = true;
+  try {
+    const due = state.track.filter(x => !x.res && Date.now() >= x.t0 + CFG.trackBars * BAR + 60e3).slice(0, 40);
+    for (const x of due) {
+      const kl = await bklines(x.coin + 'USDT', x.t0, CFG.trackBars);
+      if (!kl) continue;
+      if (!kl.length) { x.res = { res: 'NODATA', R: 0 }; continue; }
+      x.res = judge(x, kl);
+      await sleep(150);
+    }
+    if (due.length) save();
+  } finally { tracking = false; }
+}
+function nearStats(hours) {
+  const cut = Date.now() - hours * 3600e3;
+  const T = state.track.filter(x => x.t0 >= cut && x.res && x.res.res !== 'NODATA');
+  const open = state.track.filter(x => x.t0 >= cut && !x.res).length;
+  if (!T.length) return `Уште нема завршени случаи (${open} се следат). Секој 9/10 и A/B се проценува ${CFG.trackBars * 15 / 60}h по свеќата.`;
+  const g = {};
+  for (const x of T) {
+    const key = (x.gate === 'A' || x.gate === 'B') ? '✅' + x.gate : x.gate + '·' + x.mode;
+    (g[key] ||= []).push(x);
+  }
+  const keys = Object.keys(g).sort((a, b) => g[b].length - g[a].length);
+  let t = `<b>📊 Следење 9/10 и A/B · ${hours}h</b>\n${T.length} завршени · ${open} отворени · прозорец ${CFG.trackBars * 15 / 60}h · SL и TP во иста свеќа = SL\n`;
+  for (const k of keys) {
+    const a = g[k], sl = a.filter(x => x.res.res === 'SL').length, tp = a.filter(x => x.res.res === 'TP1').length;
+    const tp2 = a.filter(x => x.res.tp2).length, none = a.filter(x => x.res.res === 'NONE').length, nf = a.filter(x => x.res.res === 'NOFILL').length;
+    const filled = a.filter(x => x.res.res !== 'NOFILL'), exp = filled.length ? filled.reduce((s, x) => s + x.res.R, 0) / filled.length : 0;
+    const dec = sl + tp;
+    let v = 'премалку примери';
+    if (dec >= 8) v = k.startsWith('✅') ? (exp > 0 ? 'сетапот носи ✅' : 'сетапот губи ❌')
+      : exp > 0.2 ? 'гејтот ЧИНИ ❌ (блокира добитници)' : exp < -0.2 ? 'гејтот ШТИТИ ✅' : 'неутрално ➖';
+    t += `\n<b>${esc(k)}</b> · ${a.length}\nSL прв ${sl} · TP1 прв ${tp}${tp2 ? ' (TP2 ' + tp2 + ')' : ''} · ништо ${none}${nf ? ' · непополнет ' + nf : ''}\nПросек ${exp >= 0 ? '+' : ''}${exp.toFixed(2)}R → ${v}\n`;
+  }
+  const last = [...T].sort((a, b) => b.t0 - a.t0).slice(0, 8);
+  t += '\n<b>Последни</b>\n' + last.map(x => `${hhmm(x.t0)} ${esc(x.coin)} ${x.side === 'L' ? '▲' : '▼'} ${esc(x.gate)}·${esc(x.mode)} → ${x.res.res}${x.res.tp2 ? '+TP2' : ''} ${x.res.R >= 0 ? '+' : ''}${x.res.R}R`).join('\n');
+  return t;
 }
 
 // ---------- FORMAT ----------
@@ -257,6 +345,7 @@ const HELP = [
   '/strict — само 🟢GO (on/off)',
   '/why 48 — зошто нема сигнали (статистика по гејт)',
   '/near — 👀 9/10 известувања (on/off, не е влез)',
+  '/nearstats 72 — што се случило после 9/10 и A/B (по гејт)',
   '/mute 60 · /unmute',
   '/quiet 01:00-08:30 · /quiet off — ноќна тишина',
   '/status',
@@ -313,6 +402,7 @@ async function handle(text) {
       return send(l.length ? '⭐ ' + esc(l.join(', ')) : 'Нема favorites');
     }
     case '/strict': state.strict = !state.strict; save(); return send(`Само 🟢GO: ${state.strict ? 'ON' : 'OFF'}`);
+    case '/nearstats': { const h = Math.min(168, Math.max(1, parseInt(argRaw) || 72)); await resolveTracks(); return send(nearStats(h)); }
     case '/why': { const h = Math.min(72, Math.max(1, parseInt(argRaw) || 24)); return send(whyReport(h)); }
     case '/near': state.near = !state.near; save(); return send(`👀 9/10 известувања: ${state.near ? 'ON' : 'OFF'}\n(само за следење, влез е само ✅A/B)`);
     case '/mute': { const m = parseInt(argRaw) || 60; state.muteUntil = Date.now() + m * 60e3; save(); return send(`🔕 Тишина до ${hhmm(state.muteUntil)}`); }
@@ -334,6 +424,7 @@ async function handle(text) {
         c ? `CLEAN15 ${hhmm(c.ts)} · A${c.A} B${c.B} WAIT${c.W} · ${(c.dur / 1000).toFixed(0)}s` : 'CLEAN15: —',
         `Strict ${state.strict ? 'ON' : 'OFF'} · 9/10 ${state.near ? 'ON' : 'OFF'} · ${state.muteUntil > Date.now() ? '🔕 до ' + hhmm(state.muteUntil) : '🔔 активен'} · ред ${queueLen}`,
         `🌙 Тишина ${state.quiet ? esc(state.quiet) + (inQuiet() ? ' (сега)' : '') : 'OFF'}`,
+        `📊 Следење: ${state.track.filter(x => !x.res).length} отворени · ${state.track.filter(x => x.res).length} завршени`,
       ].join('\n'));
     }
   }
@@ -382,6 +473,7 @@ async function schedLoop() {
       else {
         const r = await job(cleanCycle);
         state.errNotified = false;
+        resolveTracks().catch(e => log('track', e.message));
         if (inQuiet() || Date.now() < state.muteUntil) continue;   // silent: nothing marked as sent
         const out = fresh(r.rows); save();
         if (out.length) await send(head(r) + '\n\n' + out.map(card).join('\n\n'));
