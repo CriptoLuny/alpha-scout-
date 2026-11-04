@@ -636,7 +636,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     за <input id="labDays" class="thresh-input" type="number" value="7" min="2" max="30" step="1" style="width:44px"> дена
     · мирна недела ret7 &lt;<input id="labQuiet" class="thresh-input" type="number" value="20" min="0" max="100" step="5" style="width:50px">%
     · палење ≥<input id="labIgn" class="thresh-input" type="number" value="10" min="3" max="50" step="1" style="width:44px">%
-    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v6" selected>v6 RE-PUMP 4h+1d</option><option value="wave">WAVE Fib .5/.618 1h+4h</option><option value="pat">PAT свеќи+форми 1h+4h</option><option value="v5">v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
+    · студија <select id="labMode" class="thresh-input" style="width:auto;padding:3px 6px"><option value="v6" selected>v6 RE-PUMP 4h+1d</option><option value="wave">WAVE Fib .5/.618 1h+4h</option><option value="wave15">WAVE Fib .5/.618 15m+1h</option><option value="pat">PAT свеќи+форми 1h+4h</option><option value="v5">v5 1h OBV+A/D</option><option value="v4">v4 повлекување</option><option value="v3">v3 насока + палење</option></select>
     · случај <input id="labCase" class="thresh-input" type="text" value="US,OGN" style="width:110px;text-transform:uppercase">
     <div class="dg-btn prim" id="labStart" onclick="runPumpLab()">▶ START LAB</div>
     <div class="dg-btn" id="labStop" onclick="stopLab()" style="display:none;border-color:var(--red);color:var(--red)">⏹ STOP</div>
@@ -1277,6 +1277,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-04-b  WAVE LAB 15m+1h (🧪 study "WAVE 15m+1h"): the same event/entry/SL/TP rules as WAVE
+//    1h+4h, now on 15m (1500 bars ~15.6 days, W 192 = 48h, forward 96 = 24h, leg >= +25% because
+//    +40% inside 48h is rare) + 1h (unchanged: 1000 bars, W 120, fwd 48, leg >= +40%).
+//    The leg threshold is now per TF (cfg.leg, default WV.LEG). OI 15m = openInterestHist period 15m,
+//    500 points (~5.2 days) -> the ·OI groups on 15m are small. ✔ still needs BOTH TFs of the run.
+//    Request count per coin is the same as 1h+4h (2 klines + 2 OI); the 15m kline call is weight 10.
+//    runLabWave(tfs) and wvReport are TF-generic; the 1h+4h report is unchanged.
 //
 //  Digests are version-stamped on purpose: a v1.x digest has
 //  fake OI numbers and must not be read the same way.
@@ -1285,7 +1292,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-04-a';
+const APP_BUILD='2026-11-04-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -6580,7 +6587,7 @@ async function runLabV3(){
   }
 }
 
-function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v6';if(m==='pat'&&typeof runLabPat==='function')return runLabPat();if(m==='wave'&&typeof runLabWave==='function')return runLabWave();return m==='v6'?runLabV6():m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
+function runPumpLab(){if(LAB.running)return;const m=document.getElementById('labMode')?.value||'v6';if(m==='pat'&&typeof runLabPat==='function')return runLabPat();if(m==='wave'&&typeof runLabWave==='function')return runLabWave(['1h','4h']);if(m==='wave15'&&typeof runLabWave==='function')return runLabWave(['15m','1h']);return m==='v6'?runLabV6():m==='v3'?runLabV3():m==='v4'?runLabV4():runLabV5();}
 function labIgnRow(name,arr){
   const n=arr.length;if(!n)return `${name}|0|—|—|—|—|—|—|—|—\n`;
   const p=f=>arr.filter(f).length/n;
@@ -8850,7 +8857,8 @@ async function loadPatDetail(coin,force){
 // WAVE LAB (2026-11-02-a): first touch of Fib .5/.618 of an up-leg, stepwise confirmations, EV in R
 // ══════════════════════════════════════════════════════════════
 const WV={
-  TF:{'1h':{iv:'1h',lim:1000,oiP:'1h',oiLim:500,ms:3600e3,W:120,fwd:48,conf:8},
+  TF:{'15m':{iv:'15m',lim:1500,oiP:'15m',oiLim:500,ms:900e3,W:192,fwd:96,conf:8,leg:0.25},
+      '1h':{iv:'1h',lim:1000,oiP:'1h',oiLim:500,ms:3600e3,W:120,fwd:48,conf:8},
       '4h':{iv:'4h',lim:1000,oiP:'4h',oiLim:180,ms:14400e3,W:90,fwd:30,conf:8}},
   LEG:0.4,TOUCH:0.5,SLX:0.3,MAXR:3,TP:2,FLUSH:0.03,HOLD:0.01,RAND_PER:8,SEED:20261102,MIN:30,WARM:60};
 const WV_G=[
@@ -8909,7 +8917,7 @@ function wvSeriesLab(S,cfg,tf,coin,A,R,rng,caseSet,CASE,LIVE){
     if(hi<1)continue;
     let Lo=Infinity;for(let q=Math.max(0,hi-W);q<hi;q++)if(S.L[q]<Lo)Lo=S.L[q];
     if(!(Lo>0)||!isFinite(Lo))continue;
-    const leg=H/Lo-1;if(leg<WV.LEG)continue;
+    const leg=H/Lo-1;if(leg<(cfg.leg??WV.LEG))continue;
     const rg=H-Lo,f50=H-0.5*rg,f618=H-0.618*rg,f786=H-0.786*rg,a=S.atr[i];if(!(a>0))continue;
     let broken=false;for(let q=hi+1;q<i;q++)if(S.C[q]<f786){broken=true;break;}
     if(broken)continue;
@@ -8951,9 +8959,9 @@ function wvSeriesLab(S,cfg,tf,coin,A,R,rng,caseSet,CASE,LIVE){
   for(let k=0;k<WV.RAND_PER&&last>WV.WARM;k++){const i=WV.WARM+Math.floor(rng()*(last-WV.WARM+1));wvAdd(R.RND,wvOut(S,i,S.L[i]-WV.SLX*S.atr[i],fwd,null));}
   for(let k=0;k<WV.RAND_PER&&post.length;k++){const i=post[Math.floor(rng()*post.length)];wvAdd(R.POST,wvOut(S,i,S.L[i]-WV.SLX*S.atr[i],fwd,null));}
 }
-async function runLabWave(){
+async function runLabWave(tfs){
   LAB.running=true;LAB.abort=false;LAB.rateHit=0;LAB.log=[];LAB.out='';labBtns();
-  const t0=Date.now(),TFS=['1h','4h'],caseList=(document.getElementById('labCase')?.value||'').toUpperCase().split(/[\s,;]+/).map(x=>x.replace(/USDT$/,'')).filter(Boolean),caseSet=new Set(caseList);
+  const t0=Date.now(),TFS=(Array.isArray(tfs)&&tfs.length===2&&tfs.every(t=>WV.TF[t]))?tfs:['1h','4h'],caseList=(document.getElementById('labCase')?.value||'').toUpperCase().split(/[\s,;]+/).map(x=>x.replace(/USDT$/,'')).filter(Boolean),caseSet=new Set(caseList);
   try{
     labSetProg('🧪 WAVE LAB · exchangeInfo...');
     const ei=await labFetch(FAPI+'/exchangeInfo',15000);if(ei)buildClassMaps(ei);
@@ -8986,27 +8994,28 @@ async function runLabWave(){
           wvSeriesLab(S,cfg,tf,coin,A[tf],R[tf],rng,caseSet,CASE,LIVE);I[tf].coins++;
         }
       }));
-      labSetProg(`🧪 WAVE LAB · 1h + 4h · ${Math.min(i+4,uni.length)}/${uni.length} коини · OI 1h ${I['1h'].oi} / 4h ${I['4h'].oi} · ${Math.round((Date.now()-t0)/1000)}s${LAB.rateHit?' · rate limit '+LAB.rateHit:''}`);
+      labSetProg(`🧪 WAVE LAB · ${TFS.join(' + ')} · ${Math.min(i+4,uni.length)}/${uni.length} коини · OI ${TFS.map(t=>t+' '+I[t].oi).join(' / ')} · ${Math.round((Date.now()-t0)/1000)}s${LAB.rateHit?' · rate limit '+LAB.rateHit:''}`);
       await sleep(1800);   // openInterestHist has a tighter IP limit than klines
     }
-    LAB.out=wvReport({uni,skipped,A,R,I,t0,aborted:LAB.abort,CASE,LIVE,caseList});
+    LAB.out=wvReport({uni,skipped,A,R,I,t0,aborted:LAB.abort,CASE,LIVE,caseList,TFS});
   }catch(err){LAB.out='⚠️ WAVE LAB грешка: '+(err&&err.stack||err);}
   finally{LAB.running=false;labBtns();if(LAB.view)document.getElementById('dgTa').value=LAB.out;toast(LAB.out?'🧪 WAVE LAB готов — КОПИРАЈ':'🧪 прекинат');}
 }
 function wvReport(X){
+  const TFS=X.TFS||['1h','4h'],T0=TFS[0],T1=TFS[1],legTxt=tf=>`+${Math.round((WV.TF[tf].leg??WV.LEG)*100)}%`;
   const d=new Date(),pad=v=>String(v).padStart(2,'0'),stamp=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const dU=t=>{const x=new Date(t);return `${pad(x.getUTCDate())}.${pad(x.getUTCMonth()+1)} ${pad(x.getUTCHours())}h`;};
+  const dU=t=>{const x=new Date(t);return `${pad(x.getUTCDate())}.${pad(x.getUTCMonth()+1)} ${pad(x.getUTCHours())}${x.getUTCMinutes()?':'+pad(x.getUTCMinutes()):'h'}`;};
   const fR=v=>(v>=0?'+':'')+v.toFixed(2)+'R',pc=v=>(v*100).toFixed(0)+'%';
   const evTxt=e=>e?`${fR(e.mu)} ±${(2*e.se).toFixed(2)}`:'—';
   const cmp=(a,b)=>{if(!a||!b)return '—';const df=a.mu-b.mu,se=2*Math.sqrt(a.se*a.se+b.se*b.se);return `${fR(df)} ±${se.toFixed(2)}${df-se>0?' ▲':df+se<0?' ▼':''}`;};
-  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | WAVE LAB · отскок од Fib .5/.618 | ${stamp} local | bar times UTC | ${Math.round((Date.now()-X.t0)/1000)}s${X.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
-  o+=`DATA: universe ${X.uni.length} (skipped ${X.skipped}) | 1h ${X.I['1h'].coins} coins (OI ${X.I['1h'].oi}) | 4h ${X.I['4h'].coins} coins (OI ${X.I['4h'].oi}) | short/failed 1h ${X.I['1h'].fail} / 4h ${X.I['4h'].fail} | rate-limit hits ${LAB.rateHit}\n`;
-  o+=`EVENT: up-leg >= +${WV.LEG*100}% (high = max of the last W bars, 1h 120 / 4h 90; low = min of the W bars before the high) -> FIRST touch of Fib .5/.618 (low inside the zone or within ${WV.TOUCH} ATR), no close under .786 since the high.\n`;
-  o+=`ENTRY: close of the first bar within ${WV.TF['1h'].conf} bars of the touch where the group's conditions all hold (a close under .786 before that = no trigger) | SL = lowest low since the touch - ${WV.SLX} ATR (risk > ${WV.MAXR} ATR = skipped) | TP = +${WV.TP}R, else mark-to-market after 1h ${WV.TF['1h'].fwd} / 4h ${WV.TF['4h'].fwd} bars, clipped -1..+${WV.TP}R. EV in R ±2SE.\n`;
-  o+=`CONDITIONS: OBV = OBV > OBV 3 bars ago · MOMz = MOMz(14) > 3 bars ago · JMA = JMA(8,50,2) > DWMA(10) after being <= since the touch · OI = OI coins fell >= ${WV.FLUSH*100}% from the leg high to the touch (FLUSH) and at entry is not > ${WV.HOLD*100}% under the touch (HOLD). OI exists only for ~30 days (1h 500 / 4h 180 points): ·OI groups use only events with OI, compare FULL with 3CONF·OI and TOUCH·OI.\n`;
+  let o=`aSCOUT v${APP_VER} ${APP_CODENAME} (${APP_BUILD}) | WAVE LAB · отскок од Fib .5/.618 · ${TFS.join('+')} | ${stamp} local | bar times UTC | ${Math.round((Date.now()-X.t0)/1000)}s${X.aborted?' | ⚠️ ПРЕКИНАТ (делумно)':''}\n`;
+  o+=`DATA: universe ${X.uni.length} (skipped ${X.skipped}) | ${TFS.map(t=>`${t} ${X.I[t].coins} coins (OI ${X.I[t].oi})`).join(' | ')} | short/failed ${TFS.map(t=>`${t} ${X.I[t].fail}`).join(' / ')} | rate-limit hits ${LAB.rateHit}\n`;
+  o+=`EVENT: up-leg >= ${TFS.map(t=>`${t} ${legTxt(t)}`).join(' / ')} (high = max of the last W bars, ${TFS.map(t=>`${t} ${WV.TF[t].W}`).join(' / ')}; low = min of the W bars before the high) -> FIRST touch of Fib .5/.618 (low inside the zone or within ${WV.TOUCH} ATR), no close under .786 since the high.\n`;
+  o+=`ENTRY: close of the first bar within ${WV.TF[T0].conf} bars of the touch where the group's conditions all hold (a close under .786 before that = no trigger) | SL = lowest low since the touch - ${WV.SLX} ATR (risk > ${WV.MAXR} ATR = skipped) | TP = +${WV.TP}R, else mark-to-market after ${TFS.map(t=>`${t} ${WV.TF[t].fwd}`).join(' / ')} bars, clipped -1..+${WV.TP}R. EV in R ±2SE.\n`;
+  o+=`CONDITIONS: OBV = OBV > OBV 3 bars ago · MOMz = MOMz(14) > 3 bars ago · JMA = JMA(8,50,2) > DWMA(10) after being <= since the touch · OI = OI coins fell >= ${WV.FLUSH*100}% from the leg high to the touch (FLUSH) and at entry is not > ${WV.HOLD*100}% under the touch (HOLD). OI history: ${TFS.map(t=>`${t} ${WV.TF[t].oiLim} points`).join(' / ')} (Binance keeps ~30 days${TFS.includes('15m')?'; 15m 500 points = ~5 days':''}): ·OI groups use only events with OI, compare FULL with 3CONF·OI and TOUCH·OI.\n`;
   o+=`CONTROLS: RANDOM = random bars, same coins/period, same SL rule (bar low - ${WV.SLX} ATR) and +${WV.TP}R | POST = random bars AFTER a qualifying leg with the structure intact (same location, no Fib touch needed): tells whether the touch itself matters.\n`;
   const ver={};
-  for(const tf of ['1h','4h']){
+  for(const tf of TFS){
     const A=X.A[tf],R=X.R[tf],rnd=wvEV(R.RND),post=wvEV(R.POST);
     o+=`\n══ ${tf} · forward ${WV.TF[tf].fwd} bars ══\n`;
     o+=`GROUP|n|win +${WV.TP}R|loss -1R|EV R ±2SE|vs RANDOM|vs POST|no trigger|skip (risk>${WV.MAXR}ATR)|avg risk ATR|P(reach leg high)\n`;
@@ -9019,7 +9028,7 @@ function wvReport(X){
     ['TOUCH','3CONF'].forEach(id=>['.5','.618','leg<100%','leg>=100%'].forEach(sp=>{const t=A[id+'|'+sp];if(t&&t.n)o+=row(` ${id} ${sp}`,t,0);}));
   }
   o+=`\nVERDICT (EV > 0 with the 2SE band, n >= ${WV.MIN}; ✔ needed on BOTH TFs):\n`;
-  WV_G.forEach(g=>{const v=ver[g.id]||{};o+=` ${g.id}: 1h ${v['1h']||'·'} · 4h ${v['4h']||'·'}${v['1h']==='✔'&&v['4h']==='✔'?'  ← EDGE':''}\n`;});
+  WV_G.forEach(g=>{const v=ver[g.id]||{};o+=` ${g.id}: ${T0} ${v[T0]||'·'} · ${T1} ${v[T1]||'·'}${v[T0]==='✔'&&v[T1]==='✔'?'  ← EDGE':''}\n`;});
   if(X.caseList.length){
     o+=`\nCASE (${X.caseList.join(',')}) · touch time UTC · R per group (— = no trigger / no OI / window open):\n`;
     if(!X.CASE.length)o+=' нема допир во податоците\n';
@@ -9027,7 +9036,7 @@ function wvReport(X){
       o+=` ${c.coin}|${c.tf}|${dU(c.t)}|leg +${(c.leg*100).toFixed(0)}% → ${fmt(c.H)}|${c.lvl} (.5 ${fmt(c.f50)} · .618 ${fmt(c.f618)})|TOUCH ${r('TOUCH')} · OBV+MOM ${r('OBV+MOM')} · 3CONF ${r('3CONF')} · FULL ${c.evOI?r('FULL'):'no OI'}\n`;});
   }
   const lv=X.LIVE.slice().sort((a,b)=>{const s=x=>(x.c.obv?1:0)+(x.c.mom?1:0)+(x.c.jma?1:0)+(x.c.oi===true?1:0);return s(b)-s(a)||b.t-a.t;});
-  o+=`\nLIVE · touch in the last ${WV.TF['1h'].conf} bars, structure intact (${lv.length}) · ✔/✗ = condition on the last closed bar, OI n/a = no OI · plan = entry now, SL under the touch, TP +${WV.TP}R:\n`;
+  o+=`\nLIVE · touch in the last ${WV.TF[T0].conf} bars, structure intact (${lv.length}) · ✔/✗ = condition on the last closed bar, OI n/a = no OI · plan = entry now, SL under the touch, TP +${WV.TP}R:\n`;
   if(!lv.length)o+=' —\n';
   const ck=v=>v===true?'✔':v===false?'✗':'n/a';
   lv.slice(0,30).forEach(x=>{o+=` ${x.coin}|${x.tf}|touch ${dU(x.t)} ${x.lvl}|leg +${(x.leg*100).toFixed(0)}% high ${fmt(x.H)}|.5 ${fmt(x.f50)} .618 ${fmt(x.f618)} .786 ${fmt(x.f786)}|OBV ${ck(x.c.obv)} MOM ${ck(x.c.mom)} JMA ${ck(x.c.jma)} OI ${ck(x.c.oi)}|E ${fmt(x.e)} SL ${fmt(x.sl)}${x.rA!=null?' ('+x.rA.toFixed(2)+' ATR)':''} TP ${fmt(x.tp)}\n`;});
