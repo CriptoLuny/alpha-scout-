@@ -1285,7 +1285,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-02-a';
+const APP_BUILD='2026-11-04-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -8050,7 +8050,8 @@ function wTagSet(r){
 
 // ── options per coin ───────────────────────────────────────
 // 2026-10-22-d: tap a price = copy it (exchange tick precision, no thousands separator) for the
-// Binance order form / a TV horizontal-line price field; 📋 TV Pine = all levels as a Pine script
+// Binance order form / a TV horizontal-line price field; 🤖 TV AI = full plan +
+// derivatives context as text for the TradingView AI assistant; 📋 TV Pine = all levels as a Pine script
 // (Pine Editor -> paste -> Add to chart draws Entry/SL/TP lines); 📋 Текст = one line for notes.
 function pxCopyStr(coin,v){
   if(v==null||!isFinite(v))return '';
@@ -8068,27 +8069,101 @@ function wCopyPx(ev,coin,v){
   const s=pxCopyStr(coin,v);if(!s)return;
   copyText(s).then(ok=>toast(ok?'📋 '+s+' копирано':'⚠️ копирањето не успеа'));
 }
-function wCopyLv(ev,coin,side,e,sl,tp1,tp2,mode){
+function wCopyLv(ev,coin,side,e,sl,tp1,tp2,mode,kind){
   if(ev){ev.stopPropagation();ev.preventDefault();}
   const P=v=>pxCopyStr(coin,v),dir=side==='L'?'LONG':'SHORT';
   let txt;
-  if(mode==='pine'){
+  if(mode==='ai'){
+    txt=wAIText(coin,side,e,sl,tp1,tp2,kind);
+  }else if(mode==='pine'){
     const L=[['Entry',e,'color.blue','solid'],['SL',sl,'color.red','dashed'],['TP1',tp1,'color.green','dashed'],['TP2',tp2,'color.teal','dotted']].filter(x=>x[1]!=null&&isFinite(x[1]));
     txt='//@version=5\nindicator("aSCOUT '+coin+' '+dir+'", overlay=true)\n'
       +L.map(x=>'hline('+P(x[1])+', "'+x[0]+' '+P(x[1])+'", color='+x[2]+', linestyle=hline.style_'+x[3]+', linewidth=2)').join('\n')+'\n';
   }else txt=coin+'USDT '+dir+' | Entry '+P(e)+' | SL '+P(sl)+' | TP1 '+P(tp1)+(tp2!=null&&isFinite(tp2)?' | TP2 '+P(tp2):'');
-  copyText(txt).then(ok=>toast(ok?(mode==='pine'?'📋 Pine копиран → TV: Pine Editor · залепи · Add to chart':'📋 нивоа копирани'):'⚠️ копирањето не успеа'));
+  copyText(txt).then(ok=>toast(ok?(mode==='ai'?'🤖 Целиот план копиран → залепи во TV AI':mode==='pine'?'📋 Pine копиран → TV: Pine Editor · залепи · Add to chart':'📋 нивоа копирани'):'⚠️ копирањето не успеа'));
+}
+
+// 2026-11-04-a: 🤖 TV AI = the whole plan plus the derivatives context as one text block for
+// the TradingView AI assistant. Tap-a-price copy (Binance) and TV Pine / Текст are unchanged.
+// STATUS is always the second block so the assistant cannot mistake a WATCH plan for a live entry.
+function wAIText(coin,side,e,sl,tp1,tp2,kind){
+  const P=v=>(v==null||!isFinite(+v))?'-':pxCopyStr(coin,+v), short=side==='S';
+  const rel=v=>{const V=+v,E=+e;if(!isFinite(V)||!isFinite(E)||!E)return '';
+    const d=((V-E)/E)*100*(short?-1:1);return '   '+(d>=0?'+':'')+d.toFixed(2)+'%';};
+  const TF=((typeof WT!=='undefined')&&WT.tf)||'15m';
+  const o=((typeof _wRes!=='undefined'&&_wRes)||[]).find(x=>x.coin===coin)||{};
+  const r=o.r,c15=o.c15,su=o.su,K=kind||'-';
+  const lv=/CLEAN15/.test(K)?(c15&&(short?c15.S:c15.L)):su;
+  const isEntry=!/WATCH/.test(K);
+  const L=[];
+
+  L.push(coin+'USDT  -  Binance USDT-M perpetual  -  '+(short?'SHORT':'LONG'));
+  L.push('Source: aSCOUT '+((typeof APP_BUILD!=='undefined'&&APP_BUILD)||'')+' | scan TF '+TF+' | '+new Date().toISOString().slice(0,16).replace('T',' ')+' UTC');
+  L.push('STATUS: '+K+(isEntry?'  ->  entry condition met':'  ->  WATCH ONLY, NOT AN ENTRY (plan if the condition is met)'));
+  if(o.px!=null)L.push('Price now: '+P(o.px)+'   24h: '+wSgn(o.chg,2)+'%');
+  L.push('');
+
+  L.push('--- PLAN ---');
+  L.push('ENTRY : '+P(e)+(lv&&lv.entryType?'   ('+lv.entryType+')':''));
+  L.push('STOP  : '+P(sl)+rel(sl)+(lv&&lv.slAtr!=null?'   ('+(+lv.slAtr).toFixed(2)+' ATR)':''));
+  L.push('TP1   : '+P(tp1)+rel(tp1));
+  if(tp2!=null&&isFinite(+tp2))L.push('TP2   : '+P(tp2)+rel(tp2));
+  if(lv&&lv.rr!=null)L.push('R:R   : '+(+lv.rr).toFixed(2));
+  if(lv&&lv.maxLev)L.push('Max leverage: '+lv.maxLev+'x');
+  if(lv&&lv.mode)L.push('Mode: '+lv.mode);
+  if(lv&&lv.levelSrc)L.push('Levels from: '+lv.levelSrc);
+  if(lv&&lv.tfConf)L.push('TF confluence: '+lv.tfConf);
+  if(lv&&lv.flags&&lv.flags.length)L.push('Flags: '+lv.flags.join(' / '));
+  if(!isEntry&&su&&su.gate&&su.gate.why&&su.gate.why.length)L.push('Waiting for: '+su.gate.why.join(' / '));
+  L.push('');
+
+  L.push('--- DERIVATIVES STATE ---');
+  if(r){
+    L.push('SCORE '+r.score+' '+r.dir+' | OI coins '+wSgn(r.oiCoinsChg)+'% | DOM '+(r.oiDom||'-')+' | SHAPE '+(r.oiShape||'-'));
+    L.push('CVDt '+(r.cvdNewLow?'LOW':r.cvdNewHigh?'HIGH':'--')+' | taker '+(r.takerBuyPct!=null?(+r.takerBuyPct).toFixed(0):'-')+'%B | FR '+wSgn(o.fr,4)+'% | L/S '+(r.lsRatio!=null?(+r.lsRatio).toFixed(2):'-'));
+    if(r.sigs&&r.sigs.length)L.push('Tags: '+r.sigs.map(x=>x.l).join(', '));
+  }else L.push('SCORE 0 - no signals on '+TF);
+  if(o.al&&o.al.chips)L.push('TF alignment: '+o.al.chips.map(x=>x.tf+' '+(x.d||'n/a')).join(' | ')+'  ->  '+o.al.verdict);
+  if(o.chase)L.push('WARNING: '+o.chase.tag+' - house rule: no new long');
+  if(o.rp4&&typeof rp4Short==='function')L.push('WARNING: '+rp4Short(o.rp4)+' - RE-PUMP arm 4h, no new long');
+  L.push('');
+
+  if(c15){
+    L.push('--- CLEAN15 (closed 15m bars, 1h trend) ---');
+    L.push('Grade: '+c15.grade+(c15.best?' '+(c15.best==='L'?'LONG':'SHORT'):'')+' | ATR '+(c15.atrPct!=null?(+c15.atrPct).toFixed(2)+'%':'-'));
+    if(typeof clnTrendTxt==='function')L.push('TRND '+clnTrendTxt(c15.st));
+    if(typeof clnLocTxt==='function')L.push('LOC  '+clnLocTxt(c15.st));
+    const sd=short?c15.S:c15.L,fg=(sd&&sd.gates)?sd.gates.filter(g=>!g.ok):[];
+    if(fg.length)L.push('Failing gates: '+fg.map(g=>g.id+' '+g.note).join(' ; '));
+    if(typeof clnFundTxt==='function')L.push(clnFundTxt(coin,c15.fr));
+    if(typeof clnTopTxt==='function')L.push(clnTopTxt(c15.top));
+    if(typeof clnLegTxt==='function')L.push(clnLegTxt(c15.leg,c15.price));
+    L.push('');
+  }
+
+  L.push('--- ASK ---');
+  L.push('Look at this chart and judge the setup above.');
+  L.push('1. Does price structure, momentum and volume support the direction?');
+  L.push('2. Is the entry level sensible, or is there a better one close by?');
+  L.push('3. Is the stop behind real structure, or sitting in noise?');
+  L.push('4. Are the targets realistic before the next obstacle?');
+  L.push('5. Name anything on the chart that invalidates this plan.');
+  if(!isEntry)L.push('Note: this is a WATCH plan, not a live entry. Do not treat it as confirmed.');
+  return L.join('\n');
 }
 function wPx(coin,v){
   if(v==null||isNaN(v))return '—';
   return `<span class="w-px" onclick="wCopyPx(event,'${wEsc(coin)}',${+v})" title="допри = копирај">${wF(v)}</span>`;
 }
-function wLv(o,coin,side){
+function wLv(o,coin,side,kind){
   if(!o||o.entry==null)return '';
   const F=v=>coin?wPx(coin,v):wF(v),N=v=>v==null||!isFinite(v)?'null':String(+v);
+  const A=`'${wEsc(coin)}','${side}',${N(o.entry)},${N(o.sl)},${N(o.tp1)},${N(o.tp2)}`;
+  const K=wEsc(String(kind||'').replace(/['"\\]/g,''));
   return`Влез ${F(o.entry)}${o.entryType?' ('+wEsc(o.entryType)+')':''} · SL ${F(o.sl)}${o.slAtr!=null?' ('+(+o.slAtr).toFixed(2)+' ATR)':''}<br>TP1 ${F(o.tp1)}${o.tp2!=null?' · TP2 '+F(o.tp2):''}${o.rr!=null?' · R:R '+(+o.rr).toFixed(2):''}`
-    +(coin?`<div class="w-cp"><button class="w-btn w-sm" onclick="wCopyLv(event,'${wEsc(coin)}','${side}',${N(o.entry)},${N(o.sl)},${N(o.tp1)},${N(o.tp2)},'pine')">📋 TV Pine</button>`
-      +`<button class="w-btn w-sm" onclick="wCopyLv(event,'${wEsc(coin)}','${side}',${N(o.entry)},${N(o.sl)},${N(o.tp1)},${N(o.tp2)},'txt')">📋 Текст</button></div>`:'');
+    +(coin?`<div class="w-cp"><button class="w-btn w-sm" onclick="wCopyLv(event,${A},'pine')">📋 TV Pine</button>`
+      +`<button class="w-btn w-sm" onclick="wCopyLv(event,${A},'txt')">📋 Текст</button>`
+      +`<button class="w-btn w-sm" style="border-color:rgba(0,229,255,.45);color:var(--accent)" onclick="wCopyLv(event,${A},'ai','${K}')">🤖 TV AI</button></div>`:'');
 }
 function wGates(sd){return sd&&sd.gates?sd.gates.filter(g=>!g.ok):[];}
 function wOptions(o){
@@ -8100,14 +8175,14 @@ function wOptions(o){
     if(up&&o.chase)warn+=`<br><span style="color:var(--yellow)">⚠ ${wEsc(o.chase.tag)}: правилото е без нов лонг</span>`;
     if(up&&o.rp4)warn+=`<br><span style="color:var(--yellow)">⚠ ${wEsc(rp4Short(o.rp4))}: RE-PUMP ARM 4h, без нов лонг</span>`;
     if(sd.flags&&sd.flags.length)warn+=`<br><span style="color:var(--yellow)">флаг: ${wEsc(sd.flags.join(' · '))}</span>`;
-    out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ ${up?'▲ ЛОНГ':'▼ ШОРТ'} · CLEAN15 ${c15.grade}</b><br>${wLv(sd,o.coin,up?'L':'S')}${warn}</div>`);
+    out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ ${up?'▲ ЛОНГ':'▼ ШОРТ'} · CLEAN15 ${c15.grade}</b><br>${wLv(sd,o.coin,up?'L':'S','CLEAN15 '+c15.grade)}${warn}</div>`);
   }
   const s=o.su,al=o.al;
   if(out.length&&al&&al.conflict)out[out.length-1]=out[out.length-1].replace(/<\/div>$/,`<br><span style="color:var(--yellow)">⚠ ${wEsc(al.verdict)}</span></div>`);
   if(s&&s.status==='GO'){
     const up=s.finalDir==='bull';
     out.push(`<div class="w-opt ${up?'long':'short'}"><b>✅ СЕТАП GO ${up?'▲ ЛОНГ':'▼ ШОРТ'}</b>${s.levelSrc?' <span style="color:var(--muted)">· '+wEsc(s.levelSrc)+'</span>':''}${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}<br>`
-      +(s.entry!=null?wLv(s,o.coin,up?'L':'S'):'')
+      +(s.entry!=null?wLv(s,o.coin,up?'L':'S','SETUP GO'):'')
       +(up&&o.chase?`<br><span style="color:var(--yellow)">⚠ ${wEsc(o.chase.tag)}: без нов лонг</span>`:'')
       +(up&&o.rp4?`<br><span style="color:var(--yellow)">⚠ ${wEsc(rp4Short(o.rp4))}: без нов лонг</span>`:'')+`</div>`);
   }
@@ -8122,7 +8197,7 @@ function wOptions(o){
     const up=s.finalDir==='bull',why=(s.gate&&s.gate.why)||[];
     out.push(`<div class="w-opt none"><b style="color:var(--yellow)">⏸ СЕТАП WATCH ${up?'▲':'▼'} — ЧЕКАЈ, не е влез</b>${s.tfConf?' <span style="color:var(--muted)">· '+wEsc(s.tfConf)+'</span>':''}`
       +(why.length?`<br><span style="color:var(--yellow)">чека: ${wEsc(why.join(' · '))}</span>`:'')
-      +(s.entry!=null?`<br><span style="color:var(--muted)">план ако се исполни (${wEsc(s.levelSrc||'')}):</span><br>`+wLv(s,o.coin,up?'L':'S'):'<br><span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
+      +(s.entry!=null?`<br><span style="color:var(--muted)">план ако се исполни (${wEsc(s.levelSrc||'')}):</span><br>`+wLv(s,o.coin,up?'L':'S','SETUP WATCH'):'<br><span style="color:var(--muted)">'+wEsc(s.plan&&s.plan.why||'нема ниво од 1h структура')+'</span>')
       +`</div>`);
   }
   return out.join('');
