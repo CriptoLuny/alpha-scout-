@@ -1280,6 +1280,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-05-c  IGN RELATIVE TO THE MARKET. TRUTH 05.11 16:17 (first IGN digest): the whole market was
+//    falling (BEAR 481/522, median MOMz -4.4) and IGN flagged 362 WAKE + 5 IGNITE, all ▼ -- it was
+//    measuring the market, not single coins. AIO was a SOLO move; the only real solo move on that
+//    digest was ARIA (▲ against a falling market). Now each full scan records the raw move and
+//    volume x of EVERY analysed coin (before the score cut) and takes the universe medians per TF;
+//    IGN is re-scored with move_rel = move - market median and vol_rel = vol x / market median vol x.
+//    Direction = sign of move_rel (a coin falling 1% while the market falls 5% is a relative ▲, but
+//    it only scores if it is also outside its own base in that direction). New minimum relative
+//    move: IGNITE >= 2%, WAKE >= 1% over R. Search scans reuse the last full-scan medians (<= 2h,
+//    same TF) and say so. 🔥 ALARM: market median of the 5 / 15 / 90 min moves from its own ticker
+//    snapshots; candidates by RELATIVE move; ▲ only by default (button ▲ / ▲▼); WAKE never alarms.
 //  2026-11-05-b  IGN + OBV & A/D (user: "OBV and A/D moving together is the real sign of a move").
 //    OBV (close vs previous close x volume) and Chaikin A/D (close location in the bar x volume)
 //    are run over the same klines. FLOW ✔✔ = BOTH make a new extreme vs the base window in the move
@@ -1322,7 +1333,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-05-b';
+const APP_BUILD='2026-11-05-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2035,6 +2046,7 @@ async function doScanPass(){
   document.getElementById('prog').style.display='block';
   setP('Вчитувам Alpha листа + тикери...',3);
   _btcCloses1h=null;_coin1hCache={}; // refresh BTC reference + per-coin 1h cache each new scan
+  if(!S.srch)_ignUni={};   // 2026-11-05-c: fresh market sample for the IGN medians
   const[,tickers,fundings,exchangeInfo]=await Promise.all([fetchAlphaList(),apiFetch('/ticker/24hr'),apiFetch('/premiumIndex'),apiFetch('/exchangeInfo'),loadFundingInfo().catch(()=>null)]);
   if(!tickers){errShow('⚠️ Binance API недостапен');stopScan();return;}
 
@@ -2138,7 +2150,7 @@ async function doScanPass(){
       await sleep(sl);
     }
   }
-  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildClean();enrichSrc(S.signals);}
+  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));if(typeof ignFinalizeScan==='function')try{ignFinalizeScan();}catch(e){}S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildClean();enrichSrc(S.signals);}
 }
 
 // ── MOMENTUM RANKS (v2.4) ───────────────────────────────────
@@ -2213,7 +2225,7 @@ function momRegime(s){
 }
 
 function buildSignals(partial){
-  return Object.values(partial).filter(x=>x.score>0||Object.values(x.tfData||{}).some(r=>r&&r.ign&&r.ign.phase)).map(x=>{
+  return Object.values(partial).filter(x=>x.score>0||Object.values(x.tfData||{}).some(r=>r&&r.ign&&(r.ign.phase||r.ign.volX>=2))).map(x=>{
     const best=x.tfData[x.bestTF]||Object.values(x.tfData)[0];
     return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,coil:(x.coil||best.coil||false),coilRangePct:(x.coilRangePct??best.coilRangePct??null),coilVolRatio:(x.coilVolRatio??best.coilVolRatio??null),jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes,btcCorr:x.btcCorr};
   }).sort((a,b)=>{
@@ -2821,7 +2833,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
     if(klFull&&typeof patScan==='function'){try{pat=patScan(klFull,tf);}catch(e){pat=null;}}   // 2026-10-27-a: same klines, no extra request
-    if(klFull&&typeof ignCompute==='function'){try{ign=ignCompute(klFull,tf,oiReal?oiCoinsChg:null);}catch(e){ign=null;}}   // 2026-11-05-a
+    if(klFull&&typeof ignCompute==='function'){try{ign=ignCompute(klFull,tf,oiReal?oiCoinsChg:null);if(ign&&!S.srch)(_ignUni[tf]=_ignUni[tf]||[]).push({mv:ign.mv,volX:ign.volX});}catch(e){ign=null;}}   // 2026-11-05-a/c
     const kl=klFull?(hiTF?klFull:klFull.slice(-20)):null; // legacy пресметки остануваат на стариот број барови
     if(kl&&kl.length>=10){
       const h=Math.floor(kl.length/2);let eB=0,eT=0,lB=0,lT=0;
@@ -3105,7 +3117,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(confLong){score+=3;sigs.push({l:confLabel,t:'confluence-bull'});}
   else if(confShort){score+=3;sigs.push({l:confLabel,t:'confluence-bear'});}
 
-  if(score===0&&!(ign&&ign.phase))return null;   // 2026-11-05-a: an igniting coin stays visible even with SCORE 0
+  if(score===0&&!(ign&&(ign.phase||ign.volX>=2)))return null;   // 2026-11-05-a/c: igniting / volume coins stay (re-scored vs market after the scan)
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   // dir = what the indicators expect NEXT.
   // liqType names the EVENT, not the outlook: liqType 'bull' is a short squeeze
@@ -3990,7 +4002,7 @@ function buildDigest(){
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   o+='RP4h = RE-PUMP ARM on the last closed 4h bar (spike >= +80% 4-60 days back, retrace >= 80%, base held, close in lower 35%, BBW squeeze). PUMP LAB v6 26.10: P(+50%/14d) no edge vs RANDOM; P(-20%/14d) 34.9% vs 17.2% -> no new long. Checked for the shown rows (max 30) once per 4h bar; a LAB v6 run covers the universe.\n';
   if(typeof patLegend==='function')o+=patLegend();   // 2026-10-27-a
-  o+='IGN (2026-11-05-a, observation only, no SCORE vote) = is the coin starting to move NOW, on closed bars of the row TF: recent R bars (15m 6 = 1.5h, 1h 3, 4h 2) vs up to 96 base bars before them. IGN 0-100 = volume x (avg recent / median base bar, 8x = full) 30 + breakout outside the base (5% = full) 20 + OI coins change (+15% = full) 25 + FLOW (OBV and Chaikin A/D at a new extreme vs the base in the move direction: both 15, one 7) + taker 5 + tight base 5. FLOW ✔✔ = both, ✔OBV / ✔A/D = one, ✗ = price moved without the volume flow. IGNITE = vol >= 3x, outside the base, OI coins >= +2%, move < 25% | RUN = move >= 25% over R (late: CHASE risk) | 👀 WAKE = vol >= 2x at the base edge. Not an entry.\n';
+  o+='IGN (2026-11-05-a, observation only, no SCORE vote) = is the coin starting to move NOW, on closed bars of the row TF: recent R bars (15m 6 = 1.5h, 1h 3, 4h 2) vs up to 96 base bars before them. IGN 0-100 = volume x (avg recent / median base bar, 8x = full) 30 + breakout outside the base (5% = full) 20 + OI coins change (+15% = full) 25 + FLOW (OBV and Chaikin A/D at a new extreme vs the base in the move direction: both 15, one 7) + taker 5 + tight base 5. FLOW ✔✔ = both, ✔OBV / ✔A/D = one, ✗ = price moved without the volume flow. RELATIVE (2026-11-05-c): move_rel = move - market median move, vol_rel = vol x / market median vol x (universe of the last full scan, same TF); ▲/▼ = direction of move_rel. IGNITE = vol_rel >= 3, outside the base, |move_rel| >= 2%, OI coins >= +2% | RUN = |move_rel| >= 25% (late: CHASE risk) | 👀 WAKE = vol_rel >= 2 at the base edge, |move_rel| >= 1%. Not an entry.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
   if(S.srch&&S.srchList.length>1){
@@ -8912,26 +8924,42 @@ function ignCompute(kl,tf,oiChg){
   for(let i=b0;i<=b1;i++){if(obv[i]>oHi)oHi=obv[i];if(obv[i]<oLo)oLo=obv[i];if(ad[i]>aHi)aHi=ad[i];if(ad[i]<aLo)aLo=ad[i];}
   const volX=rv/R/med,barX=rmax/med;
   let bh=-Infinity,bl=Infinity;for(let i=b0;i<=b1;i++){if(H[i]>bh)bh=H[i];if(L[i]<bl)bl=L[i];}
-  const c=C[n-1],c0=C[n-1-R],mv=c0>0?c/c0-1:0,dir=mv>=0?1:-1;
-  const brk=dir>0?(bh>0?c/bh-1:0):(c>0?bl/c-1:0);
-  const range=bl>0?bh/bl-1:null,taker=rt>0?rb/rt:0.5,tk=dir>0?taker:1-taker;
-  const obvOk=dir>0?obv[n-1]>oHi:obv[n-1]<oLo,adOk=dir>0?ad[n-1]>aHi:ad[n-1]<aLo,flow=(obvOk?1:0)+(adOk?1:0);
-  const sV=Math.max(0,Math.min(1,Math.log2(Math.max(volX,1))/3))*30;
+  const c=C[n-1],c0=C[n-1-R],mv=c0>0?c/c0-1:0;
+  const brkUp=bh>0?c/bh-1:0,brkDn=c>0?bl/c-1:0;
+  const range=bl>0?bh/bl-1:null,taker=rt>0?rb/rt:0.5;
+  const g={volX,barX,mv,brkUp,brkDn,range,taker,oi:oiChg,R,tf,baseHi:bh,baseLo:bl,t:+k[n-1][0],
+    obvUp:obv[n-1]>oHi,obvDn:obv[n-1]<oLo,adUp:ad[n-1]>aHi,adDn:ad[n-1]<aLo};
+  return ignFinal(g,(typeof _ignMkt!=='undefined'&&_ignMkt[tf])||null);
+}
+// market context per TF from the last full scan: medians of the raw move and volume x of every analysed coin
+let _ignMkt={},_ignUni={};
+function ignMed(a){if(!a.length)return null;const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)];}
+function ignFinal(g,mkt){
+  const m=mkt&&mkt.n>=30?mkt:null,mMv=m?m.mv:0,mVol=m&&m.volX>1?m.volX:1;
+  const mvRel=g.mv-mMv,volRel=g.volX/mVol,dir=mvRel>=0?1:-1;
+  const brk=dir>0?g.brkUp:g.brkDn,obvOk=dir>0?g.obvUp:g.obvDn,adOk=dir>0?g.adUp:g.adDn,flow=(obvOk?1:0)+(adOk?1:0),tk=dir>0?g.taker:1-g.taker;
+  const sV=Math.max(0,Math.min(1,Math.log2(Math.max(volRel,1))/3))*30;
   const sB=brk>0?Math.min(1,brk/0.05)*20:0;
-  const sO=oiChg!=null&&oiChg>0?Math.min(1,oiChg/15)*25:0;
+  const sO=g.oi!=null&&g.oi>0?Math.min(1,g.oi/15)*25:0;
   const sF=flow===2?15:flow===1?7:0;
   const sT=Math.max(0,Math.min(1,(tk-0.5)/0.1))*5;
-  const sR=range==null?0:range<0.12?5:range<0.25?2:0;
-  const score=Math.round(sV+sB+sO+sF+sT+sR);
-  let phase='';
-  if(Math.abs(mv)>=0.25)phase='RUN';
-  else if(volX>=3&&brk>0&&(oiChg==null||oiChg>=2))phase='IGNITE';
-  else if(volX>=2&&brk>-0.02)phase='WAKE';
-  return{score,phase,dir,volX,barX,brk,mv,range,taker,oi:oiChg,R,tf,baseHi:bh,baseLo:bl,t:+k[n-1][0],obvOk,adOk,flow};
+  const sR=g.range==null?0:g.range<0.12?5:g.range<0.25?2:0;
+  const am=Math.abs(mvRel);let phase='';
+  if(am>=0.25)phase='RUN';
+  else if(volRel>=3&&brk>0&&am>=0.02&&(g.oi==null||g.oi>=2))phase='IGNITE';
+  else if(volRel>=2&&brk>-0.02&&am>=0.01)phase='WAKE';
+  return Object.assign(g,{score:Math.round(sV+sB+sO+sF+sT+sR),phase,dir,mvRel,volRel,brk,obvOk,adOk,flow,mkt:m?{mv:m.mv,volX:m.volX,n:m.n,t:m.t}:null});
+}
+// after a full scan: universe medians -> re-score every IGN on the board
+function ignFinalizeScan(){
+  const now=Date.now();
+  for(const tf in _ignUni){const a=_ignUni[tf];if(a.length>=30)_ignMkt[tf]={mv:ignMed(a.map(x=>x.mv)),volX:ignMed(a.map(x=>x.volX)),n:a.length,t:now};}
+  (S.signals||[]).forEach(x=>{Object.entries(x.tfData||{}).forEach(([tf,r])=>{if(r&&r.ign)ignFinal(r.ign,_ignMkt[tf]&&now-_ignMkt[tf].t<2*3600e3?_ignMkt[tf]:null);});if(x.ign&&x.ign.tf)ignFinal(x.ign,_ignMkt[x.ign.tf]||null);});
 }
 function ignShort(g){
   const p=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
-  return `🔥IGN ${g.score} ${g.phase}${g.dir>0?'▲':'▼'} vol×${g.volX.toFixed(1)} (bar×${g.barX.toFixed(0)}) brk ${p(g.brk)} mv ${p(g.mv)}/${g.R}b${g.oi!=null?' OI◆ '+(g.oi>=0?'+':'')+g.oi.toFixed(1)+'%':''} FLOW ${g.flow===2?'✔✔':g.flow===1?'✔'+(g.obvOk?'OBV':'A/D'):'✗'}`;
+  const mk=g.mkt?` (mkt ${p(g.mkt.mv)}, vol ×${g.mkt.volX.toFixed(1)})`:' (mkt n/a)';
+  return `🔥IGN ${g.score} ${g.phase||'—'}${g.dir>0?'▲':'▼'} vol×${g.volX.toFixed(1)}→rel ×${g.volRel.toFixed(1)} (bar×${g.barX.toFixed(0)}) brk ${p(g.brk)} mv ${p(g.mv)}→rel ${p(g.mvRel)}/${g.R}b${mk}${g.oi!=null?' OI◆ '+(g.oi>=0?'+':'')+g.oi.toFixed(1)+'%':''} FLOW ${g.flow===2?'✔✔':g.flow===1?'✔'+(g.obvOk?'OBV':'A/D'):'✗'}`;
 }
 function ignTagHTML(s){
   const g=s.ign;if(!g||!g.phase)return '';
@@ -8945,15 +8973,16 @@ function ignDigestBlock(rows){
   const rank=new Map([...(S.signals||[])].sort((a,b)=>b.score-a.score).map((x,i)=>[x.coin,i+1]));
   const top=all.filter(x=>!shown.has(x.coin)).sort((a,b)=>b.ign.score-a.ign.score).slice(0,8);
   const ph={IGNITE:0,RUN:0,WAKE:0};all.forEach(x=>ph[x.ign.phase]++);
-  let o=`\nIGNITION (whole scan: IGNITE ${ph.IGNITE} · RUN ${ph.RUN} · WAKE ${ph.WAKE}) · top ${top.length} by IGN NOT in the rows above (SCORE rank shows why they were hidden):\n`;
+  const mk=_ignMkt[S.tf==='all'?'15m':S.tf];
+  let o=`\nIGNITION vs MARKET (${mk?`market median over R: move ${(mk.mv*100>=0?'+':'')+(mk.mv*100).toFixed(1)}%, vol ×${mk.volX.toFixed(2)}, n ${mk.n}, ${igHM(mk.t)}`:'no full-scan market sample yet: raw values'}) · IGNITE ${ph.IGNITE} · RUN ${ph.RUN} · WAKE ${ph.WAKE} (▲ ${all.filter(x=>x.ign.dir>0).length} / ▼ ${all.filter(x=>x.ign.dir<0).length}) · top ${top.length} by IGN NOT in the rows above (SCORE rank shows why they were hidden):\n`;
   if(!top.length)o+=' — (all igniting coins are already in the rows above)\n';
   top.forEach(x=>{o+=` ${x.coin}|PX ${fmt(x.price)}|24h ${(x.priceChg>=0?'+':'')+x.priceChg.toFixed(1)}%|${ignShort(x.ign)}|base ${fmt(x.ign.baseLo)}–${fmt(x.ign.baseHi)}|SCORE ${x.score} (#${rank.get(x.coin)||'?'} of ${S.signals.length})${(typeof chaseInfo==='function'&&chaseInfo(x.priceChg))?'|⚠'+chaseInfo(x.priceChg).tag:''}\n`;});
   return o;
 }
 
 // ── 🔥 ALARM: whole-market sweep every IGA.iv, independent of the scan ──
-const IGA={on:false,thr:55,minVolM:3,iv:3*60000,cool:4*3600e3,mute:false,notif:false};
-let _igSnaps=[],_igAlerted={},_igLast=0,_igBusy=false,_igRes=[],_igEv=[],_igCand=0,_igFlash=null,_igTitle=null;
+const IGA={on:false,thr:55,minVolM:3,iv:3*60000,cool:4*3600e3,mute:false,notif:false,both:false};
+let _igSnaps=[],_igAlerted={},_igLast=0,_igBusy=false,_igRes=[],_igEv=[],_igCand=0,_igFlash=null,_igTitle=null,_igMk=null;
 try{Object.assign(IGA,JSON.parse(localStorage.getItem('igAlarm')||'{}'));}catch(e){}
 try{_igAlerted=JSON.parse(localStorage.getItem('igAlerted')||'{}')||{};}catch(e){_igAlerted={};}
 function igSave(){try{localStorage.setItem('igAlarm',JSON.stringify(IGA));localStorage.setItem('igAlerted',JSON.stringify(_igAlerted));}catch(e){}}
@@ -8996,14 +9025,18 @@ async function igSweep(){
     const t=await apiFetch('/ticker/24hr');if(!t||!t.length)return;
     const now=Date.now(),px={},qv={},chg={};
     t.forEach(x=>{if(!x.symbol||!x.symbol.endsWith('USDT')||x.symbol.includes('_'))return;const c=x.symbol.replace(/USDT$/,'');px[c]=+x.lastPrice;qv[c]=+x.quoteVolume;chg[c]=+x.priceChangePercent;});
-    _igSnaps.push({t:now,px});_igSnaps=_igSnaps.filter(z=>now-z.t<=40*60000);
+    _igSnaps.push({t:now,px});_igSnaps=_igSnaps.filter(z=>now-z.t<=100*60000);
     const ago=m=>{let b=null;for(const z of _igSnaps)if(now-z.t>=m*60000-30000)b=z;return b;};
-    const s5=ago(5),s15=ago(15),cand=[];
+    const s5=ago(5),s15=ago(15),s90=ago(90),cand=[];
+    // market median of each window (2026-11-05-c): a coin is a candidate only for its move RELATIVE to the market
+    const medOf=sn=>{if(!sn)return 0;const a=[];for(const c in px)if(sn.px[c]>0&&(qv[c]||0)>=IGA.minVolM*1e6)a.push(px[c]/sn.px[c]-1);return a.length>=30?ignMed(a):0;};
+    const m5=medOf(s5),m15=medOf(s15),m90=s90?medOf(s90):null;
     for(const c in px){
       if(!(px[c]>0))continue;
       if((typeof LAB_STABLE!=='undefined'&&LAB_STABLE.has(c))||(typeof isTradFi==='function'&&isTradFi(c))||(typeof blockReason==='function'&&blockReason(c)))continue;
       if((qv[c]||0)<IGA.minVolM*1e6)continue;
-      const d5=s5&&s5.px[c]>0?px[c]/s5.px[c]-1:null,d15=s15&&s15.px[c]>0?px[c]/s15.px[c]-1:null;
+      const d5=s5&&s5.px[c]>0?px[c]/s5.px[c]-1-m5:null,d15=s15&&s15.px[c]>0?px[c]/s15.px[c]-1-m15:null;   // relative to the market
+      const up=(d5||0)>0||(d15||0)>0;if(!IGA.both&&!up)continue;
       if((d5!=null&&Math.abs(d5)>=0.02)||(d15!=null&&Math.abs(d15)>=0.03))cand.push({c,d5,d15,m:Math.max(Math.abs(d5||0)*1.5,Math.abs(d15||0))});
     }
     cand.sort((a,b)=>b.m-a.m);_igCand=cand.length;
@@ -9013,10 +9046,13 @@ async function igSweep(){
         const kl=await apiFetch(`/klines?symbol=${x.c}USDT&interval=15m&limit=120`);if(!kl)return;
         let oi=null;try{const oh=await fetchOiHist(x.c,'15m');if(oh&&oh.oiCoinsChg!=null)oi=oh.oiCoinsChg;}catch(e){}
         const g=ignCompute(kl,'15m',oi);if(!g)return;
+        const mk=_ignMkt['15m']&&now-_ignMkt['15m'].t<2*3600e3?Object.assign({},_ignMkt['15m']):{mv:0,volX:1,n:30,t:now,snap:1};
+        if(m90!=null)mk.mv=m90;ignFinal(g,mk);if(!IGA.both&&g.dir<0)return;
         res.push({coin:x.c,d5:x.d5,d15:x.d15,px:px[x.c],chg24:chg[x.c],vol:qv[x.c],g,t:now});
       }));
     }
     res.sort((a,b)=>b.g.score-a.g.score);_igRes=res;
+    _igMk={m5,m15,m90};
     const ev=res.filter(r=>(r.g.phase==='IGNITE'||r.g.phase==='RUN')&&r.g.score>=IGA.thr&&!(now-(_igAlerted[r.coin]||0)<IGA.cool));
     if(ev.length){ev.forEach(e=>{_igAlerted[e.coin]=now;});igSave();_igEv=ev;igBeep();igNotify(ev);igFlash(ev);igShow(ev,false);}
   }catch(e){}
@@ -9053,13 +9089,14 @@ function igShow(list,isStatus){
   const p=igEnsurePop(),box=document.getElementById('igBox'),warm=_igSnaps.length&&Date.now()-_igSnaps[0].t<15*60000;
   box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span style="font-family:var(--mono);font-weight:bold;color:var(--orange)">🔥 ${isStatus?'ALARM · статус':'ПАЛЕЊЕ'} · ${IGA.on?'ВКЛУЧЕН':'ИСКЛУЧЕН'}${_igLast?' · последна проверка '+igHM(_igLast):''}</span>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">кандидати ${_igCand} · праг IGN ${IGA.thr}${warm?' · ⏳ загревање (Δ15m по 15 мин)':''}</span></div>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">кандидати ${_igCand} · праг IGN ${IGA.thr} · ${IGA.both?'▲▼':'само ▲'}${_igMk?` · пазар 15m ${(_igMk.m15*100>=0?'+':'')+(_igMk.m15*100).toFixed(1)}%`:''}${warm?' · ⏳ загревање (Δ15m по 15 мин)':''}</span></div>
     ${(list&&list.length)?list.map(igCard).join(''):'<div style="font-size:12px;color:var(--muted);margin-top:10px">Нема коин што пали во последната проверка.</div>'}
-    <div style="font-size:11px;color:var(--muted);margin-top:10px">Проверка на секои 3 мин: коини со ≥2% за 5 мин или ≥3% за 15 мин (24h ≥ $${IGA.minVolM}M) → 15m свеќи + OI → IGN. Аларм = IGNITE/RUN со IGN ≥ ${IGA.thr}, еднаш на 4ч по коин. Страницата мора да остане отворена. Не е влез.</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:10px">Проверка на секои 3 мин: коини со ≥2% за 5 мин или ≥3% за 15 мин <b>повеќе од пазарот</b> (медијана на сите коини; 24h ≥ $${IGA.minVolM}M) → 15m свеќи + OI → IGN релативно на пазарот. Аларм = IGNITE/RUN со IGN ≥ ${IGA.thr}, еднаш на 4ч по коин. Страницата мора да остане отворена. Не е влез.</div>
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
       <button class="w-btn" onclick="igCopy()">📋 КОПИРАЈ</button>
       <button class="w-btn" onclick="IGA.mute=!IGA.mute;igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">${IGA.mute?'🔊 ВКЛ. ЗВУК':'🔇 МУТИРАЈ'}</button>
       <button class="w-btn" onclick="igNotifToggle()">${IGA.notif?'🔕 БЕЗ ИЗВЕСТУВАЊА':'🔔 СИСТЕМСКИ ИЗВЕСТУВАЊА'}</button>
+      <button class="w-btn" onclick="IGA.both=!IGA.both;igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})" title="▲ = само коини што растат побрзо од пазарот (стандард) · ▲▼ = и коини што паѓаат побрзо">${IGA.both?'▲▼ ДВЕТЕ':'▲ САМО РАСТ'}</button>
       <button class="w-btn" onclick="IGA.thr=Math.max(30,IGA.thr-5);igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">праг −5</button>
       <button class="w-btn" onclick="IGA.thr=Math.min(90,IGA.thr+5);igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">праг +5</button>
       <button class="w-btn" onclick="IGA.on=false;igSave();igClose();toast('🔥 ALARM исклучен')">⏸ ИСКЛУЧИ</button>
