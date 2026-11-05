@@ -514,6 +514,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <span class="search-x" id="srchX" onclick="clrSrch()">✕</span>
   </div>
   <div class="dot" id="dot"></div>
+  <button class="hm-btn" id="igBtn" onclick="igButton()" style="margin-right:4px;border-color:rgba(255,102,0,.5);color:var(--orange)" title="🔥 ALARM: го следи целиот пазар на секои 3 мин и јавува кога коин ПАЛИ (волумен ×, пробив, OI)">🔥 ALARM</button>
   <button class="hm-btn" id="wBtn" onclick="watchOpen()" style="margin-right:4px;border-color:var(--green);color:var(--green)">🔔 WATCH</button>
   <button class="hm-btn" onclick="toggleHelp()" style="margin-right:4px;border-color:rgba(255,208,0,.3);color:var(--yellow)">❓</button>
   <button class="hm-btn" id="suTabBtn" onclick="toggleSetups()" style="margin-right:4px">📊 СЕТАПИ</button><button class="hm-btn" id="hmTabBtn" onclick="toggleHeatmap()">⚡ HEATMAP</button>
@@ -568,6 +569,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="ftab f-poc"         onclick="setFil('poc',this)">📊 POC</div>
     <div class="ftab f-conf"        onclick="setFil('conf',this)" style="font-weight:800">⚡ CONFLUENCE</div>
     <div class="ftab"               onclick="setFil('clean',this)" style="border-color:rgba(0,255,136,.45);color:var(--green);font-weight:800">✅ CLEAN15</div>
+    <div class="ftab"               onclick="setFil('ign',this)" style="border-color:rgba(255,102,0,.55);color:var(--orange);font-weight:800" title="Коини што ТОКМУ СЕГА палат (IGNITE) или веќе трчаат (RUN): волумен ×, пробив на база, OI◆">🔥 ПАЛЕЊЕ</div>
     <div class="ftab"               onclick="setFil('patm',this)" style="border-color:rgba(0,229,255,.4);color:var(--accent);font-weight:700" title="M2 структура потврдена во последните 5 свеќи (врат / QML / BOS-CHoCH)">🔷 ФОРМИ</div>
     <div class="ftab"               onclick="setFil('patc',this)" style="border-color:rgba(255,208,0,.35);color:var(--yellow)" title="Насочена свеќна форма на последната затворена свеќа">🕯 СВЕЌИ</div>
     <div class="ftab f-btcfree"     onclick="setFil('btcfree',this)">🆓 BTC FREE</div>
@@ -608,6 +610,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
     <div class="sort-btn"        id="sort-vol"   onclick="setSort('vol',this)">Волумен</div>
     <div class="sort-btn"        id="sort-fr"    onclick="setSort('fr',this)">FR</div>
     <div class="sort-btn"        id="sort-oi"    onclick="setSort('oi',this)">OI</div>
+    <div class="sort-btn"        id="sort-ign"   onclick="setSort('ign',this)" style="color:var(--orange)" title="Подреди по IGN: дали коинот ТОКМУ СЕГА почнува да се движи (волумен ×, пробив на база, OI◆)">🔥 IGN</div>
     <div class="thresh-wrap">
       <span class="thresh-label">MIN %:</span>
       <input class="thresh-input" id="minChg" type="number" value="0" min="0" max="100" step="0.5" oninput="renderList()">
@@ -1277,6 +1280,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-05-b  IGN + OBV & A/D (user: "OBV and A/D moving together is the real sign of a move").
+//    OBV (close vs previous close x volume) and Chaikin A/D (close location in the bar x volume)
+//    are run over the same klines. FLOW ✔✔ = BOTH make a new extreme vs the base window in the move
+//    direction (new high on a rise, new low on a fall), ✔ = one of them, ✗ = neither (price moved
+//    without the volume flow behind it). Weights now: volume 30, breakout 20, OI 25, OBV+A/D 15,
+//    taker 5, tight base 5. Not a gate: the flag is shown on rows, digest and alarm cards so the
+//    alarms can later be split by it (LAB v5 found no PRE-pump edge in OBV/A-D; this uses them as
+//    confirmation of a move already under way, which is a different question).
+//  2026-11-05-a  IGNITION engine + universe-wide IGNITION ALARM. TRUTH AIO.P 03-05.11: the move ran
+//    ~45h (ignition 03.11 ~16:00 +25% on 15m volume x10+, Fib .618 pullback 04.11 03:00, breakout
+//    05.11 to 0.05174) and was never seen: at its peak AIO had SCORE 9, and the digest shows the
+//    top 12 by SCORE (9-12, mostly thin collapsed coins). Nothing in the scanner looked for "a coin
+//    is starting to move NOW", and nothing watched the whole market between manual scans.
+//    IGN (per row, observation only, no SCORE vote): on closed bars of the row TF, recent window
+//    R (15m 6 bars = 1.5h, 1h 3, 4h 2) vs a base of up to 96 bars before it:
+//      volume x (avg recent quote vol / median base bar), breakout outside the base hi/lo in the move
+//      direction, move over R, OI coins change (same 6-period lookback), taker share, base tightness.
+//      IGN 0-100 = vol 35 + breakout 20 + OI 25 + taker 10 + tight base 10.
+//      phase IGNITE = vol x >= 3, outside the base, OI coins >= +2% (if real OI), move < 25%;
+//      RUN = move >= 25% over R (late, CHASE territory); WAKE = vol x >= 2 at the base edge.
+//    Sort "🔥 IGN", filter "🔥 ПАЛЕЊЕ", row tag 🔥IGN n / 👀, digest tag + IGNITION block (top 8 by
+//    IGN that the SCORE cut hid, with their SCORE rank) so an AIO is visible even under sort=score.
+//    🔥 ALARM (header): every 3 min one /ticker/24hr call; coins that moved >= 2% in 5 min or >= 3% in
+//    15 min (24h vol >= 3M) get 15m klines + OI and the IGN test; IGNITE / RUN with IGN >= 55 =
+//    popup + sound + system notification + title flash, once per coin per 4h. Works with no scan
+//    running; the page must stay open (desktop browser). Needs ~5-15 min of snapshots to warm up.
+//    Not an entry: entry stays CLEAN15 / pre-entry checklist / WAVE pullback plan.
 //  2026-11-04-b  WAVE LAB 15m+1h (🧪 study "WAVE 15m+1h"): the same event/entry/SL/TP rules as WAVE
 //    1h+4h, now on 15m (1500 bars ~15.6 days, W 192 = 48h, forward 96 = 24h, leg >= +25% because
 //    +40% inside 48h is rare) + 1h (unchanged: 1000 bars, W 120, fwd 48, leg >= +40%).
@@ -1292,7 +1322,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-04-b';
+const APP_BUILD='2026-11-05-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2183,7 +2213,7 @@ function momRegime(s){
 }
 
 function buildSignals(partial){
-  return Object.values(partial).filter(x=>x.score>0).map(x=>{
+  return Object.values(partial).filter(x=>x.score>0||Object.values(x.tfData||{}).some(r=>r&&r.ign&&r.ign.phase)).map(x=>{
     const best=x.tfData[x.bestTF]||Object.values(x.tfData)[0];
     return{...x,...best,tf:x.bestTF,isAlpha:x.isAlpha,isFav:x.isFav,tfData:x.tfData,lsExtreme:x.lsExtreme,netInflow:x.netInflow,netOutflow:x.netOutflow,isUsdtProtocol:x.isUsdtProtocol,squeezeActivation:x.squeezeActivation,sqzFired:(x.sqzFiredAny||best.sqzFired||false),maSqueeze:x.maSqueeze,maSqueezeDir:x.maSqueezeDir,maSqueezeWidth:x.maSqueezeWidth,coil:(x.coil||best.coil||false),coilRangePct:(x.coilRangePct??best.coilRangePct??null),coilVolRatio:(x.coilVolRatio??best.coilVolRatio??null),jmaDwmaCrossUp:x.jmaDwmaCrossUp,jmaDwmaCrossDown:x.jmaDwmaCrossDown,jmaAbove:x.jmaAbove,confScore:x.confScore,confDir:x.confDir,confLabel:x.confLabel,confVotes:x.confVotes,btcCorr:x.btcCorr};
   }).sort((a,b)=>{
@@ -2763,6 +2793,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   let winHi=null,winLo=null,fromHiPct=null,fromLoPct=null,winBars=0;
   let cvdNewLow=false,cvdNewHigh=false,liqWick=false,liqPx=null,liqPx3=null;
   let pat=null;   // 2026-10-27-a PATTERNS M1+M2 (observation only)
+  let ign=null;   // 2026-11-05-a IGNITION (observation only)
 
   // -- REAL OI FIRST: everything downstream (squeeze detector, confluence) needs it --
   try{
@@ -2790,6 +2821,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
     const diWin=(tf==='4h'||tf==='12h'||tf==='1d'||tf==='1w')?1:2; // 4h/12h/1d/1w: само 1 свека, 1h и помали: 2 свекки
     if(klFull&&klFull.length>=55)sqz=calcSqzMomAO(klFull,diWin); // SQZMOM_LB_AO — секогаш во дефолт скен
     if(klFull&&typeof patScan==='function'){try{pat=patScan(klFull,tf);}catch(e){pat=null;}}   // 2026-10-27-a: same klines, no extra request
+    if(klFull&&typeof ignCompute==='function'){try{ign=ignCompute(klFull,tf,oiReal?oiCoinsChg:null);}catch(e){ign=null;}}   // 2026-11-05-a
     const kl=klFull?(hiTF?klFull:klFull.slice(-20)):null; // legacy пресметки остануваат на стариот број барови
     if(kl&&kl.length>=10){
       const h=Math.floor(kl.length/2);let eB=0,eT=0,lB=0,lT=0;
@@ -3073,7 +3105,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   if(confLong){score+=3;sigs.push({l:confLabel,t:'confluence-bull'});}
   else if(confShort){score+=3;sigs.push({l:confLabel,t:'confluence-bear'});}
 
-  if(score===0)return null;
+  if(score===0&&!(ign&&ign.phase))return null;   // 2026-11-05-a: an igniting coin stays visible even with SCORE 0
   const bulls=sigs.filter(s=>s.t==='bull').length,bears=sigs.filter(s=>s.t==='bear').length,liqs=sigs.filter(s=>s.t==='liq').length;
   // dir = what the indicators expect NEXT.
   // liqType names the EVENT, not the outlook: liqType 'bull' is a short squeeze
@@ -3082,7 +3114,7 @@ async function analyzeOneTF(coin,ticker,fr,tf){
   // CONFLUENCE verdict. Confluence (4+ indicators agreeing) outranks raw tag counting.
   const dir=confDir!=='none'?confDir:(bulls>bears?'bull':bears>bulls?'bear':'neutral');
   const src=computeSrc({lastPrice:price,indexPrice:_iMap[coin],interestRate:_irMap[coin],fr,tfPriceChg,priceChg});
-  return{src,coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
+  return{ign,src,coin,price,priceChg,tfPriceChg,volume,volM,high24,low24,cvdDelta,takerBuyPct,oiChange,oiUsdt,oiCoins,
     oiCoinsChg,oiCoinsChg3,oiDom,oiRevalPct,oiFlowPct,oiReal,oiShape,oiFromPeak,oiDrawdown,
     oiTs,oiBaseChg,oiBaseUsdtChg,oiBaseTs,oiBasePts,oiFix,oiFixFlag,liqPx,liqPx3,
     winHi,winLo,fromHiPct,fromLoPct,winBars,cvdNewLow,cvdNewHigh,
@@ -3121,6 +3153,7 @@ const FILTER_MAP={
   poc:    s=>s.sigs?.some(sg=>sg.l?.startsWith('POC')),
   conf:   s=>s.confScore>=4,
   clean:  s=>{const r=_clean[s.coin];return !!(r&&r.grade!=='WAIT');},
+  ign:    s=>!!(s.ign&&(s.ign.phase==='IGNITE'||s.ign.phase==='RUN')),   // 2026-11-05-a
   btcfree:s=>s.btcCorr!==null&&s.btcCorr!==undefined&&Math.abs(s.btcCorr)<0.4,
   obvdiv: s=>!!(s.obvDiv&&s.obvDiv.on),
   cciobv1100:s=>s.sigs?.some(sg=>sg.l==='CCIOBV S1100'),
@@ -3149,7 +3182,8 @@ function applyFilters(){
   if(minVolM>0)data=data.filter(s=>(s.volM||s.volume/1e6)>=minVolM);
   const sortFn={score:(a,b)=>b.score-a.score,chg:(a,b)=>Math.abs(b.priceChg)-Math.abs(a.priceChg),
     vol:(a,b)=>b.volume-a.volume,fr:(a,b)=>Math.abs(b.fr)-Math.abs(a.fr),
-    oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange)}[S.sort]||((a,b)=>b.score-a.score);
+    oi:(a,b)=>Math.abs(b.oiChange)-Math.abs(a.oiChange),
+    ign:(a,b)=>((b.ign&&b.ign.score)||0)-((a.ign&&a.ign.score)||0)||b.score-a.score}[S.sort]||((a,b)=>b.score-a.score);
   return [...data].sort(sortFn);
 }
 
@@ -3185,6 +3219,7 @@ function rowHTML(s){
   if(blk)tags.push(`<span class="ctag" style="background:rgba(255,34,68,.22);color:var(--red);border:1px solid var(--red);font-weight:700">⛔${blk}</span>`);
   // CHASE (LAB v3): big up-day = negative expectancy for a new long
   if(!blk&&typeof chaseTagHTML==='function'){const ch=chaseTagHTML(s);if(ch)tags.push(ch);}
+  if(!blk&&typeof ignTagHTML==='function'){const ig=ignTagHTML(s);if(ig)tags.unshift(ig);}   // 2026-11-05-a
   if(!blk&&typeof rp4TagHTML==='function'){const r4=rp4TagHTML(s.coin);if(r4)tags.push(r4);}   // 2026-10-26-a
   if(!blk&&s.obvDiv&&s.obvDiv.on)tags.push(`<span class="ctag" title="OBV_DIV (1h, 48h): OBV расте при рамна цена. LAB v5: НЕ најавува пумпа, но P(−20% за 4 дена) 2.9% наспроти 4.7% — помал ризик за лонг" style="background:rgba(0,229,255,.10);color:var(--accent);border:1px solid rgba(0,229,255,.45)">📈OBV↑</span>`);
   if(!blk&&typeof newsTagHTML==='function'){const nt=newsTagHTML(s.coin);if(nt)tags.push(nt);}
@@ -3955,6 +3990,7 @@ function buildDigest(){
   o+='CHASE = 24h >= +20% (LAB v3: after a +20-40% day median 7d -9%, P(-20%) 41%; after >= +40% median -19%, P(-20%) 74%) -> no new long on the candle.\n';
   o+='RP4h = RE-PUMP ARM on the last closed 4h bar (spike >= +80% 4-60 days back, retrace >= 80%, base held, close in lower 35%, BBW squeeze). PUMP LAB v6 26.10: P(+50%/14d) no edge vs RANDOM; P(-20%/14d) 34.9% vs 17.2% -> no new long. Checked for the shown rows (max 30) once per 4h bar; a LAB v6 run covers the universe.\n';
   if(typeof patLegend==='function')o+=patLegend();   // 2026-10-27-a
+  o+='IGN (2026-11-05-a, observation only, no SCORE vote) = is the coin starting to move NOW, on closed bars of the row TF: recent R bars (15m 6 = 1.5h, 1h 3, 4h 2) vs up to 96 base bars before them. IGN 0-100 = volume x (avg recent / median base bar, 8x = full) 30 + breakout outside the base (5% = full) 20 + OI coins change (+15% = full) 25 + FLOW (OBV and Chaikin A/D at a new extreme vs the base in the move direction: both 15, one 7) + taker 5 + tight base 5. FLOW ✔✔ = both, ✔OBV / ✔A/D = one, ✗ = price moved without the volume flow. IGNITE = vol >= 3x, outside the base, OI coins >= +2%, move < 25% | RUN = move >= 25% over R (late: CHASE risk) | 👀 WAKE = vol >= 2x at the base edge. Not an entry.\n';
   const blkAll=blockedList();
   if(blkAll.length)o+='BLOCKED (not scanned, never trade): '+blkAll.map(c=>c+' '+blockReason(c)).join(' | ')+'\n';
   if(S.srch&&S.srchList.length>1){
@@ -4050,6 +4086,7 @@ function buildDigest(){
     if(s.btcCorr!==null&&s.btcCorr!==undefined)tl.push(Math.abs(s.btcCorr)<0.4?'BTC FREE':'BTC LINKED');
     if(typeof chaseInfo==='function'){const ch=chaseInfo(s.priceChg);if(ch)tl.unshift('⚠'+ch.tag);}
     if(typeof rp4Info==='function'){const a=rp4Info(s.coin);if(a)tl.unshift('⚠'+rp4Short(a));}   // 2026-10-26-a
+    if(s.ign&&s.ign.phase&&typeof ignShort==='function')tl.unshift(ignShort(s.ign));   // 2026-11-05-a
     {const q=_oi24[s.coin];if(q&&q.h===Math.floor(Date.now()/3600000)&&q.c24!=null&&Math.abs(q.c24)>=0.25)tl.unshift('OI24h◆ '+(q.c24>=0?'+':'')+(q.c24*100).toFixed(0)+'%');}
     if(s.oiFix)tl.unshift('OI FIX '+s.oiFix+(s.oiFixFlag?' ('+s.oiFixFlag+')':''));   // 2026-10-15-b
     if(typeof newsDigestTag==='function'){const nt=newsDigestTag(s.coin);if(nt)tl.unshift(nt);}
@@ -4101,6 +4138,7 @@ function buildDigest(){
     ].join('|')+'\n';
   });
 
+  if(typeof ignDigestBlock==='function')o+=ignDigestBlock(rows);   // 2026-11-05-a
   if(typeof newsDigestBlock==='function')o+=newsDigestBlock(rows);
   o+=cleanDigest(rows);
   o+='\nSRC = who drives the move. Format: <FAST><SLOW> <basis%> [z] [conf].\n'
@@ -8852,6 +8890,189 @@ async function loadPatDetail(coin,force){
   if(S.detailCoin!==coin)return;
   ct.innerHTML=patDetailHTML(res);
 }
+
+// ══════════════════════════════════════════════════════════════
+// IGNITION ENGINE + 🔥 ALARM (2026-11-05-a)
+// ══════════════════════════════════════════════════════════════
+const IGN={R:{'1m':10,'5m':6,'15m':6,'1h':3,'4h':2,'12h':1,'1d':1,'1w':1},BASE:96};
+function ignCompute(kl,tf,oiChg){
+  let k=kl||[];if(k.length&&+k[k.length-1][6]>Date.now())k=k.slice(0,-1);   // closed bars only
+  const n=k.length,R=IGN.R[tf]||4;if(n<R+30)return null;
+  const B=Math.min(IGN.BASE,n-R-1),b0=n-R-B,b1=n-R-1;
+  const qv=new Float64Array(n),H=new Float64Array(n),L=new Float64Array(n),C=new Float64Array(n),V=new Float64Array(n),TB=new Float64Array(n);
+  for(let i=0;i<n;i++){const r=k[i];H[i]=+r[2];L[i]=+r[3];C[i]=+r[4];V[i]=+r[5];qv[i]=+r[7];TB[i]=+r[9];}
+  const bv=Array.from(qv.slice(b0,b1+1)).sort((a,b)=>a-b),med=bv[Math.floor(bv.length/2)]||0;
+  if(!(med>0))return null;
+  let rv=0,rmax=0,rb=0,rt=0;for(let i=n-R;i<n;i++){rv+=qv[i];if(qv[i]>rmax)rmax=qv[i];rb+=TB[i];rt+=V[i];}
+  // OBV + Chaikin A/D over the same bars (2026-11-05-b)
+  const obv=new Float64Array(n),ad=new Float64Array(n);
+  for(let i=0;i<n;i++){const rg=H[i]-L[i],mfm=rg>0?((C[i]-L[i])-(H[i]-C[i]))/rg:0;
+    obv[i]=(i?obv[i-1]:0)+(i?(C[i]>C[i-1]?V[i]:C[i]<C[i-1]?-V[i]:0):0);ad[i]=(i?ad[i-1]:0)+mfm*V[i];}
+  let oHi=-Infinity,oLo=Infinity,aHi=-Infinity,aLo=Infinity;
+  for(let i=b0;i<=b1;i++){if(obv[i]>oHi)oHi=obv[i];if(obv[i]<oLo)oLo=obv[i];if(ad[i]>aHi)aHi=ad[i];if(ad[i]<aLo)aLo=ad[i];}
+  const volX=rv/R/med,barX=rmax/med;
+  let bh=-Infinity,bl=Infinity;for(let i=b0;i<=b1;i++){if(H[i]>bh)bh=H[i];if(L[i]<bl)bl=L[i];}
+  const c=C[n-1],c0=C[n-1-R],mv=c0>0?c/c0-1:0,dir=mv>=0?1:-1;
+  const brk=dir>0?(bh>0?c/bh-1:0):(c>0?bl/c-1:0);
+  const range=bl>0?bh/bl-1:null,taker=rt>0?rb/rt:0.5,tk=dir>0?taker:1-taker;
+  const obvOk=dir>0?obv[n-1]>oHi:obv[n-1]<oLo,adOk=dir>0?ad[n-1]>aHi:ad[n-1]<aLo,flow=(obvOk?1:0)+(adOk?1:0);
+  const sV=Math.max(0,Math.min(1,Math.log2(Math.max(volX,1))/3))*30;
+  const sB=brk>0?Math.min(1,brk/0.05)*20:0;
+  const sO=oiChg!=null&&oiChg>0?Math.min(1,oiChg/15)*25:0;
+  const sF=flow===2?15:flow===1?7:0;
+  const sT=Math.max(0,Math.min(1,(tk-0.5)/0.1))*5;
+  const sR=range==null?0:range<0.12?5:range<0.25?2:0;
+  const score=Math.round(sV+sB+sO+sF+sT+sR);
+  let phase='';
+  if(Math.abs(mv)>=0.25)phase='RUN';
+  else if(volX>=3&&brk>0&&(oiChg==null||oiChg>=2))phase='IGNITE';
+  else if(volX>=2&&brk>-0.02)phase='WAKE';
+  return{score,phase,dir,volX,barX,brk,mv,range,taker,oi:oiChg,R,tf,baseHi:bh,baseLo:bl,t:+k[n-1][0],obvOk,adOk,flow};
+}
+function ignShort(g){
+  const p=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+  return `🔥IGN ${g.score} ${g.phase}${g.dir>0?'▲':'▼'} vol×${g.volX.toFixed(1)} (bar×${g.barX.toFixed(0)}) brk ${p(g.brk)} mv ${p(g.mv)}/${g.R}b${g.oi!=null?' OI◆ '+(g.oi>=0?'+':'')+g.oi.toFixed(1)+'%':''} FLOW ${g.flow===2?'✔✔':g.flow===1?'✔'+(g.obvOk?'OBV':'A/D'):'✗'}`;
+}
+function ignTagHTML(s){
+  const g=s.ign;if(!g||!g.phase)return '';
+  if(g.phase==='WAKE')return `<span class="ctag" title="WAKE: волумен ×${g.volX.toFixed(1)} на работ на базата — уште не е пробив" style="background:rgba(255,208,0,.08);color:var(--yellow);border:1px solid rgba(255,208,0,.35)">👀 ${g.score}</span>`;
+  const run=g.phase==='RUN',col=run?'var(--yellow)':'var(--orange)';
+  return `<span class="ctag" title="${ignShort(g)}${run?' — веќе трча: CHASE ризик, само план за повлекување':' — ПАЛИ сега: не е влез, план = повлекување / CLEAN15'}" style="background:rgba(255,102,0,.16);color:${col};border:1px solid ${col};font-weight:800">🔥${run?'RUN':'IGN'} ${g.score}</span>`;
+}
+function ignDigestBlock(rows){
+  const shown=new Set((rows||[]).map(r=>r.coin)),all=(S.signals||[]).filter(x=>x.ign&&x.ign.phase);
+  if(!all.length)return '\nIGNITION: no coin with IGNITE / RUN / WAKE on this scan.\n';
+  const rank=new Map([...(S.signals||[])].sort((a,b)=>b.score-a.score).map((x,i)=>[x.coin,i+1]));
+  const top=all.filter(x=>!shown.has(x.coin)).sort((a,b)=>b.ign.score-a.ign.score).slice(0,8);
+  const ph={IGNITE:0,RUN:0,WAKE:0};all.forEach(x=>ph[x.ign.phase]++);
+  let o=`\nIGNITION (whole scan: IGNITE ${ph.IGNITE} · RUN ${ph.RUN} · WAKE ${ph.WAKE}) · top ${top.length} by IGN NOT in the rows above (SCORE rank shows why they were hidden):\n`;
+  if(!top.length)o+=' — (all igniting coins are already in the rows above)\n';
+  top.forEach(x=>{o+=` ${x.coin}|PX ${fmt(x.price)}|24h ${(x.priceChg>=0?'+':'')+x.priceChg.toFixed(1)}%|${ignShort(x.ign)}|base ${fmt(x.ign.baseLo)}–${fmt(x.ign.baseHi)}|SCORE ${x.score} (#${rank.get(x.coin)||'?'} of ${S.signals.length})${(typeof chaseInfo==='function'&&chaseInfo(x.priceChg))?'|⚠'+chaseInfo(x.priceChg).tag:''}\n`;});
+  return o;
+}
+
+// ── 🔥 ALARM: whole-market sweep every IGA.iv, independent of the scan ──
+const IGA={on:false,thr:55,minVolM:3,iv:3*60000,cool:4*3600e3,mute:false,notif:false};
+let _igSnaps=[],_igAlerted={},_igLast=0,_igBusy=false,_igRes=[],_igEv=[],_igCand=0,_igFlash=null,_igTitle=null;
+try{Object.assign(IGA,JSON.parse(localStorage.getItem('igAlarm')||'{}'));}catch(e){}
+try{_igAlerted=JSON.parse(localStorage.getItem('igAlerted')||'{}')||{};}catch(e){_igAlerted={};}
+function igSave(){try{localStorage.setItem('igAlarm',JSON.stringify(IGA));localStorage.setItem('igAlerted',JSON.stringify(_igAlerted));}catch(e){}}
+function igHM(t){const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function igBtnUpd(){
+  const b=document.getElementById('igBtn');if(!b)return;
+  if(!IGA.on){b.textContent='🔥 ALARM';b.style.background='';b.style.color='var(--orange)';return;}
+  const warm=_igSnaps.length&&Date.now()-_igSnaps[0].t<15*60000;
+  b.textContent=`🔥 ${_igLast?igHM(_igLast):'…'}${warm?' ⏳':''}${_igEv.length?' · '+_igEv.length:''}`;
+  b.style.background='rgba(255,102,0,.18)';b.style.color='var(--orange)';
+}
+function igButton(){
+  if(!IGA.on){
+    IGA.on=true;igSave();try{if(typeof wAudio==='function')wAudio();}catch(e){}
+    toast('🔥 ALARM вклучен · првите 5–15 мин собира податоци · страницата мора да остане отворена');
+    _igLast=0;igTick();igBtnUpd();return;
+  }
+  igShow(_igEv.length?_igEv:_igRes.slice(0,8),!_igEv.length);
+}
+function igBeep(){
+  if(IGA.mute)return;const ac=(typeof wAudio==='function')?wAudio():null;if(!ac)return;
+  try{for(let i=0;i<4;i++){const o=ac.createOscillator(),g=ac.createGain(),t0=ac.currentTime+0.02+i*0.18;
+    o.type='square';o.frequency.value=i%2?990:740;g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(0.25,t0+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t0+0.15);
+    o.connect(g);g.connect(ac.destination);o.start(t0);o.stop(t0+0.16);}}catch(e){}
+}
+function igNotify(ev){
+  if(!IGA.notif||!('Notification' in window)||Notification.permission!=='granted')return;
+  try{const n=new Notification('🔥 αSCOUT ПАЛЕЊЕ · '+ev.map(e=>e.coin).join(', '),{body:ev.slice(0,4).map(e=>e.coin+': '+ignShort(e.g)).join('\n'),tag:'ig-alarm',renotify:true,silent:IGA.mute});
+    n.onclick=()=>{try{window.focus();}catch(e){}n.close();igShow(ev,false);};}catch(e){}
+}
+function igFlash(ev){
+  if(!document.hidden)return;if(_igTitle==null)_igTitle=document.title;
+  clearInterval(_igFlash);let k=0;const msg='🔥 '+ev[0].coin+' ПАЛИ';
+  _igFlash=setInterval(()=>{document.title=(k++%2)?_igTitle:msg;},1000);
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&_igFlash){clearInterval(_igFlash);_igFlash=null;if(_igTitle!=null)document.title=_igTitle;}});
+async function igSweep(){
+  if(_igBusy)return;_igBusy=true;
+  try{
+    const t=await apiFetch('/ticker/24hr');if(!t||!t.length)return;
+    const now=Date.now(),px={},qv={},chg={};
+    t.forEach(x=>{if(!x.symbol||!x.symbol.endsWith('USDT')||x.symbol.includes('_'))return;const c=x.symbol.replace(/USDT$/,'');px[c]=+x.lastPrice;qv[c]=+x.quoteVolume;chg[c]=+x.priceChangePercent;});
+    _igSnaps.push({t:now,px});_igSnaps=_igSnaps.filter(z=>now-z.t<=40*60000);
+    const ago=m=>{let b=null;for(const z of _igSnaps)if(now-z.t>=m*60000-30000)b=z;return b;};
+    const s5=ago(5),s15=ago(15),cand=[];
+    for(const c in px){
+      if(!(px[c]>0))continue;
+      if((typeof LAB_STABLE!=='undefined'&&LAB_STABLE.has(c))||(typeof isTradFi==='function'&&isTradFi(c))||(typeof blockReason==='function'&&blockReason(c)))continue;
+      if((qv[c]||0)<IGA.minVolM*1e6)continue;
+      const d5=s5&&s5.px[c]>0?px[c]/s5.px[c]-1:null,d15=s15&&s15.px[c]>0?px[c]/s15.px[c]-1:null;
+      if((d5!=null&&Math.abs(d5)>=0.02)||(d15!=null&&Math.abs(d15)>=0.03))cand.push({c,d5,d15,m:Math.max(Math.abs(d5||0)*1.5,Math.abs(d15||0))});
+    }
+    cand.sort((a,b)=>b.m-a.m);_igCand=cand.length;
+    const top=cand.slice(0,20),res=[];
+    for(let i=0;i<top.length;i+=4){
+      await Promise.all(top.slice(i,i+4).map(async x=>{
+        const kl=await apiFetch(`/klines?symbol=${x.c}USDT&interval=15m&limit=120`);if(!kl)return;
+        let oi=null;try{const oh=await fetchOiHist(x.c,'15m');if(oh&&oh.oiCoinsChg!=null)oi=oh.oiCoinsChg;}catch(e){}
+        const g=ignCompute(kl,'15m',oi);if(!g)return;
+        res.push({coin:x.c,d5:x.d5,d15:x.d15,px:px[x.c],chg24:chg[x.c],vol:qv[x.c],g,t:now});
+      }));
+    }
+    res.sort((a,b)=>b.g.score-a.g.score);_igRes=res;
+    const ev=res.filter(r=>(r.g.phase==='IGNITE'||r.g.phase==='RUN')&&r.g.score>=IGA.thr&&!(now-(_igAlerted[r.coin]||0)<IGA.cool));
+    if(ev.length){ev.forEach(e=>{_igAlerted[e.coin]=now;});igSave();_igEv=ev;igBeep();igNotify(ev);igFlash(ev);igShow(ev,false);}
+  }catch(e){}
+  finally{_igLast=Date.now();_igBusy=false;igBtnUpd();}
+}
+function igTick(){if(IGA.on&&!_igBusy&&Date.now()-_igLast>=IGA.iv)igSweep();}
+setInterval(igTick,30000);
+function igEnsurePop(){
+  let p=document.getElementById('igPop');if(p)return p;
+  p=document.createElement('div');p.id='igPop';
+  p.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;padding:60px 10px;overflow:auto';
+  p.innerHTML='<div id="igBox" style="max-width:640px;width:100%;background:var(--bg2,#0d0d1c);border:2px solid var(--orange);border-radius:12px;padding:12px;font-family:var(--ui)"></div>';
+  p.addEventListener('click',e=>{if(e.target===p)igClose();});document.body.appendChild(p);return p;
+}
+function igClose(){const p=document.getElementById('igPop');if(p)p.style.display='none';_igEv=[];igBtnUpd();}
+function igCard(r){
+  const g=r.g,run=g.phase==='RUN',up=g.dir>0,col=run?'var(--yellow)':'var(--orange)',p=v=>v==null?'—':(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+  const ch=(typeof chaseInfo==='function')?chaseInfo(r.chg24):null;
+  return `<div style="border:1px solid var(--border,#1e1e35);border-left:3px solid ${col};border-radius:8px;padding:8px 10px;margin-top:8px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span style="font-family:var(--mono);font-weight:bold;font-size:14px">${r.coin} ${up?'▲':'▼'} <span style="color:${col}">${g.phase} ${g.score}</span></span>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">PX ${fmt(r.px)} · 5m ${p(r.d5)} · 15m ${p(r.d15)} · 24h ${r.chg24>=0?'+':''}${(+r.chg24).toFixed(1)}%</span></div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);margin-top:4px">vol ×${g.volX.toFixed(1)} (bar ×${g.barX.toFixed(0)}) · пробив ${p(g.brk)} од база ${fmt(g.baseLo)}–${fmt(g.baseHi)} · потег ${p(g.mv)}/1.5h · OI◆ ${g.oi==null?'n/a':(g.oi>=0?'+':'')+g.oi.toFixed(1)+'%'} · taker ${(g.taker*100).toFixed(0)}%B · <b style="color:${g.flow===2?'var(--green)':g.flow===1?'var(--yellow)':'var(--red)'}">OBV ${g.obvOk?'✔':'✗'} A/D ${g.adOk?'✔':'✗'}</b></div>
+    <div style="font-size:11px;margin-top:4px;color:${run||ch?'var(--yellow)':'var(--text2)'}">${run?'Веќе трча (≥25% за 1.5h): CHASE ризик — само план за повлекување (WAVE .5/.618) или шорт по исцрпување.':up?'ПАЛИ: не брзај. План = повлекување до .5/.618 на потегот + CLEAN15 / checklist.':'ПАЃА со волумен: провери дали е дамп/ликвидации; шорт само по план.'}${ch?' ⚠'+ch.tag+'.':''}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      <button class="w-btn" onclick="igClose();if(typeof openDetail==='function')openDetail('${r.coin}')">🔍 ДЕТАЛ</button>
+      <button class="w-btn" onclick="if(typeof wAddList==='function'){wAddList(['${r.coin}']);toast('➕ ${r.coin} во WATCH');}">➕ WATCH</button>
+      <a class="w-btn" style="text-decoration:none" href="https://www.binance.com/en/futures/${r.coin}USDT" target="_blank" rel="noopener">↗ Binance</a>
+    </div></div>`;
+}
+function igText(list){return (list||[]).map(r=>`${r.coin} | ${ignShort(r.g)} | PX ${fmt(r.px)} | 5m ${r.d5==null?'—':(r.d5*100).toFixed(1)+'%'} | 15m ${r.d15==null?'—':(r.d15*100).toFixed(1)+'%'} | 24h ${(+r.chg24).toFixed(1)}% | base ${fmt(r.g.baseLo)}-${fmt(r.g.baseHi)}`).join('\n');}
+function igCopy(){const t=`αSCOUT 🔥 ALARM ${APP_BUILD} | ${new Date().toLocaleString('mk-MK')}\n`+igText(_igEv.length?_igEv:_igRes);
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('📋 Копирано'),()=>{});}
+function igShow(list,isStatus){
+  const p=igEnsurePop(),box=document.getElementById('igBox'),warm=_igSnaps.length&&Date.now()-_igSnaps[0].t<15*60000;
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span style="font-family:var(--mono);font-weight:bold;color:var(--orange)">🔥 ${isStatus?'ALARM · статус':'ПАЛЕЊЕ'} · ${IGA.on?'ВКЛУЧЕН':'ИСКЛУЧЕН'}${_igLast?' · последна проверка '+igHM(_igLast):''}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">кандидати ${_igCand} · праг IGN ${IGA.thr}${warm?' · ⏳ загревање (Δ15m по 15 мин)':''}</span></div>
+    ${(list&&list.length)?list.map(igCard).join(''):'<div style="font-size:12px;color:var(--muted);margin-top:10px">Нема коин што пали во последната проверка.</div>'}
+    <div style="font-size:11px;color:var(--muted);margin-top:10px">Проверка на секои 3 мин: коини со ≥2% за 5 мин или ≥3% за 15 мин (24h ≥ $${IGA.minVolM}M) → 15m свеќи + OI → IGN. Аларм = IGNITE/RUN со IGN ≥ ${IGA.thr}, еднаш на 4ч по коин. Страницата мора да остане отворена. Не е влез.</div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+      <button class="w-btn" onclick="igCopy()">📋 КОПИРАЈ</button>
+      <button class="w-btn" onclick="IGA.mute=!IGA.mute;igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">${IGA.mute?'🔊 ВКЛ. ЗВУК':'🔇 МУТИРАЈ'}</button>
+      <button class="w-btn" onclick="igNotifToggle()">${IGA.notif?'🔕 БЕЗ ИЗВЕСТУВАЊА':'🔔 СИСТЕМСКИ ИЗВЕСТУВАЊА'}</button>
+      <button class="w-btn" onclick="IGA.thr=Math.max(30,IGA.thr-5);igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">праг −5</button>
+      <button class="w-btn" onclick="IGA.thr=Math.min(90,IGA.thr+5);igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),${isStatus?'true':'false'})">праг +5</button>
+      <button class="w-btn" onclick="IGA.on=false;igSave();igClose();toast('🔥 ALARM исклучен')">⏸ ИСКЛУЧИ</button>
+      <button class="w-btn" onclick="igClose()" style="margin-left:auto;border-color:var(--orange);color:var(--orange)">✓ OK</button>
+    </div>`;
+  p.style.display='flex';
+}
+function igNotifToggle(){
+  if(IGA.notif){IGA.notif=false;igSave();igShow(_igEv.length?_igEv:_igRes.slice(0,8),true);return;}
+  if(!('Notification' in window)){toast('Овој прелистувач нема системски известувања');return;}
+  Notification.requestPermission().then(p=>{IGA.notif=p==='granted';igSave();if(!IGA.notif)toast('Дозволата е одбиена во прелистувачот');igShow(_igEv.length?_igEv:_igRes.slice(0,8),true);});
+}
+if(IGA.on)setTimeout(()=>{igBtnUpd();igTick();},4000);   // resumes after a reload
 
 // ══════════════════════════════════════════════════════════════
 // WAVE LAB (2026-11-02-a): first touch of Fib .5/.618 of an up-leg, stepwise confirmations, EV in R
