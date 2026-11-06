@@ -1280,6 +1280,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-06-a  CLEAN15 G4 SWEEP soft flush. Bot forward tracking 7 days (88 cases, 4h window, SL/TP same
+//    bar = SL): G4·SWEEP blocked 37 9/10 setups, split by OI coins change on the sweep bar:
+//      OI -0.3..0%  n 22 · SL 11 · TP1 7 (TP2 5) · +0.74R      OI 0..+0.3%  n 6 · SL 4 · TP1 2 · +0.31R
+//      OI > +0.3%   n 8  · SL 6  · TP1 1          · -0.68R      (a monotone ladder: the more OI drops, the better)
+//    Now OI between CLEAN_OI_FLUSH (-0.3%) and CLEAN_OI_FLUSH_SOFT (0%) counts as 'мал FLUSH': G4 passes and the
+//    side gets the flag 'мал flush (OI x%)' = grade B, never A. OI that rises on the sweep bar still fails, the HOLD /
+//    DRIVE / ABSORB checks on the reclaim bar are unchanged. Small sample (+0.74R has ~±0.45R error): the bot tracks
+//    these B setups separately (✅B·мал flush) so the change can be reverted if the edge does not hold.
 //  2026-11-05-c  IGN RELATIVE TO THE MARKET. TRUTH 05.11 16:17 (first IGN digest): the whole market was
 //    falling (BEAR 481/522, median MOMz -4.4) and IGN flagged 362 WAKE + 5 IGNITE, all ▼ -- it was
 //    measuring the market, not single coins. AIO was a SOLO move; the only real solo move on that
@@ -1333,7 +1341,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-05-c';
+const APP_BUILD='2026-11-06-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -4817,6 +4825,7 @@ const CLEAN_RECLAIM_POS=0.6;   // G3 SWEEP: reclaim close in the top (short: bot
 const CLEAN_OI_MIN=0.5;        // G4 TREND: OI coins change over 3 bars, %
 const CLEAN_OI_PX_ATR=0.3;     // G4 TREND: price move over the same 3 bars, ATR (less = ABSORB)
 const CLEAN_OI_FLUSH=-0.3;     // G4 SWEEP: OI coins change on the sweep bar must be <= this, %
+const CLEAN_OI_FLUSH_SOFT=0.0; // G4 SWEEP soft flush (2026-11-06-a): OI between FLUSH and this passes, graded B ('мал flush')
 const CLEAN_OI_HOLD_MAX=1.0;   // G4 SWEEP: HOLD band upper edge, %. OI above it on the reclaim bar passes only
                                // if price moved >= CLEAN_OI_PX_ATR in the entry direction (FLUSH -> DRIVE);
                                // otherwise it is ABSORB = the opposite side building (2026-10-22-a)
@@ -5071,7 +5080,7 @@ function clnSide(c){
     :(lvl?'нема силна 15m свеќа':'без ниво'));
 
   // G4 -- real OI flow (primary signal)
-  let g4=false,g4n='OI n/a';
+  let g4=false,g4n='OI n/a',softFl=null;
   if(mode==='SWEEP'){
     const fl=c.oiChg(sweepIdx,sweepIdx-1),hold=sweepIdx===i?0:c.oiChg(i,i-1);
     // 2026-10-22-a: HOLD has an upper edge too. OI rising on the reclaim bar is read
@@ -5079,11 +5088,14 @@ function clnSide(c){
     // without it = ABSORB, the opposite side building into the reclaim (IOST.P 22.10).
     const hpx=sweepIdx===i?0:(C[i]-C[i-1])/atr;
     if(fl!=null&&hold!=null){
-      if(fl>CLEAN_OI_FLUSH)g4n='нема flush на sweep ('+clnPct(fl)+')';
+      // 2026-11-06-a soft flush: OI -0.3..0% on the sweep bar passes as 'мал FLUSH' (graded B by the flag below)
+      if(fl>CLEAN_OI_FLUSH&&fl<=CLEAN_OI_FLUSH_SOFT)softFl=fl;
+      const fLbl=softFl!=null?'мал FLUSH ':'FLUSH ';
+      if(fl>CLEAN_OI_FLUSH_SOFT||(fl>CLEAN_OI_FLUSH&&softFl==null))g4n='нема flush на sweep ('+clnPct(fl)+')';
       else if(hold<CLEAN_OI_FLUSH)g4n='OI продолжува да паѓа ('+clnPct(hold)+')';
-      else if(hold<=CLEAN_OI_HOLD_MAX){g4=true;g4n='FLUSH '+clnPct(fl)+(sweepIdx===i?'':' → HOLD '+clnPct(hold));}
-      else if(hpx>=CLEAN_OI_PX_ATR){g4=true;g4n='FLUSH '+clnPct(fl)+' → DRIVE '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR';}
-      else g4n='FLUSH '+clnPct(fl)+' → ABSORB '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR (нови '+(up?'шортови':'лонгови')+')';
+      else if(hold<=CLEAN_OI_HOLD_MAX){g4=true;g4n=fLbl+clnPct(fl)+(sweepIdx===i?'':' → HOLD '+clnPct(hold));}
+      else if(hpx>=CLEAN_OI_PX_ATR){g4=true;g4n=fLbl+clnPct(fl)+' → DRIVE '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR';}
+      else g4n=fLbl+clnPct(fl)+' → ABSORB '+clnPct(hold)+' · цена '+clnSgn(R(hpx))+' ATR (нови '+(up?'шортови':'лонгови')+')';
     }
   }else{
     const d3=c.oiChg(i,i-3),px3=(C[i]-C[i-3])/atr;
@@ -5151,6 +5163,7 @@ function clnSide(c){
   // G9 -- risk geometry. TREND: SL 1 ATR behind the level, because the crowd's stops sit AT
   // the level. SWEEP: that liquidity is already taken, so SL goes just beyond the wick.
   let entry=null,entryType=null,sl=null,tp1=null,tp2=null,rr=null,slAtr=null,maxLev=null;const flags=[];
+  if(g4&&softFl!=null)flags.push('мал flush (OI '+clnPct(softFl)+')');   // 2026-11-06-a: soft-flush SWEEP is B only
   if(lvl&&mode){
     if(C[i]-lvl.p<=CLEAN_LOC_ATR*atr){entry=C[i];entryType='MKT';}
     else{entry=lvl.p+CLEAN_LOC_ATR*atr;entryType='LIMIT';}
@@ -5666,7 +5679,7 @@ function helpSections(){
     {tag:'G1 · Тренд 1h',col:a,what:'JMA(8) над DWMA(10) на 1h за лонг, под за шорт.',action:'Само влезови во насока на 1h трендот.'},
     {tag:'G2 · Локација',col:a,what:()=>'Тригер-свеќата или претходната допрела ниво во рамки на '+CLEAN_LOC_ATR+' ATR(15m): 15m swing low/high (pivot 3/3), POC или дно/врв на тесен опсег.',action:()=>'Ако close-от е подалеку од '+CLEAN_LOC_ATR+' ATR од нивото, влезот е LIMIT на ниво ± '+CLEAN_LOC_ATR+' ATR (ретест), не MKT.'},
     {tag:'G3 · Тригер',col:a,what:'TREND = тело ≥ 50% од свеќата, close во горните 30% (шорт: долните) и над high (шорт: под low) на претходната свеќа. SWEEP = фитил низ нивото (≥ 0.1 ATR), а close назад над него (шорт: под) во горните 40%.',when:'SWEEP има предност — лов на стоповите па враќање е најчистиот тригер.'},
-    {tag:'G4 · OI◆',col:g,what:()=>'TREND: OI во коини +'+CLEAN_OI_MIN+'% за 3 свеќи СО цена ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (DRIVE) и DOM=FLOW. OI↑ а цената рамна = ABSORB → ✗. OI↑ со цена против = нови позиции на спротивната страна → ✗.',when:()=>'SWEEP: OI паѓа ≥ '+Math.abs(CLEAN_OI_FLUSH)+'% на sweep-свеќата (FLUSH), а на reclaim-от останува во опсег '+CLEAN_OI_FLUSH+'% … +'+CLEAN_OI_HOLD_MAX+'% (HOLD). OI над +'+CLEAN_OI_HOLD_MAX+'% поминува само ако цената се движи ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (FLUSH → DRIVE); инаку е ABSORB = нови позиции на спротивната страна → ✗.'},
+    {tag:'G4 · OI◆',col:g,what:()=>'TREND: OI во коини +'+CLEAN_OI_MIN+'% за 3 свеќи СО цена ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (DRIVE) и DOM=FLOW. OI↑ а цената рамна = ABSORB → ✗. OI↑ со цена против = нови позиции на спротивната страна → ✗.',when:()=>'SWEEP: OI паѓа ≥ '+Math.abs(CLEAN_OI_FLUSH)+'% на sweep-свеќата (FLUSH), а на reclaim-от останува во опсег '+CLEAN_OI_FLUSH+'% … +'+CLEAN_OI_HOLD_MAX+'% (HOLD). OI над +'+CLEAN_OI_HOLD_MAX+'% поминува само ако цената се движи ≥ '+CLEAN_OI_PX_ATR+' ATR во насоката (FLUSH → DRIVE); инаку е ABSORB = нови позиции на спротивната страна → ✗. Мал flush (OI '+CLEAN_OI_FLUSH+'…'+CLEAN_OI_FLUSH_SOFT+'%) поминува само како B со знаменце.'},
     {tag:'G5 · CVD / Taker',col:g,what:()=>'TREND: CVD расте 3 свеќи, taker buy ≥ '+CLEAN_TAKER_L+'% (шорт: CVD паѓа, ≤ '+(100-CLEAN_TAKER_L)+'%), CVDt не е на ново дно (шорт: на нов врв). SWEEP: reclaim-свеќата има позитивен delta (шорт: негативен) и taker ≥ '+CLEAN_TAKER_L+'% (шорт: ≤ '+(100-CLEAN_TAKER_L)+'%).',when:'Построго од правилото „OI$ со цената го надгласува CVD“ — за чист влез ги бара и двете.',action:'Пумпи со апсорпција (цена↑, CVD↓) намерно ги пропушта.'},
     {tag:'G6 · Моментум',col:a,what:'TREND: MOMz во насоката на влезот И наклонот (MSLP) во истата насока, без FLIP против. SWEEP: спротивното движење не смее да забрзува — MOMz се свртел на последната свеќа или MSLP веќе е во насоката.'},
     {tag:'G7 · Компресија',col:cy,what:'SQZ ON на тригер-свеќата (Bollinger внатре во Keltner) → ✗.',action:'Чекај release — компресијата нема позната насока додека не пукне.'},
