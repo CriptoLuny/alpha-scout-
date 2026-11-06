@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.3 (quiet hours, /why, /near, /nearstats forward tracking) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.4 (🔥 ALARM in Telegram, /why, /near, /nearstats + B-flag split, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -24,7 +24,8 @@ const CFG = {
   delaySec: +(process.env.DELAY_SEC || 15),       // CLEAN15 runs this many sec after the close
   cooldownMin: +(process.env.COOLDOWN_MIN || 60), // same coin+side silence
   scanTimeoutMin: +(process.env.SCAN_TIMEOUT_MIN || 12),
-  trackBars: +(process.env.TRACK_BARS || 16),     // forward window for 9/10 + A/B tracking (16 x 15m = 4h)
+  trackBars: +(process.env.TRACK_BARS || 16),
+  alarmReloadH: +(process.env.ALARM_RELOAD_H || 6),  // the ALARM tab keeps its 90-min ticker memory; reload only this often or on a new build     // forward window for 9/10 + A/B tracking (16 x 15m = 4h)
   quiet: process.env.QUIET ?? 'off',               // e.g. 01:00-08:30 (Europe/Skopje) = no alerts in that window
 };
 if (!CFG.token) { console.error('BOT_TOKEN missing in .env'); process.exit(1); }
@@ -32,7 +33,7 @@ const BAR = 15 * 60e3;
 
 // ---------- STATE ----------
 const STATE_FILE = path.join(DIR, 'state.json');
-const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, sent: {}, nearSent: {}, diag: [], track: [], trackSeen: {}, lastFull: null, lastClean: null, errNotified: false },
+const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, alarm: true, alarmBoth: false, igSent: {}, sent: {}, nearSent: {}, diag: [], track: [], trackSeen: {}, lastFull: null, lastClean: null, errNotified: false },
   (() => { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } })());
 if (CFG.chatId) state.chatId = CFG.chatId;
 if (state.quiet === undefined) state.quiet = /^off$/i.test(CFG.quiet) ? null : CFG.quiet;
@@ -71,18 +72,25 @@ function job(fn) {
 }
 
 // ---------- BROWSER ----------
-let ctx = null, page = null, pageInfo = null;
+let ctx = null, page = null, apage = null, pageInfo = null, ctxAlive = false;
+function hookPage(p, tag) {
+  p.on('dialog', d => d.dismiss().catch(() => {}));
+  p.on('pageerror', e => log(tag + ' pageerror', e.message));
+  p.on('crash', () => { log(tag + ' crash'); if (p === page) page = null; if (p === apage) apage = null; });
+}
 async function ensureBrowser() {
-  if (page && !page.isClosed()) return;
-  try { await ctx?.close(); } catch {}
-  ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), {
-    headless: true, locale: 'mk-MK', timezoneId: 'Europe/Skopje', viewport: { width: 430, height: 900 },
-    args: ['--disable-dev-shm-usage', '--no-sandbox'],
-  });
-  page = ctx.pages()[0] || await ctx.newPage();
-  page.on('dialog', d => d.dismiss().catch(() => {}));
-  page.on('pageerror', e => log('pageerror', e.message));
-  page.on('crash', () => { log('page crash'); page = null; });
+  if (!ctx || !ctxAlive) {
+    try { await ctx?.close(); } catch {}
+    ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), {
+      headless: true, locale: 'mk-MK', timezoneId: 'Europe/Skopje', viewport: { width: 430, height: 900 },
+      args: ['--disable-dev-shm-usage', '--no-sandbox'],
+    });
+    ctxAlive = true; page = null; apage = null;
+    ctx.on('close', () => { ctxAlive = false; page = null; apage = null; });
+    const first = ctx.pages()[0];
+    if (first) { page = first; hookPage(page, 'main'); }
+  }
+  if (!page || page.isClosed()) { page = await ctx.newPage(); hookPage(page, 'main'); }
 }
 async function loadPage() {
   await ensureBrowser();
@@ -91,6 +99,7 @@ async function loadPage() {
   pageInfo = await page.evaluate(() => {
     startBuildClean = function () {};   // the bot drives CLEAN15 itself, on the closed bar
     S.tf = '15m'; S.filters.clear(); S.srch = ''; S.srchList = []; S.abort = false;
+    if (typeof IGA === 'object') IGA.on = false;   // ALARM runs only in its own tab (not reloaded every bar)
     return { ver: APP_VER, code: APP_CODENAME, build: APP_BUILD };
   });
 }
@@ -106,6 +115,7 @@ async function fullScan() {
   const r = await withTimeout(inPage(async () => { await doScan(); return { n: S.signals.length, uni: Object.keys(_tMap).length }; }), CFG.scanTimeoutMin * 60e3, 'full scan');
   if (!r.n) throw new Error('scan returned 0 signals (Binance API?)');
   state.lastFull = { ts: Date.now(), dur: Date.now() - t0, ...r, ...pageInfo }; save();
+  try { const mk = await page.evaluate(() => typeof _ignMkt === 'object' ? _ignMkt : null); if (mk && apage && !apage.isClosed()) await apage.evaluate(m => { _ignMkt = m; }, mk); } catch {}
   log('full', state.lastFull);
   return r;
 }
@@ -134,7 +144,7 @@ async function cleanCycle() {
       if (!sd || !sd.gates) continue;
       diag.push({ coin: r.coin, side: sd.dir === 'long' ? 'L' : 'S', mode: sd.mode || null, closeT: r.barT + 15 * 60e3,
         entry: sd.entry ?? null, et: sd.entryType || null, sl: sd.sl ?? null, tp1: sd.tp1 ?? null, tp2: sd.tp2 ?? null,
-        rr: sd.rr ?? null, nflags: (sd.flags || []).length,
+        rr: sd.rr ?? null, nflags: (sd.flags || []).length, flags: (sd.flags || []).map(f => String(f).slice(0, 60)),
         ok: sd.gates.map(g => g.ok ? 1 : 0),
         na: sd.gates.filter(g => /n\/a/.test(g.note || '')).map(g => g.id),
         fails: sd.gates.filter(g => !g.ok).map(g => ({ id: g.id, note: String(g.note || '').slice(0, 70) })) });
@@ -175,7 +185,8 @@ function recordDiag(r) {
     const k = d.coin + ':' + d.side, p = state.trackSeen[k];
     if (p && now - p < CFG.cooldownMin * 60e3) continue;
     state.trackSeen[k] = now;
-    const gate = pass === 10 ? (d.nflags ? 'B' : 'A') : d.fails[0].id;
+    const softFlush = (d.flags || []).some(f => /мал flush/i.test(f));
+    const gate = pass === 10 ? (d.nflags ? (softFlush ? 'B·мал flush' : 'B') : 'A') : d.fails[0].id;
     state.track.push({ coin: d.coin, side: d.side, mode: d.mode || '—', gate, note: pass === 10 ? '' : d.fails[0].note,
       t0: d.closeT, entry: d.entry, et: d.et, sl: d.sl, tp1: d.tp1, tp2: d.tp2, rr: d.rr, res: null });
   }
@@ -264,7 +275,7 @@ function nearStats(hours) {
   if (!T.length) return `Уште нема завршени случаи (${open} се следат). Секој 9/10 и A/B се проценува ${CFG.trackBars * 15 / 60}h по свеќата.`;
   const g = {};
   for (const x of T) {
-    const key = (x.gate === 'A' || x.gate === 'B') ? '✅' + x.gate : x.gate + '·' + x.mode;
+    const key = /^(A|B)/.test(x.gate) ? '✅' + x.gate + '·' + x.mode : x.gate + '·' + x.mode;
     (g[key] ||= []).push(x);
   }
   const keys = Object.keys(g).sort((a, b) => g[b].length - g[a].length);
@@ -312,6 +323,77 @@ function fresh(rows) {
   return out;
 }
 
+// ---------- 🔥 ALARM (the page's own IGNITION ALARM, in a second tab) ----------
+let aInfo = null, aLoadedAt = 0, aBusy = false;
+async function loadAlarmPage() {
+  await ensureBrowser();
+  if (!apage || apage.isClosed()) { apage = await ctx.newPage(); hookPage(apage, 'alarm'); }
+  await apage.goto(CFG.pageUrl + (CFG.pageUrl.includes('?') ? '&' : '?') + 'alarm=' + Date.now(), { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await apage.waitForFunction(() => typeof igSweep === 'function' && typeof IGA === 'object' && typeof igShow === 'function', null, { timeout: 60000 });
+  aInfo = await apage.evaluate((both) => {
+    IGA.on = true; IGA.both = both; IGA.mute = true; IGA.notif = false;
+    window.__igQ = [];
+    const orig = igShow;
+    igShow = function (list, isStatus) {   // igSweep calls igShow(ev,false) for every new event
+      try {
+        if (!isStatus) (list || []).forEach(r => {
+          const g = r.g || {}, ch = (typeof chaseInfo === 'function') ? chaseInfo(r.chg24) : null;
+          window.__igQ.push({ coin: r.coin, d5: r.d5, d15: r.d15, chg24: r.chg24, t: r.t, px: fmt(r.px), lo: fmt(g.baseLo), hi: fmt(g.baseHi),
+            phase: g.phase, score: g.score, dir: g.dir, volX: g.volX, barX: g.barX, brk: g.brk, mv: g.mv, oi: g.oi, taker: g.taker,
+            obv: !!g.obvOk, ad: !!g.adOk, chase: ch ? ch.tag : '' });
+        });
+      } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+    _igLast = 0;
+    return { build: APP_BUILD };
+  }, !!state.alarmBoth);
+  aLoadedAt = Date.now();
+  log('alarm tab loaded', aInfo);
+}
+const pc = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+function igMsg(e) {
+  const up = e.dir > 0, run = e.phase === 'RUN';
+  const plan = run ? '⚠ Веќе трча (≥25% за 1.5h): CHASE ризик, само план за повлекување'
+    : up ? '➡ Не е влез: план = повлекување .5/.618 + CLEAN15' : '➡ Паѓа со волумен: провери дали е дамп/ликвидации, шорт само по план';
+  return `🔥 <b>${run ? 'RUN' : 'ПАЛЕЊЕ'} · ${esc(e.coin)}.P ${up ? '▲' : '▼'} ${esc(e.phase)} ${e.score}</b>\n` +
+    `PX ${esc(e.px)} · 5m ${pc(e.d5)} · 15m ${pc(e.d15)} · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
+    `vol ×${(+e.volX).toFixed(1)} (bar ×${(+e.barX).toFixed(0)}) · пробив ${pc(e.brk)} · OI◆ ${e.oi == null ? 'n/a' : (e.oi >= 0 ? '+' : '') + (+e.oi).toFixed(1) + '%'} · taker ${(e.taker * 100).toFixed(0)}%B · OBV ${e.obv ? '✔' : '✗'} A/D ${e.ad ? '✔' : '✗'}\n` +
+    `база ${esc(e.lo)}–${esc(e.hi)}${e.chase ? ' · ⚠' + esc(e.chase) : ''}\n${plan}\n` +
+    `<a href="https://www.binance.com/en/futures/${e.coin}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${e.coin}USDT">CoinGlass</a>`;
+}
+async function alarmPoll() {
+  if (aBusy) return; aBusy = true;
+  try {
+    if (!state.alarm || !state.chatId) {
+      if (apage && !apage.isClosed()) await apage.evaluate(() => { IGA.on = false; }).catch(() => {});
+      return;
+    }
+    const stale = Date.now() - aLoadedAt > CFG.alarmReloadH * 3600e3;
+    const newBuild = state.lastFull?.build && aInfo?.build && aInfo.build !== state.lastFull.build;
+    if (!apage || apage.isClosed() || stale || newBuild) { await loadAlarmPage(); return; }
+    const ev = await apage.evaluate(() => { IGA.on = true; return (window.__igQ || []).splice(0); });
+    if (!ev.length) return;
+    const now = Date.now(), out = ev.filter(e => !(state.igSent[e.coin] && now - state.igSent[e.coin] < 4 * 3600e3));
+    out.forEach(e => { state.igSent[e.coin] = now; });
+    for (const k in state.igSent) if (now - state.igSent[k] > 24 * 3600e3) delete state.igSent[k];
+    save();
+    if (!out.length || inQuiet() || now < state.muteUntil) return;
+    await send(out.slice(0, 5).map(igMsg).join('\n\n'));
+  } catch (e) {
+    log('alarm', e.message);
+    if (/closed|crash|Target|detached/i.test(e.message)) apage = null;
+  } finally { aBusy = false; }
+}
+async function alarmStatus() {
+  if (!state.alarm) return '🔥 ALARM: OFF';
+  if (!apage || apage.isClosed()) return '🔥 ALARM: ON · се вчитува';
+  try {
+    const a = await apage.evaluate(() => ({ last: _igLast, cand: _igCand, warm: _igSnaps.length ? Date.now() - _igSnaps[0].t < 15 * 60000 : true, n: (_igRes || []).length }));
+    return `🔥 ALARM: ON${state.alarmBoth ? ' ▲▼' : ' ▲'} · проверка ${a.last ? hhmm(a.last) : '—'} · кандидати ${a.cand}${a.warm ? ' · ⏳ загревање' : ''}`;
+  } catch { return '🔥 ALARM: ON · ?'; }
+}
+
 // ---------- TELEGRAM ----------
 const TG = `https://api.telegram.org/bot${CFG.token}`;
 async function tg(method, body, ms = 15000) {
@@ -346,6 +428,7 @@ const HELP = [
   '/why 48 — зошто нема сигнали (статистика по гејт)',
   '/near — 👀 9/10 известувања (on/off, не е влез)',
   '/nearstats 72 — што се случило после 9/10 и A/B (по гејт)',
+  '/alarm — 🔥 ПАЛЕЊЕ аларм on/off · /alarm both — ▲ или ▲▼',
   '/mute 60 · /unmute',
   '/quiet 01:00-08:30 · /quiet off — ноќна тишина',
   '/status',
@@ -402,6 +485,12 @@ async function handle(text) {
       return send(l.length ? '⭐ ' + esc(l.join(', ')) : 'Нема favorites');
     }
     case '/strict': state.strict = !state.strict; save(); return send(`Само 🟢GO: ${state.strict ? 'ON' : 'OFF'}`);
+    case '/alarm': {
+      if (/^both$/i.test(argRaw || '')) { state.alarmBoth = !state.alarmBoth; save(); aLoadedAt = 0; return send(`🔥 ALARM насока: ${state.alarmBoth ? '▲▼ (и паѓања)' : '▲ (само раст)'}`); }
+      if (/^on$/i.test(argRaw || '')) state.alarm = true; else if (/^off$/i.test(argRaw || '')) state.alarm = false; else if (!argRaw) state.alarm = !state.alarm;
+      save(); alarmPoll().catch(() => {});
+      return send(state.alarm ? '🔥 ALARM вклучен · првите 5–15 мин собира податоци' : '🔥 ALARM исклучен');
+    }
     case '/nearstats': { const h = Math.min(168, Math.max(1, parseInt(argRaw) || 72)); await resolveTracks(); return send(nearStats(h)); }
     case '/why': { const h = Math.min(72, Math.max(1, parseInt(argRaw) || 24)); return send(whyReport(h)); }
     case '/near': state.near = !state.near; save(); return send(`👀 9/10 известувања: ${state.near ? 'ON' : 'OFF'}\n(само за следење, влез е само ✅A/B)`);
@@ -425,6 +514,7 @@ async function handle(text) {
         `Strict ${state.strict ? 'ON' : 'OFF'} · 9/10 ${state.near ? 'ON' : 'OFF'} · ${state.muteUntil > Date.now() ? '🔕 до ' + hhmm(state.muteUntil) : '🔔 активен'} · ред ${queueLen}`,
         `🌙 Тишина ${state.quiet ? esc(state.quiet) + (inQuiet() ? ' (сега)' : '') : 'OFF'}`,
         `📊 Следење: ${state.track.filter(x => !x.res).length} отворени · ${state.track.filter(x => x.res).length} завршени`,
+        await alarmStatus(),
       ].join('\n'));
     }
   }
@@ -488,7 +578,7 @@ async function schedLoop() {
           if (nn.length) await send(nn.map(nearCard).join('\n\n'));
         }
       }
-    } catch (e) { await onError(e); page = null; }
+    } catch (e) { await onError(e); try { await page?.close(); } catch {} page = null; }
   }
 }
 
@@ -497,3 +587,4 @@ log('aSCOUT bot starting, chat', state.chatId || '(waiting /start)');
 pollLoop();
 job(fullScan).then(() => send(`🟢 αSCOUT бот стартуван · ${esc(state.lastFull.ver)} ${esc(state.lastFull.code)} · ${esc(state.lastFull.build)}`)).catch(onError);
 schedLoop();
+setInterval(() => { alarmPoll().catch(() => {}); }, 20000);
