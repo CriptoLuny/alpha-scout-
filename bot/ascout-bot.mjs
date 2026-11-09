@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.4 (🔥 ALARM in Telegram, /why, /near, /nearstats + B-flag split, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.5 (🔥⚡🧯 ALARM + /igstats, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -33,7 +33,7 @@ const BAR = 15 * 60e3;
 
 // ---------- STATE ----------
 const STATE_FILE = path.join(DIR, 'state.json');
-const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, alarm: true, alarmBoth: false, igSent: {}, sent: {}, nearSent: {}, diag: [], track: [], trackSeen: {}, lastFull: null, lastClean: null, errNotified: false },
+const state = Object.assign({ offset: 0, chatId: '', muteUntil: 0, strict: false, near: false, alarm: true, alarmBoth: false, igSent: {}, igLog: {}, igTrack: [], sent: {}, nearSent: {}, diag: [], track: [], trackSeen: {}, lastFull: null, lastClean: null, errNotified: false },
   (() => { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } })());
 if (CFG.chatId) state.chatId = CFG.chatId;
 if (state.quiet === undefined) state.quiet = /^off$/i.test(CFG.quiet) ? null : CFG.quiet;
@@ -324,7 +324,7 @@ function fresh(rows) {
 }
 
 // ---------- 🔥 ALARM (the page's own IGNITION ALARM, in a second tab) ----------
-let aInfo = null, aLoadedAt = 0, aBusy = false;
+let aInfo = null, aLoadedAt = 0, aBusy = false, aLastSweep = 0;
 async function loadAlarmPage() {
   await ensureBrowser();
   if (!apage || apage.isClosed()) { apage = await ctx.newPage(); hookPage(apage, 'alarm'); }
@@ -334,33 +334,82 @@ async function loadAlarmPage() {
     IGA.on = true; IGA.both = both; IGA.mute = true; IGA.notif = false;
     window.__igQ = [];
     const orig = igShow;
-    igShow = function (list, isStatus) {   // igSweep calls igShow(ev,false) for every new event
+    igShow = function (list, isStatus) {   // igSweep calls igShow(ev,false) for every new 🔥 / ⚡ event
       try {
         if (!isStatus) (list || []).forEach(r => {
           const g = r.g || {}, ch = (typeof chaseInfo === 'function') ? chaseInfo(r.chg24) : null;
-          window.__igQ.push({ coin: r.coin, d5: r.d5, d15: r.d15, chg24: r.chg24, t: r.t, px: fmt(r.px), lo: fmt(g.baseLo), hi: fmt(g.baseHi),
-            phase: g.phase, score: g.score, dir: g.dir, volX: g.volX, barX: g.barX, brk: g.brk, mv: g.mv, oi: g.oi, taker: g.taker,
+          window.__igQ.push({ kind: g.phase === 'EARLY' ? 'EARLY' : g.phase === 'RUN' ? 'RUN' : 'IGNITE', coin: r.coin, d5: r.d5, d15: r.d15, chg24: r.chg24, t: r.t,
+            px: fmt(r.px), lo: fmt(g.baseLo), hi: fmt(g.baseHi), pxN: r.px, loN: g.baseLo, hiN: g.baseHi,
+            phase: g.phase, score: g.score, dir: g.dir, volX: g.volX, barX: g.barX, lastX: g.lastX, brk: g.brk, mv: g.mv, oi: g.oi, taker: g.taker,
             obv: !!g.obvOk, ad: !!g.adOk, chase: ch ? ch.tag : '' });
         });
       } catch (e) {}
       return orig.apply(this, arguments);
     };
+    if (typeof gaShow === 'function') {   // 🧯 ГАСИ (scanner 2026-11-09-a+)
+      const og = gaShow;
+      gaShow = function (list) {
+        try {
+          (list || []).forEach(r => {
+            const g = r.g || {};
+            window.__igQ.push({ kind: 'GASI', coin: r.coin, t: r.t, chg24: r.chg24, px: fmt(r.px), pxN: r.px, score: g.score,
+              peak: fmt(g.peak), peakN: g.peak, legLowN: g.legLow, leg: g.leg, dd: g.dd, ddAtr: g.ddAtr, retr: g.retr, sp: g.sp, taker: g.taker,
+              obvDiv: !!g.obvDiv, adDiv: !!g.adDiv, oiChg: g.oiChg, trapped: !!g.trapped, unwind: !!g.unwind, mom: !!g.mom, wick: g.wick,
+              f236: fmt(g.f236), f382: fmt(g.f382), f5: fmt(g.f5), f382N: g.f382, f5N: g.f5 });
+          });
+        } catch (e) {}
+        return og.apply(this, arguments);
+      };
+    }
     _igLast = 0;
-    return { build: APP_BUILD };
+    return { build: APP_BUILD, gasi: typeof gaShow === 'function' };
   }, !!state.alarmBoth);
-  aLoadedAt = Date.now();
+  aLoadedAt = Date.now(); aLastSweep = 0;
   log('alarm tab loaded', aInfo);
 }
 const pc = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const binLinks = c => `<a href="https://www.binance.com/en/futures/${c}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${c}USDT">CoinGlass</a>`;
+function leadTxt(e) {
+  const L = state.igLog[e.coin]?.first;
+  if (!L || !(L.px > 0) || !(e.pxN > 0)) return '';
+  const mins = Math.round((e.t - L.t) / 60000);
+  return mins >= 3 ? `\n👀 прв кандидат ${hhmm(L.t)} (${L.ph || '—'}) · ${mins} мин · цена од тогаш ${pc(e.pxN / L.px - 1)}` : '';
+}
 function igMsg(e) {
-  const up = e.dir > 0, run = e.phase === 'RUN';
-  const plan = run ? '⚠ Веќе трча (≥25% за 1.5h): CHASE ризик, само план за повлекување'
+  if (e.kind === 'GASI') {
+    const yn = b => b ? '✔' : '✗';
+    return `🧯 <b>ГАСИ · ${esc(e.coin)}.P · ${e.score}</b>\n` +
+      `PX ${esc(e.px)} · врв ${esc(e.peak)} (${pc(-e.dd)}, −${(+e.ddAtr).toFixed(1)} ATR) · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
+      `потег ${pc(e.leg)} · ${e.sp} свеќи без нов врв · retrace ${(e.retr * 100).toFixed(0)}% · taker ${(e.taker * 100).toFixed(0)}%B\n` +
+      `OBV↓ ${yn(e.obvDiv)} A/D↓ ${yn(e.adDiv)} · OI од врвот ${e.oiChg == null ? 'n/a' : (e.oiChg >= 0 ? '+' : '') + (+e.oiChg).toFixed(1) + '%'}${e.trapped ? ' (заробени лонгови)' : e.unwind ? ' (squeeze се одмотува)' : ''} · мом ${yn(e.mom)} · фитил ${yn(e.wick >= 0.5)}\n` +
+      `➡ Крај на тренд: без нов лонг / заштити профит. Шорт само по план: ретест .236 ${esc(e.f236)}, SL над ${esc(e.peak)}, цели .382 ${esc(e.f382)} / .5 ${esc(e.f5)}\n` + binLinks(e.coin);
+  }
+  const up = e.dir > 0, run = e.kind === 'RUN', early = e.kind === 'EARLY';
+  const plan = early ? '➡ Најрана фаза (една силна свеќа), уште не е потврдено. Следи: план = повлекување / CLEAN15'
+    : run ? '⚠ Веќе трча (≥25% за 1.5h): CHASE ризик, само план за повлекување'
     : up ? '➡ Не е влез: план = повлекување .5/.618 + CLEAN15' : '➡ Паѓа со волумен: провери дали е дамп/ликвидации, шорт само по план';
-  return `🔥 <b>${run ? 'RUN' : 'ПАЛЕЊЕ'} · ${esc(e.coin)}.P ${up ? '▲' : '▼'} ${esc(e.phase)} ${e.score}</b>\n` +
+  const head = early ? `⚡ <b>РАНО ПАЛЕЊЕ · ${esc(e.coin)}.P ${up ? '▲' : '▼'} EARLY ${e.score}</b>` : `🔥 <b>${run ? 'RUN' : 'ПАЛЕЊЕ'} · ${esc(e.coin)}.P ${up ? '▲' : '▼'} ${esc(e.phase)} ${e.score}</b>`;
+  return head + '\n' +
     `PX ${esc(e.px)} · 5m ${pc(e.d5)} · 15m ${pc(e.d15)} · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
-    `vol ×${(+e.volX).toFixed(1)} (bar ×${(+e.barX).toFixed(0)}) · пробив ${pc(e.brk)} · OI◆ ${e.oi == null ? 'n/a' : (e.oi >= 0 ? '+' : '') + (+e.oi).toFixed(1) + '%'} · taker ${(e.taker * 100).toFixed(0)}%B · OBV ${e.obv ? '✔' : '✗'} A/D ${e.ad ? '✔' : '✗'}\n` +
-    `база ${esc(e.lo)}–${esc(e.hi)}${e.chase ? ' · ⚠' + esc(e.chase) : ''}\n${plan}\n` +
-    `<a href="https://www.binance.com/en/futures/${e.coin}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${e.coin}USDT">CoinGlass</a>`;
+    `vol ×${(+e.volX).toFixed(1)} (bar ×${(+e.barX).toFixed(0)}${early && e.lastX != null ? ', последна ×' + (+e.lastX).toFixed(0) : ''}) · пробив ${pc(e.brk)} · OI◆ ${e.oi == null ? 'n/a' : (e.oi >= 0 ? '+' : '') + (+e.oi).toFixed(1) + '%'} · taker ${(e.taker * 100).toFixed(0)}%B · OBV ${e.obv ? '✔' : '✗'} A/D ${e.ad ? '✔' : '✗'}\n` +
+    `база ${esc(e.lo)}–${esc(e.hi)}${e.chase ? ' · ⚠' + esc(e.chase) : ''}${leadTxt(e)}\n${plan}\n` + binLinks(e.coin);
+}
+// candidate log: first time each coin shows up in the ALARM sweep (any phase) -> how early could we have known
+function logCands(cands, t) {
+  for (const r of cands) {
+    const L = state.igLog[r.c];
+    if (!L || t - L.last > 6 * 3600e3) state.igLog[r.c] = { first: { t, px: r.px, ph: r.ph || '', sc: r.sc }, ph: {}, last: t };
+    const M = state.igLog[r.c]; M.last = t;
+    if (r.ph && !M.ph[r.ph]) M.ph[r.ph] = { t, px: r.px, sc: r.sc };
+  }
+  for (const k in state.igLog) if (t - state.igLog[k].last > 24 * 3600e3) delete state.igLog[k];
+}
+function trackAlarm(e) {
+  const L = state.igLog[e.coin];
+  state.igTrack.push({ kind: e.kind, coin: e.coin, t: e.t || Date.now(), px: e.pxN, score: e.score, lo: e.loN ?? null,
+    peak: e.peakN ?? null, legLow: e.legLowN ?? null, f382: e.f382N ?? null, f5: e.f5N ?? null,
+    first: L?.first ? { t: L.first.t, px: L.first.px, ph: L.first.ph } : null, res: null });
+  state.igTrack = state.igTrack.filter(x => Date.now() - x.t < 10 * 24 * 3600e3);
 }
 async function alarmPoll() {
   if (aBusy) return; aBusy = true;
@@ -372,10 +421,18 @@ async function alarmPoll() {
     const stale = Date.now() - aLoadedAt > CFG.alarmReloadH * 3600e3;
     const newBuild = state.lastFull?.build && aInfo?.build && aInfo.build !== state.lastFull.build;
     if (!apage || apage.isClosed() || stale || newBuild) { await loadAlarmPage(); return; }
-    const ev = await apage.evaluate(() => { IGA.on = true; return (window.__igQ || []).splice(0); });
-    if (!ev.length) return;
-    const now = Date.now(), out = ev.filter(e => !(state.igSent[e.coin] && now - state.igSent[e.coin] < 4 * 3600e3));
-    out.forEach(e => { state.igSent[e.coin] = now; });
+    const snap = await apage.evaluate((since) => {
+      IGA.on = true;
+      const out = { ev: (window.__igQ || []).splice(0), last: _igLast, cands: null };
+      if (_igLast && _igLast !== since) out.cands = (_igRes || []).map(r => ({ c: r.coin, ph: r.g && r.g.phase, sc: r.g && r.g.score, px: r.px }));
+      return out;
+    }, aLastSweep);
+    if (snap.cands) { aLastSweep = snap.last; logCands(snap.cands, snap.last); }
+    const ev = snap.ev;
+    if (!ev.length) { if (snap.cands) save(); return; }
+    const now = Date.now(), key = e => e.coin + '#' + (e.kind === 'EARLY' ? 'E' : e.kind === 'GASI' ? 'G' : 'I');
+    const out = ev.filter(e => !(state.igSent[key(e)] && now - state.igSent[key(e)] < 4 * 3600e3));
+    out.forEach(e => { state.igSent[key(e)] = now; trackAlarm(e); });
     for (const k in state.igSent) if (now - state.igSent[k] > 24 * 3600e3) delete state.igSent[k];
     save();
     if (!out.length || inQuiet() || now < state.muteUntil) return;
@@ -389,9 +446,64 @@ async function alarmStatus() {
   if (!state.alarm) return '🔥 ALARM: OFF';
   if (!apage || apage.isClosed()) return '🔥 ALARM: ON · се вчитува';
   try {
-    const a = await apage.evaluate(() => ({ last: _igLast, cand: _igCand, warm: _igSnaps.length ? Date.now() - _igSnaps[0].t < 15 * 60000 : true, n: (_igRes || []).length }));
-    return `🔥 ALARM: ON${state.alarmBoth ? ' ▲▼' : ' ▲'} · проверка ${a.last ? hhmm(a.last) : '—'} · кандидати ${a.cand}${a.warm ? ' · ⏳ загревање' : ''}`;
+    const a = await apage.evaluate(() => ({ last: _igLast, cand: _igCand, warm: _igSnaps.length ? Date.now() - _igSnaps[0].t < 15 * 60000 : true, ga: typeof _gaRes !== 'undefined' ? _gaRes.length : null }));
+    return `🔥 ALARM: ON${state.alarmBoth ? ' ▲▼' : ' ▲'} · проверка ${a.last ? hhmm(a.last) : '—'} · кандидати ${a.cand}${a.ga != null ? ' · 🧯 следи ' + a.ga : ''}${a.warm ? ' · ⏳ загревање' : ''}`;
   } catch { return '🔥 ALARM: ON · ?'; }
+}
+// ---------- /igstats: what happened after each 🔥 ⚡ 🧯 (15m bars from Binance, 1h and 4h) ----------
+function igJudge(x, kl) {
+  const at = h => kl.slice(0, h * 4);
+  const mx = (a, f) => a.length ? Math.max(...a.map(f)) : null, mn = (a, f) => a.length ? Math.min(...a.map(f)) : null;
+  const k1 = at(1), k4 = at(4), up1 = mx(k1, k => +k[2]), up4 = mx(k4, k => +k[2]), dn1 = mn(k1, k => +k[3]), dn4 = mn(k4, k => +k[3]);
+  const r = { up1: up1 / x.px - 1, up4: up4 / x.px - 1, dn1: dn1 / x.px - 1, dn4: dn4 / x.px - 1, end4: +k4[k4.length - 1][4] / x.px - 1 };
+  if (x.kind === 'GASI') {
+    r.newHi = x.peak != null && up4 > x.peak;
+    r.hit382 = x.f382 != null && dn4 <= x.f382; r.hit5 = x.f5 != null && dn4 <= x.f5;
+  } else if (x.lo != null) {   // pull-back to .5/.618 of the leg base low -> highest high after the alarm, AFTER that high
+    let hi = x.px, iHi = -1; k4.forEach((k, i) => { if (+k[2] > hi) { hi = +k[2]; iHi = i; } });
+    const after = k4.slice(iHi + 1), lowAfter = after.length ? Math.min(...after.map(k => +k[3])) : Infinity;
+    r.pb5 = lowAfter <= hi - 0.5 * (hi - x.lo); r.pb618 = lowAfter <= hi - 0.618 * (hi - x.lo);
+  }
+  return r;
+}
+let igResolving = false;
+async function resolveIg() {
+  if (igResolving) return; igResolving = true;
+  try {
+    const due = state.igTrack.filter(x => !x.res && x.px > 0 && Date.now() >= x.t + 4 * 3600e3 + 60e3).slice(0, 30);
+    for (const x of due) {
+      const kl = await bklines(x.coin + 'USDT', Math.floor(x.t / BAR) * BAR, 17);
+      if (!kl) continue;
+      const k = kl.filter(r => +r[6] > x.t).slice(0, 16);
+      x.res = k.length >= 4 ? igJudge(x, k) : { na: true };
+      await sleep(150);
+    }
+    if (due.length) save();
+  } finally { igResolving = false; }
+}
+function igStats(hours) {
+  const cut = Date.now() - hours * 3600e3, T = state.igTrack.filter(x => x.t >= cut), done = T.filter(x => x.res && !x.res.na);
+  if (!T.length) return 'Уште нема аларми во овој период.';
+  const med = a => { const v = a.filter(x => x != null && isFinite(x)).sort((p, q) => p - q); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  const cnt = k => T.filter(x => x.kind === k).length;
+  let t = `<b>🔥 ALARM следење · ${hours}h</b>\n⚡ EARLY ${cnt('EARLY')} · 🔥 IGNITE ${cnt('IGNITE')} · RUN ${cnt('RUN')} · 🧯 ГАСИ ${cnt('GASI')} · завршени ${done.length} (4h)\n`;
+  for (const g of [['EARLY', '⚡ EARLY'], ['IGNITE', '🔥 IGNITE'], ['RUN', '🔥 RUN']]) {
+    const a = done.filter(x => x.kind === g[0]); if (!a.length) continue;
+    t += `\n<b>${g[1]}</b> · ${a.length}\nпо алармот: макс раст 1h ${pc(med(a.map(x => x.res.up1)))} / 4h ${pc(med(a.map(x => x.res.up4)))} · макс пад 4h ${pc(med(a.map(x => x.res.dn4)))} · крај 4h ${pc(med(a.map(x => x.res.end4)))} (медијани)\n` +
+      `повлекување по врвот: до .5 ${a.filter(x => x.res.pb5).length}/${a.length} · до .618 ${a.filter(x => x.res.pb618).length}/${a.length}\n`;
+  }
+  const G = done.filter(x => x.kind === 'GASI');
+  if (G.length) t += `\n<b>🧯 ГАСИ</b> · ${G.length}\nпо алармот: макс пад 4h ${pc(med(G.map(x => x.res.dn4)))} · макс раст 4h ${pc(med(G.map(x => x.res.up4)))} · крај 4h ${pc(med(G.map(x => x.res.end4)))}\nнов врв (squeeze) ${G.filter(x => x.res.newHi).length}/${G.length} · до .382 ${G.filter(x => x.res.hit382).length}/${G.length} · до .5 ${G.filter(x => x.res.hit5).length}/${G.length}\n`;
+  const L = T.filter(x => x.kind !== 'GASI' && x.first && x.first.px > 0);
+  if (L.length) t += `\n<b>Доцнење</b> (прв кандидат → аларм): медијана ${Math.round(med(L.map(x => (x.t - x.first.t) / 60000)))} мин · цена ${pc(med(L.map(x => x.px / x.first.px - 1)))}\n`;
+  t += '\n<b>Последни</b>\n' + [...T].sort((a, b) => b.t - a.t).slice(0, 10).map(x => {
+    const ic = x.kind === 'GASI' ? '🧯' : x.kind === 'EARLY' ? '⚡' : '🔥', r = x.res;
+    const res = !r ? 'отворено' : r.na ? 'n/a' : x.kind === 'GASI' ? `4h ${pc(r.dn4)} / ${pc(r.up4)}${r.newHi ? ' ⚠нов врв' : ''}${r.hit5 ? ' .5✔' : r.hit382 ? ' .382✔' : ''}`
+      : `4h ${pc(r.up4)} / ${pc(r.dn4)}${r.pb618 ? ' .618✔' : r.pb5 ? ' .5✔' : ''}`;
+    const lead = x.first && x.kind !== 'GASI' ? ` · прв ${hhmm(x.first.t)} ${pc(x.px / x.first.px - 1)}` : '';
+    return `${hhmm(x.t)} ${ic} ${esc(x.coin)} ${x.score}${lead} · ${res}`;
+  }).join('\n');
+  return t;
 }
 
 // ---------- TELEGRAM ----------
@@ -428,7 +540,8 @@ const HELP = [
   '/why 48 — зошто нема сигнали (статистика по гејт)',
   '/near — 👀 9/10 известувања (on/off, не е влез)',
   '/nearstats 72 — што се случило после 9/10 и A/B (по гејт)',
-  '/alarm — 🔥 ПАЛЕЊЕ аларм on/off · /alarm both — ▲ или ▲▼',
+  '/alarm — 🔥⚡🧯 аларм on/off · /alarm both — ▲ или ▲▼',
+  '/igstats 72 — што се случило после 🔥 ⚡ 🧯 (1h/4h)',
   '/mute 60 · /unmute',
   '/quiet 01:00-08:30 · /quiet off — ноќна тишина',
   '/status',
@@ -485,6 +598,7 @@ async function handle(text) {
       return send(l.length ? '⭐ ' + esc(l.join(', ')) : 'Нема favorites');
     }
     case '/strict': state.strict = !state.strict; save(); return send(`Само 🟢GO: ${state.strict ? 'ON' : 'OFF'}`);
+    case '/igstats': { const h = Math.min(240, Math.max(1, parseInt(argRaw) || 72)); await resolveIg(); return send(igStats(h)); }
     case '/alarm': {
       if (/^both$/i.test(argRaw || '')) { state.alarmBoth = !state.alarmBoth; save(); aLoadedAt = 0; return send(`🔥 ALARM насока: ${state.alarmBoth ? '▲▼ (и паѓања)' : '▲ (само раст)'}`); }
       if (/^on$/i.test(argRaw || '')) state.alarm = true; else if (/^off$/i.test(argRaw || '')) state.alarm = false; else if (!argRaw) state.alarm = !state.alarm;
@@ -564,6 +678,7 @@ async function schedLoop() {
         const r = await job(cleanCycle);
         state.errNotified = false;
         resolveTracks().catch(e => log('track', e.message));
+        resolveIg().catch(e => log('igtrack', e.message));
         if (inQuiet() || Date.now() < state.muteUntil) continue;   // silent: nothing marked as sent
         const out = fresh(r.rows); save();
         if (out.length) await send(head(r) + '\n\n' + out.map(card).join('\n\n'));
