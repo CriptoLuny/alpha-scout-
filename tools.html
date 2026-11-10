@@ -195,7 +195,7 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
     <ul class="chk" id="chk"></ul>
     <div class="man" style="margin-top:8px">
       <label><input type="checkbox" class="mc"> Тригер свеќата е затворена (15m)</label>
-      <label><input type="checkbox" class="mc"> OI коини и цена прочитани заедно, ист правец</label>
+      <label id="mcOIwrap"><input type="checkbox" class="mc" id="mcOI"> OI коини и цена прочитани заедно, ист правец</label>
       <label><input type="checkbox" class="mc"> Влез на планирано ниво, не бркам свеќа</label>
     </div>
     <button class="btn go" id="openBtn" style="margin-top:10px" disabled>▶ Отвори трејд</button>
@@ -321,6 +321,37 @@ async function api(ep){
   try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(12000)});if(r.ok)return await r.json();}catch(e){}
   return null;
 }
+async function apiUrl(url){
+  try{const r=await fetch(url,{signal:AbortSignal.timeout(8000)});if(r.ok)return await r.json();}catch(e){}
+  try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(12000)});if(r.ok)return await r.json();}catch(e){}
+  return null;
+}
+// ===== OI coins + price read, same thresholds as αSCOUT CLEAN15 G4 =====
+const OI_MIN=0.5,OI_PX_ATR=0.3,OI_FLUSH=-0.3,OI_HOLD_MAX=1.0,OI_FRESH=17*60000;
+function oiRead(side){
+  const H=SD.oiH;if(!H||H.length<4||!isFinite(SD.atr))return null;
+  const P=H.slice(-4);                 // 4 snapshots = 3 closed 15m bars
+  const px=P.map(x=>x.val/x.coins),dir=side==='L'?1:-1;
+  const oiChg=(P[3].coins/P[0].coins-1)*100;
+  const pxAtr=dir*(px[3]-px[0])/SD.atr;          // + = price moved in the trade direction
+  const flow=(P[3].coins-P[0].coins)*px[3],reval=P[0].coins*(px[3]-px[0]);
+  const dom=Math.abs(flow)>=Math.abs(reval)?'FLOW':'REVAL';
+  const bar=i=>({oi:(P[i].coins/P[i-1].coins-1)*100,px:dir*(px[i]-px[i-1])/SD.atr});
+  const b3=bar(3),b2=bar(2),b1=bar(1);
+  const age=Date.now()-P[3].t;
+  const fresh=age<=OI_FRESH;
+  let st,ok;
+  if(oiChg>=OI_MIN&&pxAtr>=OI_PX_ATR&&dom==='FLOW'){st='DRIVE';ok=true;}
+  else if(oiChg>=OI_MIN&&pxAtr>=OI_PX_ATR){st='DRIVE (DOM REVAL)';ok=false;}
+  else if(oiChg>=OI_MIN){st='ABSORB';ok=false;}
+  else if([b1,b2].some(b=>b.oi<=OI_FLUSH&&b.px<0)&&b3.oi>OI_FLUSH&&b3.oi<=OI_HOLD_MAX&&b3.px>0){st='FLUSH→HOLD';ok=true;}
+  else if(oiChg<=-OI_MIN&&pxAtr>0){st='UNWIND';ok=false;}
+  else if(oiChg<=-OI_MIN){st='FLUSH';ok=false;}
+  else{st='FLAT';ok=false;}
+  const why={'DRIVE':'нови позиции во насока на трејдот','DRIVE (DOM REVAL)':'OI$ го дига цената, не нови коини','ABSORB':'нови позиции, а цената не оди во насоката → спротивната страна гради',
+    'FLUSH→HOLD':'flush против трејдот, OI стои на reclaim','UNWIND':'цената оди со затворање позиции, не со нови','FLUSH':'позициите се затвораат против трејдот','FLAT':'нема нов проток, нема потврда'}[st];
+  return{st,ok,fresh,oiChg,pxAtr,dom,t:P[3].t,why};
+}
 function cleanSym(v){return String(v||'').toUpperCase().replace(/USDT$/,'').replace(/\.P$/,'').replace(/[^A-Z0-9\u4e00-\u9fff]/g,'').trim();}
 
 // ===== tabs =====
@@ -398,11 +429,11 @@ $('sym').addEventListener('keydown',e=>{if(e.key==='Enter')loadSym();});
 async function loadSym(){
   const s=cleanSym($('sym').value);if(!s){toast('Внеси коин');return;}
   $('sym').value=s;$('symInfo').textContent='Вчитувам '+s+'USDT…';
-  const[t,k]=await Promise.all([api('/ticker/24hr?symbol='+s+'USDT'),api('/klines?symbol='+s+'USDT&interval=15m&limit=20')]);
+  const[t,k,oh]=await Promise.all([api('/ticker/24hr?symbol='+s+'USDT'),api('/klines?symbol='+s+'USDT&interval=15m&limit=20'),apiUrl('https://fapi.binance.com/futures/data/openInterestHist?symbol='+s+'USDT&period=15m&limit=6')]);
   if(!t||!t.lastPrice){$('symInfo').innerHTML='<span class="dn">'+s+'USDT не е најден на Futures.</span>';SD={};calc();return;}
   let atr=NaN;
   if(k&&k.length>=16){const c=k.slice(0,-1);let sum=0,n=0;for(let i=c.length-14;i<c.length;i++){const h=+c[i][2],l=+c[i][3],pc=+c[i-1][4];sum+=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc));n++;}atr=sum/n;}
-  SD={sym:s,price:+t.lastPrice,chg:+t.priceChangePercent,atr};
+  SD={sym:s,price:+t.lastPrice,chg:+t.priceChangePercent,atr,oiH:Array.isArray(oh)?oh.map(x=>({t:+x.timestamp,coins:+x.sumOpenInterest,val:+x.sumOpenInterestValue})).filter(x=>x.coins>0).sort((a,b)=>a.t-b.t):null};
   if(!$('entry').value)$('entry').value=SD.price;
   $('symInfo').innerHTML=`Цена <b class="mono">${fP(SD.price)}</b> · 24h <b class="mono ${SD.chg>=0?'up':'dn'}">${SD.chg>=0?'+':''}${SD.chg.toFixed(2)}%</b> · ATR(15m) <b class="mono">${fP(atr)}</b> (${(atr/SD.price*100).toFixed(2)}%)`;
   calc();
@@ -471,6 +502,13 @@ function calc(){
   checks.push([!cl,cl?('Ист коин заклучен до '+hhmm(S.coinLocks[csym])):'Коинот не е во лок (2–3h правило)']);
   checks.push([slOk,slOk?'SL на правилна страна':'SL е на погрешна страна од влезот']);
   checks.push([tpOk,tpOk?'TP на правилна страна':'TP е на погрешна страна']);
+  // OI coins + price: automatic when loaded and fresh, else manual checkbox
+  const oi=SD.sym===csym?oiRead(side):null,oiAuto=!!(oi&&oi.fresh);
+  $('mcOIwrap').style.display=oiAuto?'none':'';
+  if(oiAuto)$('mcOI').checked=true;else if($('mcOI').dataset.auto==='1')$('mcOI').checked=false;
+  $('mcOI').dataset.auto=oiAuto?'1':'0';
+  if(oi)checks.push([oi.fresh?oi.ok:null,'OI◆ 3×15m '+(oi.oiChg>=0?'+':'')+oi.oiChg.toFixed(2)+'% · цена '+(oi.pxAtr>=0?'+':'')+oi.pxAtr.toFixed(2)+' ATR во насоката · DOM '+oi.dom+' → <b>'+oi.st+'</b>: '+oi.why+(oi.fresh?' ('+hhmm(oi.t)+')':' · <b>старо ('+hhmm(oi.t)+'), притисни Вчитај</b>')]);
+  else checks.push([null,csym?'OI◆ + цена: притисни „Вчитај цена + ATR“ за автоматска проверка':'OI◆ + цена: внеси коин и притисни Вчитај']);
   checks.push([isFinite(atrMul)?atrMul<=1.5:null,isFinite(atrMul)?('SL '+atrMul.toFixed(2)+' ATR (≤1.5)'):'SL ≤ 1.5 ATR: вчитај коин за ATR']);
   checks.push([isFinite(rr)?rr>=2:null,isFinite(rr)?('R:R нето '+rr.toFixed(2)+' (≥2)'):'R:R ≥ 2: внеси TP']);
   checks.push([!liqBad,liqBad?'Ликвидација ПРЕД SL':'Ликвидација после SL']);
