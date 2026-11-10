@@ -1286,6 +1286,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-10-c  🎵 TEMPO confirmation. User: show the tag only when the coin algorithmically HAS a tempo,
+//    tap = open the coin detail. Six tests, all must pass: >=10 legs (>=3 up, >=3 down); duration CV <= 0.50;
+//    persistence = median(newer half)/median(older half) in 0.67-1.5; amplitude CV <= 0.6; median leg >= 2%;
+//    normal regime now. Calibrated on synthetic series (1000 bars, ZigZag 3xATR, 12 legs): random walk passes
+//    ~5% (old CV<=0.85 "mid" passed a random walk ~75%, CV<=0.55 ~13% -> both removed), cyclic ~99%. Tag tap -> openDetail +
+//    scroll to the TEMPO panel (popup kept only as tempoPop()). Checked set = FAV + first 40 of the current view,
+//    tags render as they confirm. Detail panel shows the 6 tests with values; guidance only when confirmed.
 //  2026-11-10-b  🎵 TEMPO (observation only). Prompted by IDOL.P 04-09.11: holds 15m-4h = 21 positions +115,
 //    holds <15m = 64 positions -153 (WR 3%); the coin swung 0.0300 <-> 0.034-0.0355 in 3-8h legs.
 //    ZigZag on closed 15m high/low, reversal = 3 x ATR14 (prev bar); last 12 legs = current regime.
@@ -1377,7 +1384,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-10-b';
+const APP_BUILD='2026-11-10-c';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -9706,9 +9713,10 @@ function patHelpSections(){
 // Method: ZigZag on high/low with reversal = TEMPO_K x ATR14(15m) (previous bar),
 // legs = consecutive pivots, last TEMPO_LEGS legs = current regime.
 // ==========================================================
-const TEMPO_TF='15m',TEMPO_BARS=1000,TEMPO_K=3,TEMPO_LEGS=12,TEMPO_MIN_LEGS=6;
-const TEMPO_MAX_COINS=30,TEMPO_TTL=15*60000,TEMPO_BAR_MIN=15;
-const TEMPO_ATR_LO=0.6,TEMPO_ATR_HI=1.6,TEMPO_CV_GOOD=0.55,TEMPO_CV_MID=0.85;
+const TEMPO_TF='15m',TEMPO_BARS=1000,TEMPO_K=3,TEMPO_LEGS=12,TEMPO_MIN_LEGS=10;
+const TEMPO_MAX_COINS=40,TEMPO_TTL=15*60000,TEMPO_BAR_MIN=15;
+const TEMPO_ATR_LO=0.6,TEMPO_ATR_HI=1.6,TEMPO_CV_MAX=0.5,TEMPO_PERS_LO=0.67,TEMPO_PERS_HI=1.5,TEMPO_ACV_MAX=0.6,TEMPO_AMP_MIN=0.02;
+// 2026-11-10-c calibration (ZigZag 3xATR, 12 legs, 1000 bars): a random walk passes all tests ~5%, a cyclic series ~99%.
 let _tempo={},_tempoBuilding=false;
 
 const tmpHeadless=()=>{try{return !!navigator.webdriver||/HeadlessChrome/.test(navigator.userAgent);}catch(e){return false;}};
@@ -9799,26 +9807,45 @@ async function tempoEval(coin,force){
   // floor / ceiling from the last 2 confirmed lows / highs
   const lows=P.filter(x=>x.t==='L').slice(-2).map(x=>x.p),highs=P.filter(x=>x.t==='H').slice(-2).map(x=>x.p);
   if(lows.length&&highs.length){r.floor=Math.min(...lows);r.ceil=Math.max(...highs);r.pos=r.ceil>r.floor?(r.price-r.floor)/(r.ceil-r.floor):NaN;}
-  r.q=legs.length<TEMPO_MIN_LEGS||r.up.n<2||r.dn.n<2?'none':!r.normal?'abn':r.cv<=TEMPO_CV_GOOD?'good':r.cv<=TEMPO_CV_MID?'mid':'irr';
+  // 2026-11-10-c: algorithmic confirmation -- ALL tests must pass for "tempo confirmed"
+  const half=Math.floor(legs.length/2);
+  r.pers=legs.length>=4?tmpMed(legs.slice(half).map(x=>x.dur))/tmpMed(legs.slice(0,half).map(x=>x.dur)):NaN;
+  r.ampCV=tmpCV(legs.map(x=>x.amp));r.ampMed=tmpMed(legs.map(x=>x.amp));
+  r.tests=[
+    {id:'Бранови',ok:legs.length>=TEMPO_MIN_LEGS&&r.up.n>=3&&r.dn.n>=3,v:legs.length+' (≥'+TEMPO_MIN_LEGS+')'},
+    {id:'Ритам (CV траење)',ok:r.cv<=TEMPO_CV_MAX,v:isFinite(r.cv)?r.cv.toFixed(2)+' (≤'+TEMPO_CV_MAX+'; случаен пазар ~0.7)':'—'},
+    {id:'Постојаност (нова/стара половина)',ok:r.pers>=TEMPO_PERS_LO&&r.pers<=TEMPO_PERS_HI,v:isFinite(r.pers)?r.pers.toFixed(2)+'× ('+TEMPO_PERS_LO+'–'+TEMPO_PERS_HI+')':'—'},
+    {id:'Еднаква големина на бранови (CV)',ok:r.ampCV<=TEMPO_ACV_MAX,v:isFinite(r.ampCV)?r.ampCV.toFixed(2)+' (≤'+TEMPO_ACV_MAX+')':'—'},
+    {id:'Бран вреди за трејд',ok:r.ampMed>=TEMPO_AMP_MIN,v:tmpPct(r.ampMed)+' (≥'+tmpPct(TEMPO_AMP_MIN,0)+')'},
+    {id:'Нормален режим сега',ok:r.normal,v:'ATR '+(isFinite(r.atrRatio)?r.atrRatio.toFixed(2):'—')+'× (0.6–1.6)'+(isFinite(r.chg24)?' · 24h '+(r.chg24>=0?'+':'')+r.chg24.toFixed(0)+'%':'')}
+  ];
+  r.confirmed=r.tests.every(t=>t.ok);
+  r.q=legs.length<4?'none':r.confirmed?'good':'no';
   _tempo[coin]=r;
   return r;
 }
 
 // -- row tag: only when the coin has a usable rhythm --------
 function tempoTagHTML(coin){
-  const r=_tempo[coin];if(!r||(r.q!=='good'&&r.q!=='mid'))return '';
-  const c=r.q==='good'?'var(--green)':'var(--yellow)';
+  const r=_tempo[coin];if(!r||!r.confirmed)return '';
+  const c='var(--green)';
   const cur=r.cur&&isFinite(r.cur.prog)?(r.cur.dir==='up'?'▲':'▼')+Math.round(Math.min(r.cur.prog,9.99)*100)+'%':'';
-  return '<span class="ctag" data-coin="'+coin+'" onclick="event.stopPropagation();tempoPop(this.dataset.coin)" style="background:transparent;color:'+c
+  return '<span class="ctag" data-coin="'+coin+'" onclick="event.stopPropagation();tempoGo(this.dataset.coin)" style="background:transparent;color:'+c
     +';border:1px solid '+c+';font-family:var(--mono);cursor:pointer">🎵'+tmpDurShort(r.medAll)+cur+'</span>';
 }
 
 function tmpQualTxt(r){
-  if(r.q==='none')return['var(--muted)','Нема доволно бранови ('+r.nLegs+' < '+TEMPO_MIN_LEGS+'): коинот се движи премалку за мерење'];
-  if(r.q==='abn')return['var(--orange)','Режимот НЕ е нормален'+(r.chg24>=20?' (24h +'+r.chg24.toFixed(0)+'%)':'')+' · ATR '+r.atrRatio.toFixed(1)+'× од 7д медијан: темпото не важи'];
-  if(r.q==='irr')return['var(--orange)','Нерегуларен ритам (CV '+r.cv.toFixed(2)+'): нема темпо за тргување'];
-  if(r.q==='mid')return['var(--yellow)','Умерен ритам (CV '+r.cv.toFixed(2)+') · нормален режим (ATR '+r.atrRatio.toFixed(1)+'×)'];
-  return['var(--green)','Стабилен ритам (CV '+r.cv.toFixed(2)+') · нормален режим (ATR '+r.atrRatio.toFixed(1)+'×)'];
+  if(r.q==='none')return['var(--muted)','❌ НЕМА ТЕМПО · премалку бранови ('+r.nLegs+'): коинот се движи премалку за мерење'];
+  if(r.confirmed)return['var(--green)','✅ ТЕМПО ПОТВРДЕНО · сите '+r.tests.length+' тестови'];
+  const f=r.tests.filter(t=>!t.ok).map(t=>t.id);
+  return[f.length===1&&f[0]==='Нормален режим сега'?'var(--orange)':'var(--muted)','❌ НЕМА ТЕМПО · не поминува: '+f.join(', ')];
+}
+function tmpTestsHTML(r){
+  return '<div style="margin:2px 0 10px">'+r.tests.map(t=>'<div style="display:flex;gap:8px;padding:3px 0;font-size:11px"><span style="width:14px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✔':'✗')+'</span><span style="flex:1;color:var(--text2)">'+t.id+'</span><span style="color:'+(t.ok?'var(--text)':'var(--red)')+'">'+t.v+'</span></div>').join('')+'</div>';
+}
+function tempoGo(coin){
+  openDetail(coin);
+  setTimeout(()=>{const b=document.getElementById('dpTempo');if(b)b.scrollIntoView({behavior:'smooth',block:'start'});},450);
 }
 
 function tempoHTML(r){
@@ -9826,8 +9853,10 @@ function tempoHTML(r){
   const [qc,qt]=tmpQualTxt(r);
   const row=(l,v,c)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">'+l+'</span><b style="color:'+(c||'var(--text)')+';text-align:right">'+v+'</b></div>';
   let o='<div style="font-family:var(--mono);font-size:12px;line-height:1.5">';
-  o+='<div style="color:'+qc+';font-weight:bold;margin-bottom:8px">'+qt+'</div>';
+  o+='<div style="color:'+qc+';font-weight:bold;margin-bottom:6px">'+qt+'</div>';
   if(r.q==='none'){return o+'</div>';}
+  o+=tmpTestsHTML(r);
+  if(!r.confirmed)o+='<div style="color:var(--muted);font-size:11px;margin-bottom:4px">Мерењата подолу се само за информација — без потврдено темпо нема насоки по темпо.</div>';
   o+=row('Бран (медијан, '+r.nLegs+' бранови · '+(isFinite(r.span)?Math.round(r.span)+'h':'—')+')',tmpDur(r.medAll));
   o+=row('▲ бран горе',tmpDur(r.up.med)+' ('+tmpDur(r.up.q1)+'–'+tmpDur(r.up.q3)+') · +'+tmpPct(r.up.amp),'var(--green)');
   o+=row('▼ бран долу',tmpDur(r.dn.med)+' ('+tmpDur(r.dn.q1)+'–'+tmpDur(r.dn.q3)+') · −'+tmpPct(r.dn.amp),'var(--red)');
@@ -9845,8 +9874,8 @@ function tempoHTML(r){
   }
   // guidance
   const g=[];
-  if(r.q==='abn'||r.q==='irr'){
-    g.push('Не тргувај по темпо додека '+(r.q==='abn'?'режимот не се врати во нормала (ATR 0.6–1.6× од медијан)':'ритамот не се стабилизира')+'.');
+  if(!r.confirmed){
+    g.push('Не тргувај по темпо: '+r.tests.filter(t=>!t.ok).map(t=>t.id.toLowerCase()).join(', ')+'.');
   }else{
     g.push('<b>Минимално држење ~'+tmpDur(r.medAll/2)+'</b> (половина бран). Помалку од тоа е шум за овој коин.');
     g.push('SL за лонг ≥ '+tmpPct(Math.max(r.up.pull*1.2,r.atrPct))+' од влезот, за шорт ≥ '+tmpPct(Math.max(r.dn.pull*1.2,r.atrPct))+' (1.2× типичното повлекување, мин. 1 ATR), или зад подот / таванот.');
@@ -9893,7 +9922,7 @@ async function loadTempoDetail(coin,force){
   let r=null;try{r=await tempoEval(coin,force);}catch(e){console.warn('TEMPO',coin,e);}
   if(S.detailCoin!==coin)return;
   ct.innerHTML=tempoHTML(r);
-  if(r&&(r.q==='good'||r.q==='mid'))renderList();
+  if(r&&r.confirmed)renderList();
 }
 
 // -- background build after each scan (user browser only) --
@@ -9901,14 +9930,22 @@ async function startBuildTempo(){
   if(_tempoBuilding||tmpHeadless())return;
   _tempoBuilding=true;
   try{
-    const list=(typeof pickCleanShortlist==='function'?pickCleanShortlist():S.signals.map(s=>s.coin))
-      .filter(c=>!(typeof blockReason==='function'&&blockReason(c))).slice(0,TEMPO_MAX_COINS);
-    for(let k=0;k<list.length;k+=4){
+    // what the user sees: FAV first, then the current filtered/sorted view
+    const seen=new Set(),list=[];
+    const push=c=>{if(c&&!seen.has(c)&&!(typeof blockReason==='function'&&blockReason(c))){seen.add(c);list.push(c);}};
+    S.signals.filter(x=>x.isFav).forEach(x=>push(x.coin));
+    const view=(typeof applyFilters==='function'?applyFilters():S.signals)||[];
+    view.forEach(x=>push(x.coin));
+    const L=list.slice(0,TEMPO_MAX_COINS);
+    for(let k=0;k<L.length;k+=4){
       if(S.abort)break;
-      await Promise.all(list.slice(k,k+4).map(c=>tempoEval(c).catch(()=>null)));
+      await Promise.all(L.slice(k,k+4).map(c=>tempoEval(c).catch(()=>null)));
+      if(L.slice(k,k+4).some(c=>_tempo[c]&&_tempo[c].confirmed))renderList();   // tags appear as they are confirmed
       await sleep(200);
     }
     renderList();
+    const nC=L.filter(c=>_tempo[c]&&_tempo[c].confirmed).length;
+    if(nC)toast('🎵 ТЕМПО потврдено: '+nC+' од '+L.length+' коини');
   }catch(e){console.warn('TEMPO build',e);}
   _tempoBuilding=false;
 }
@@ -9916,11 +9953,12 @@ async function startBuildTempo(){
 // -- help --------------------------------------------------
 function tempoHelpSections(){
   const g='var(--green)',y='var(--yellow)',a='var(--accent)',o='var(--orange)',m='var(--muted)';
-  return[{h:'🎵 ТЕМПО — ритам на брановите (15m, 2026-11-10-b)',items:[
-    {tag:'🎵3.5h▼80%',col:g,what:'Типична должина на еден бран на коинот (медијан од последните '+TEMPO_LEGS+' бранови на 15m), па насоката на тековниот бран и колку од типичното траење е поминато. Зелено = стабилен ритам, жолто = умерен.',when:'Се покажува само кога коинот има мерливо темпо И е во нормален режим. Се гради автоматски по скен за shortlist (FAV + топ SCORE), најмногу '+TEMPO_MAX_COINS+' коини; во детали за секој коин.',action:'Клик на тагот = насоки: минимално држење, SL, TP, фаза, прозорец за крај на бранот.'},
+  return[{h:'🎵 ТЕМПО — ритам на брановите (15m, 2026-11-10-c)',items:[
+    {tag:'🎵3.5h▼80%',col:g,what:'Типична должина на еден бран на коинот (медијан од последните '+TEMPO_LEGS+' бранови на 15m), па насоката на тековниот бран и колку од типичното траење е поминато.',when:()=>'Тагот се појавува САМО кога темпото е алгоритамски ПОТВРДЕНО (сите 6 тестови). Се проверува по секој скен за ⭐ FAV + првите '+TEMPO_MAX_COINS+' коини во тековниот приказ; во детали за секој коин.',action:'Клик на тагот = детали на коинот, скролано до панелот ТЕМПО (тестови, мерења, насоки).'},
+    {tag:'✅ Потврда (6 тестови)',col:g,what:()=>'1) ≥ '+TEMPO_MIN_LEGS+' бранови · 2) ритам: CV на траењето ≤ '+TEMPO_CV_MAX+' (случаен пазар дава ~0.7) · 3) постојаност: новата половина бранови трае '+TEMPO_PERS_LO+'–'+TEMPO_PERS_HI+'× од старата · 4) брановите се слични по големина (CV ≤ '+TEMPO_ACV_MAX+') · 5) типичен бран ≥ '+(TEMPO_AMP_MIN*100)+'% (да вреди после провизии) · 6) нормален режим сега.',when:'Калибрација на синтетички податоци: случаен пазар ги поминува сите тестови ~5% од времето, пазар со ритам ~99%. На вистински коини уште треба forward проверка.'},
     {tag:'Бран',col:a,what:()=>'Движење од swing дно до swing врв (или обратно). Нов бран почнува кога цената ќе се врати '+TEMPO_K+'× ATR(15m) од последниот екстрем (ZigZag). Помали движења се шум внатре во бранот.'},
     {tag:'Нормален режим',col:y,what:()=>'ATR(15m) сега е '+TEMPO_ATR_LO+'–'+TEMPO_ATR_HI+'× од 7-дневниот медијан и 24h промена < +20%. Надвор од тоа (пумпа, паника) темпото не важи.',action:'Ненормален режим = не тргувај по темпо.'},
-    {tag:'Ритам (CV)',col:a,what:()=>'Колку се разликуваат должините на брановите. CV ≤ '+TEMPO_CV_GOOD+' = стабилен, ≤ '+TEMPO_CV_MID+' = умерен, над тоа = нерегуларен (нема таг).'},
+    {tag:'Ритам (CV)',col:a,what:()=>'Колку се разликуваат должините на брановите (стандардна девијација / просек). Мало CV = брановите траат слично. Праг за потврда: ≤ '+TEMPO_CV_MAX+'.'},
     {tag:'Фаза',col:o,what:'рано (< ⅓ од типичниот бран) · среде · доцна (≈ типичното траење) · пречекорен (> 1.25×).',action:'Влез само рано во нов бран. Доцна / пречекорен = не во насоката на бранот, чекај свртување со потврда.'},
     {tag:'Насоки',col:g,what:'Минимално држење ≈ ½ бран. SL ≥ 1.2× типичното повлекување во бранот. TP ≈ типична амплитуда на бранот.',action:'Само опис: не гласа во SCORE, не е гејт, не оди на Telegram. Насоката и понатаму: OI коини + цена, CVD, CLEAN15 / checklist.'},
     {tag:'⚠ Ритамот се менува',col:o,what:'Последните 4 бранови се повеќе од 2× подолги или пократки од претходните: коинот влегува во нов режим, темпото уште не е стабилно.'}
