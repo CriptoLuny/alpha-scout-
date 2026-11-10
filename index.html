@@ -527,6 +527,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-clear" onclick="openDigest()" title="Извештај за анализа">📋</button>
   <button class="btn btn-clear" onclick="openFavShare()" title="Пренеси ⭐ FAV на друг уред (линк / QR)">⭐🔗</button>
   <button class="btn btn-clear" onclick="openLab()" title="PUMP LAB — што покажувале коините пред пумпа">🧪</button>
+  <a class="btn btn-clear" href="./tools.html" title="TOOLS — калкулатор на ризик, пауза, шема по час" style="text-decoration:none;display:inline-block;color:var(--alpha);border-color:rgba(240,192,0,.35)">🧮</a>
   <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
     <div class="tf"        id="tf-1m"  onclick="setTF('1m',this)">1m</div>
@@ -1280,6 +1281,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-10-a  🧮 TOOLS link in the control row (next to 🧪) -> ./tools.html, a separate page
+//    (risk calculator from balance, cooldown/locks, market pattern by hour). No scan, gate, SCORE,
+//    ALARM or bot logic changed; tools.html does not touch the scanner state.
 //  2026-11-09-a  ⚡ EARLY + 🧯 ГАСИ + PUMP LAB BLOW. TRUTH 08.11 (bot in Telegram): 4 of 4 🔥 came late, near
 //    the top -- HOT breakout 10:45, IGNITE 89 at 11:30 (+9% gone); JCT moved from ~08:00, first 🔥 at 11:02 as
 //    RUN 81 (+65%), IGNITE never fired; ICNT breakout 08:00, IGNITE 56 at 10:17 at 0.389 (top 0.396), then -5%;
@@ -1359,7 +1363,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-09-a';
+const APP_BUILD='2026-11-10-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={

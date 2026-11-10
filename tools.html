@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="mk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07070f">
+<title>αSCOUT TOOLS</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07070f;--bg2:#0d0d1c;--card:#121220;--border:#1e1e35;
+  --accent:#00e5ff;--accent2:#a020f0;--green:#00ff88;--red:#ff2244;
+  --yellow:#ffd000;--orange:#ff6600;--alpha:#f0c000;
+  --text:#f0f0ff;--text2:#b0b0cc;--muted:#5a5a78;
+  --mono:'Share Tech Mono',ui-monospace,Menlo,monospace;--ui:'Barlow',system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;max-width:820px;margin:0 auto;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px}
+.logo b{color:var(--accent2)}
+.hdr a{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text2);text-decoration:none;border:1px solid var(--border);padding:5px 10px;border-radius:6px}
+
+/* status bar: the one bold element */
+.status{position:sticky;top:0;z-index:20;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--bg2);display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
+.st-main{font-family:var(--mono);font-size:22px;font-weight:bold;letter-spacing:.5px;line-height:1.1}
+.st-timer{font-family:var(--mono);font-size:26px;font-weight:bold;text-align:right}
+.st-sub{font-size:12px;color:var(--text2);grid-column:1/-1}
+.status.free{box-shadow:inset 4px 0 0 var(--green)} .status.free .st-main{color:var(--green)}
+.status.pause{box-shadow:inset 4px 0 0 var(--yellow);background:rgba(255,208,0,.06)} .status.pause .st-main,.status.pause .st-timer{color:var(--yellow)}
+.status.lock{box-shadow:inset 4px 0 0 var(--red);background:rgba(255,34,68,.08)} .status.lock .st-main,.status.lock .st-timer{color:var(--red)}
+.status.trade{box-shadow:inset 4px 0 0 var(--accent)} .status.trade .st-main,.status.trade .st-timer{color:var(--accent)}
+.daybar{display:flex;gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.daybar div{flex:1;background:var(--bg);padding:6px 4px;text-align:center}
+.daybar b{display:block;font-family:var(--mono);font-size:15px}
+.daybar span{font-size:10px;color:var(--text2)}
+
+/* tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{flex:1;padding:11px;text-align:center;font-weight:700;font-size:13px;color:var(--text2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.pane{display:none;padding:12px 14px 40px}
+.pane.on{display:block}
+
+/* blocks */
+.blk{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:12px;margin-bottom:12px}
+.blk h3{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px}
+.blk h3 small{font-weight:400;color:var(--text2);font-size:11px;margin-left:6px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+label.f{display:block;font-size:11px;color:var(--text2)}
+label.f input,label.f select{display:block;width:100%;margin-top:3px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 10px;font-family:var(--mono);font-size:15px}
+label.f input:focus,label.f select:focus{border-color:var(--accent);outline:none}
+.seg{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-top:3px}
+.seg button{flex:1;background:var(--bg);border:none;padding:9px 6px;font-family:var(--mono);font-size:13px;color:var(--text2);cursor:pointer}
+.seg button.on.l{background:rgba(0,255,136,.14);color:var(--green)}
+.seg button.on.s{background:rgba(255,34,68,.14);color:var(--red)}
+.seg button.on.n{background:rgba(0,229,255,.12);color:var(--accent)}
+.btn{display:inline-block;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 14px;font-weight:700;font-size:13px;cursor:pointer;color:var(--text)}
+.btn.go{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#000;width:100%;font-size:15px;padding:13px}
+.btn.go:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+.btn.sm{padding:6px 10px;font-size:12px}
+.btn.red{border-color:rgba(255,34,68,.5);color:var(--red)}
+.inline{display:flex;gap:8px;align-items:flex-end}
+.inline label.f{flex:1}
+.hint{font-size:11px;color:var(--text2);margin-top:6px;line-height:1.45}
+.mono{font-family:var(--mono)}
+.up{color:var(--green)}.dn{color:var(--red)}.yl{color:var(--yellow)}.bl{color:var(--accent)}.or{color:var(--orange)}.mu{color:var(--muted)}
+
+/* result table */
+table.res{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+table.res td{padding:6px 4px;border-bottom:1px solid var(--border)}
+table.res td:last-child{text-align:right;font-weight:bold}
+table.res tr.key td{font-size:16px}
+.chk{list-style:none;font-size:13px}
+.chk li{padding:5px 0;border-bottom:1px dashed var(--border);display:flex;gap:8px}
+.chk li span:first-child{width:18px;flex-shrink:0;text-align:center}
+.man label{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 0}
+.man input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* open trades */
+.ot{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg)}
+.ot-top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:14px}
+.prog{height:4px;background:var(--border);border-radius:2px;margin:8px 0 4px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent)}
+.prog i.done{background:var(--green)}
+.ot-close{display:flex;gap:8px;margin-top:8px;align-items:center}
+.ot-close input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:var(--mono);font-size:14px;min-width:0}
+.log{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.log td,.log th{padding:5px 3px;border-bottom:1px solid var(--border);text-align:left}
+.log th{color:var(--text2);font-weight:normal;font-size:11px}
+details.set summary{cursor:pointer;font-weight:700;font-size:13px;padding:2px 0}
+details.set[open] summary{margin-bottom:10px}
+
+/* hours */
+textarea.coins{width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:var(--mono);font-size:12px;text-transform:uppercase}
+.pbar{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .25s}
+.wide{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.hrs{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;min-width:520px}
+table.hrs th{font-weight:normal;color:var(--text2);font-size:10px;text-align:left;padding:4px 3px;border-bottom:1px solid var(--border)}
+table.hrs td{padding:5px 3px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.hrs tr.now td{background:rgba(0,229,255,.06)}
+.bar{display:inline-block;height:8px;border-radius:2px;background:var(--accent);vertical-align:middle;margin-right:5px}
+.cls{font-size:11px;padding:2px 6px;border-radius:3px}
+.c-tr{background:rgba(0,255,136,.12);color:var(--green)}
+.c-ch{background:rgba(255,102,0,.15);color:var(--orange)}
+.c-dd{background:rgba(90,90,120,.18);color:var(--muted)}
+.c-mx{background:rgba(255,208,0,.1);color:var(--yellow)}
+.heat{display:grid;grid-template-columns:34px repeat(24,1fr);gap:2px;min-width:560px;font-family:var(--mono);font-size:9px}
+.heat div{height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--text2)}
+.sum p{font-size:13px;margin:4px 0;line-height:1.5}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-family:var(--mono);font-size:12px;z-index:99;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92vw;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(max-width:420px){.row3{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">α<b>SCOUT</b> TOOLS</div>
+  <a href="./index.html">← скенер</a>
+</div>
+
+<div class="status free" id="status">
+  <div class="st-main" id="stMain">🟢 СЛОБОДНО</div>
+  <div class="st-timer" id="stTimer"></div>
+  <div class="st-sub" id="stSub">Нема пауза. Влез само по план.</div>
+</div>
+<div class="daybar">
+  <div><b id="dTr">0/5</b><span>трејдови денес</span></div>
+  <div><b id="dNet">0.00</b><span>нето денес</span></div>
+  <div><b id="dLim">10.00</b><span>до дневен лимит</span></div>
+  <div><b id="dOv">0</b><span>прескокнати паузи</span></div>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab on" data-tab="risk" role="tab">🧮 Ризик</button>
+  <button class="tab" data-tab="hours" role="tab">⏰ Шема по час</button>
+</div>
+
+<!-- ============ RISK ============ -->
+<section class="pane on" id="pane-risk">
+
+  <div class="blk">
+    <h3>Салдо <small>Futures, USDT</small></h3>
+    <div class="inline">
+      <label class="f">Моментално салдо<input id="bal" type="number" inputmode="decimal" step="0.01" placeholder="74.45"></label>
+      <button class="btn" id="balSave">Зачувај</button>
+    </div>
+    <p class="hint" id="balInfo">Внеси салдо. Ризикот се пресметува од помалото меѓу моменталното салдо и салдото на почеток на денот.</p>
+  </div>
+
+  <div class="blk">
+    <h3>Пресметка на позиција</h3>
+    <div class="inline" style="margin-bottom:8px">
+      <label class="f">Коин<input id="sym" placeholder="ON" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <button class="btn" id="symLoad">Вчитај цена + ATR</button>
+    </div>
+    <p class="hint" id="symInfo" style="margin:-2px 0 8px"></p>
+    <div class="row" style="margin-bottom:8px">
+      <div><label class="f">Насока</label>
+        <div class="seg" id="sideSeg"><button class="l on" data-v="L">LONG</button><button class="s" data-v="S">SHORT</button></div></div>
+      <div><label class="f">Влез со</label>
+        <div class="seg" id="typeSeg"><button class="n on" data-v="limit">LIMIT</button><button class="n" data-v="market">MARKET</button></div></div>
+    </div>
+    <div class="row3" style="margin-bottom:8px">
+      <label class="f">Влез<input id="entry" type="number" inputmode="decimal" step="any"></label>
+      <label class="f">SL<input id="sl" type="number" inputmode="decimal" step="any"></label>
+      <label class="f">TP (опц.)<input id="tp" type="number" inputmode="decimal" step="any"></label>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <label class="f">Левериџ<input id="lev" type="number" inputmode="numeric" step="1" min="1" max="125"></label>
+      <div><label class="f">Маржа</label>
+        <div class="seg" id="modeSeg"><button class="n on" data-v="cross">CROSS</button><button class="n" data-v="iso">ISOLATED</button></div></div>
+    </div>
+
+    <table class="res" id="res"><tr><td class="mu">Внеси влез и SL.</td><td></td></tr></table>
+  </div>
+
+  <div class="blk">
+    <h3>Проверки пред влез</h3>
+    <ul class="chk" id="chk"></ul>
+    <div class="man" style="margin-top:8px">
+      <label><input type="checkbox" class="mc"> Тригер свеќата е затворена (15m)</label>
+      <label><input type="checkbox" class="mc"> OI коини и цена прочитани заедно, ист правец</label>
+      <label><input type="checkbox" class="mc"> Влез на планирано ниво, не бркам свеќа</label>
+    </div>
+    <button class="btn go" id="openBtn" style="margin-top:10px" disabled>▶ Отвори трејд</button>
+    <p class="hint" id="openHint"></p>
+  </div>
+
+  <div class="blk" id="openBlk" style="display:none">
+    <h3>Отворени трејдови <small>минимално држење се брои од влезот</small></h3>
+    <div id="openList"></div>
+  </div>
+
+  <div class="blk">
+    <h3>Денешен дневник</h3>
+    <div class="wide"><table class="log" id="logT"></table></div>
+    <p class="hint" id="logHint"></p>
+  </div>
+
+  <div class="blk">
+    <details class="set">
+      <summary>⚙ Правила и поставки</summary>
+      <div class="row3">
+        <label class="f">Ризик % од база<input data-s="riskPct" type="number" step="0.1"></label>
+        <label class="f">Макс ризик USDT<input data-s="riskCap" type="number" step="0.1"></label>
+        <label class="f">Левериџ default<input data-s="lev" type="number" step="1"></label>
+        <label class="f">Maker %<input data-s="maker" type="number" step="0.001"></label>
+        <label class="f">Taker %<input data-s="taker" type="number" step="0.001"></label>
+        <label class="f">MMR % (ликв.)<input data-s="mmr" type="number" step="0.1"></label>
+        <label class="f">Пауза по загуба (мин)<input data-s="cdLoss" type="number" step="1"></label>
+        <label class="f">Пауза по победа (мин)<input data-s="cdWin" type="number" step="1"></label>
+        <label class="f">Голема победа = крај на ден (USDT)<input data-s="bigWin" type="number" step="0.5"></label>
+        <label class="f">Дневен лимит загуба (USDT)<input data-s="dayLoss" type="number" step="0.5"></label>
+        <label class="f">Макс трејдови/ден<input data-s="maxTrades" type="number" step="1"></label>
+        <label class="f">Макс отворени<input data-s="maxOpen" type="number" step="1"></label>
+        <label class="f">Лок на ист коин (мин)<input data-s="coinLock" type="number" step="5"></label>
+        <label class="f">Мин. држење (мин)<input data-s="minHold" type="number" step="5"></label>
+        <label class="f">Ским % од добивка<input data-s="skim" type="number" step="1"></label>
+        <label class="f">Нов ден почнува (час)<input data-s="dayStartH" type="number" step="1" min="0" max="23"></label>
+      </div>
+      <p class="hint">Големата победа и дневниот лимит ја заклучуваат страницата до „нов ден“. Ноќниот прозорец 00–07 е предупредување од твоите податоци (−168 USDT на влезови во тоа време).</p>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn sm" id="setReset">Врати default</button>
+        <button class="btn sm" id="exportBtn">⬇ Export JSON</button>
+        <button class="btn sm red" id="wipeBtn">Избриши дневник</button>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ============ HOURS ============ -->
+<section class="pane" id="pane-hours">
+  <div class="blk">
+    <h3>Коини за мерење</h3>
+    <textarea class="coins" id="coins" spellcheck="false"></textarea>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn sm" id="cMine">Мои коини</button>
+      <button class="btn sm" id="cTop">Топ 30 волумен</button>
+      <label class="f" style="flex:1;min-width:110px"><select id="days"><option value="7">7 дена</option><option value="14">14 дена</option><option value="30" selected>30 дена</option></select></label>
+    </div>
+    <button class="btn go" id="hScan" style="margin-top:10px">Измери шема</button>
+    <div class="pbar"><i id="hProg"></i></div>
+    <p class="hint" id="hInfo">15m свеќи, локално време на уредот. Секој коин е нормализиран на својот просек, па 1.00 = просечен час.</p>
+  </div>
+
+  <div class="blk">
+    <h3>Мои трејдови <small>опционално, Binance Futures Trade History CSV</small></h3>
+    <input type="file" id="csv" accept=".csv,text/csv" style="font-size:12px;width:100%">
+    <p class="hint" id="csvInfo">Се чита само локално во прелистувачот. Додава колона со твојот резултат по час на влез.</p>
+  </div>
+
+  <div id="hOut"></div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== config =====
+const FAPI='https://fapi.binance.com/fapi/v1';
+const PROXY='https://api.allorigins.win/raw?url=';
+const KEY='ascoutTools_v1';
+const DEF={riskPct:2,riskCap:3,lev:10,maker:0.02,taker:0.05,mmr:1.0,cdLoss:15,cdWin:30,bigWin:15,dayLoss:10,maxTrades:5,maxOpen:2,coinLock:120,minHold:60,skim:10,dayStartH:8};
+const MINE='ON ONE IDOL DOOD Q BEAT BLESS BULLA JCT AIO BIRB TRUTH AIN MERL STRK ARIA METIS CYBER ESPORTS SKR SIREN GTC BTC';
+const DOW=['Пон','Вто','Сре','Чет','Пет','Саб','Нед'];
+
+// ===== state =====
+let S=load();
+function load(){
+  let s={};
+  try{s=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){s={}}
+  s.set=Object.assign({},DEF,s.set||{});
+  s.open=s.open||[];s.log=s.log||[];s.coinLocks=s.coinLocks||{};
+  s.cdUntil=s.cdUntil||0;s.lockUntil=s.lockUntil||0;
+  return s;
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const $=id=>document.getElementById(id);
+const now=()=>Date.now();
+
+// trading day: starts at set.dayStartH local
+function dayKey(ts){const d=new Date(ts);if(d.getHours()<S.set.dayStartH)d.setDate(d.getDate()-1);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function nextDayStart(){const d=new Date();if(d.getHours()>=S.set.dayStartH)d.setDate(d.getDate()+1);d.setHours(S.set.dayStartH,0,0,0);return d.getTime();}
+function ensureDay(){
+  const k=dayKey(now());
+  if(!S.dayStart||S.dayStart.key!==k){S.dayStart={key:k,bal:S.balance||0};save();}
+}
+function todayLog(){const k=dayKey(now());return S.log.filter(x=>dayKey(x.openTs)===k);}
+function todayOpened(){const k=dayKey(now());return todayLog().length+S.open.filter(o=>dayKey(o.openTs)===k).length;}
+
+// ===== helpers =====
+function num(v){const n=parseFloat(String(v).replace(',','.'));return isFinite(n)?n:NaN;}
+function fP(p){if(!isFinite(p))return'—';const a=Math.abs(p);if(a>=1000)return p.toLocaleString('en-US',{maximumFractionDigits:2});if(a>=1)return p.toFixed(4);if(a>=0.01)return p.toFixed(5);if(a>=0.0001)return p.toFixed(7);return p.toPrecision(4);}
+function fU(n,d=2){return isFinite(n)?(n>=0?'':'−')+Math.abs(n).toFixed(d):'—';}
+function fQ(q){if(!isFinite(q))return'—';if(q>=100)return Math.floor(q).toLocaleString('en-US');if(q>=1)return q.toFixed(2);return q.toFixed(4);}
+function mmss(ms){ms=Math.max(0,ms);const t=Math.ceil(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0');}
+function hhmm(ts){return new Date(ts).toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit'});}
+function toast(m,ms=4000){const t=$('toast');t.textContent=m;t.style.opacity='1';clearTimeout(toast._t);toast._t=setTimeout(()=>t.style.opacity='0',ms);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+async function api(ep){
+  const url=FAPI+ep;
+  try{const r=await fetch(url,{signal:AbortSignal.timeout(8000)});if(r.ok)return await r.json();}catch(e){}
+  try{const r=await fetch(PROXY+encodeURIComponent(url),{signal:AbortSignal.timeout(12000)});if(r.ok)return await r.json();}catch(e){}
+  return null;
+}
+function cleanSym(v){return String(v||'').toUpperCase().replace(/USDT$/,'').replace(/\.P$/,'').replace(/[^A-Z0-9\u4e00-\u9fff]/g,'').trim();}
+
+// ===== tabs =====
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+b.dataset.tab));
+});
+function seg(id,cb){const el=$(id);el.querySelectorAll('button').forEach(b=>b.onclick=()=>{el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));cb&&cb(b.dataset.v);calc();});}
+function segVal(id){return $(id).querySelector('button.on').dataset.v;}
+seg('sideSeg');seg('typeSeg');seg('modeSeg');
+
+// ===== status (cooldown / locks) =====
+function lockState(){
+  const t=now();
+  if(S.lockUntil>t)return{k:'lock',until:S.lockUntil,why:S.lockWhy||'Заклучено'};
+  if(S.cdUntil>t)return{k:'pause',until:S.cdUntil,why:S.cdWhy||'Пауза'};
+  return null;
+}
+function renderStatus(){
+  ensureDay();
+  const st=$('status'),ls=lockState(),t=now();
+  if(ls){
+    st.className='status '+ls.k;
+    $('stMain').textContent=ls.k==='lock'?'⛔ ГОТОВО ЗА ДЕНЕС':'⏸ ПАУЗА';
+    $('stTimer').textContent=mmss(ls.until-t);
+    $('stSub').textContent=ls.why+' · до '+hhmm(ls.until);
+  }else if(S.open.length){
+    const o=S.open.reduce((a,b)=>a.openTs>b.openTs?a:b);
+    const left=o.openTs+S.set.minHold*60000-t;
+    st.className='status trade';
+    $('stMain').textContent='⏳ ВО ТРЕЈД · '+o.sym;
+    $('stTimer').textContent=left>0?mmss(left):'✔';
+    $('stSub').textContent=left>0?'Не затворај рачно пред минималното држење. SL и TP работат сами.':'Минималното држење помина. Држи го планот.';
+  }else{
+    st.className='status free';
+    $('stMain').textContent='🟢 СЛОБОДНО';$('stTimer').textContent='';
+    $('stSub').textContent='Нема пауза. Влез само по план.';
+  }
+  // day bar
+  const lg=todayLog(),net=lg.reduce((a,x)=>a+x.pnl,0);
+  $('dTr').textContent=todayOpened()+'/'+S.set.maxTrades;
+  $('dNet').textContent=fU(net);$('dNet').className=net>0?'up':net<0?'dn':'';
+  const rem=S.set.dayLoss+Math.min(net,0);
+  $('dLim').textContent=fU(rem);$('dLim').className=rem<=S.set.dayLoss*0.3?'dn':'';
+  $('dOv').textContent=lg.filter(x=>x.override).length+S.open.filter(o=>o.override).length;
+  renderOpen();
+  gateOpen();
+}
+
+// ===== balance =====
+function renderBal(){
+  ensureDay();
+  if(S.balance!=null&&document.activeElement!==$('bal'))$('bal').value=S.balance;
+  const b=S.balance||0,ds=S.dayStart?.bal||b,base=Math.min(b,ds||b);
+  const r=Math.min(base*S.set.riskPct/100,S.set.riskCap);
+  $('balInfo').innerHTML=S.balance==null?'Внеси салдо. Ризикот се пресметува од помалото меѓу моменталното салдо и салдото на почеток на денот.':
+    `Почеток на ден: <b class="mono">${fU(ds)}</b> · база: <b class="mono">${fU(base)}</b> · ризик по трејд: <b class="mono yl">${fU(r)} USDT</b>`+(b>ds?'<br><span class="yl">Салдото е над почетокот на денот: добивката не ја зголемува позицијата до утре.</span>':'');
+}
+$('balSave').onclick=()=>{const v=num($('bal').value);if(!isFinite(v)||v<0){toast('Внеси валидно салдо');return;}
+  const first=S.balance==null;S.balance=v;
+  if(first||!S.dayStart||S.dayStart.key!==dayKey(now()))S.dayStart={key:dayKey(now()),bal:v};
+  save();renderBal();calc();toast('Салдо зачувано: '+fU(v)+' USDT');};
+
+// ===== symbol data =====
+let SD={};// {sym, price, chg, atr}
+$('symLoad').onclick=loadSym;
+$('sym').addEventListener('keydown',e=>{if(e.key==='Enter')loadSym();});
+async function loadSym(){
+  const s=cleanSym($('sym').value);if(!s){toast('Внеси коин');return;}
+  $('sym').value=s;$('symInfo').textContent='Вчитувам '+s+'USDT…';
+  const[t,k]=await Promise.all([api('/ticker/24hr?symbol='+s+'USDT'),api('/klines?symbol='+s+'USDT&interval=15m&limit=20')]);
+  if(!t||!t.lastPrice){$('symInfo').innerHTML='<span class="dn">'+s+'USDT не е најден на Futures.</span>';SD={};calc();return;}
+  let atr=NaN;
+  if(k&&k.length>=16){const c=k.slice(0,-1);let sum=0,n=0;for(let i=c.length-14;i<c.length;i++){const h=+c[i][2],l=+c[i][3],pc=+c[i-1][4];sum+=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc));n++;}atr=sum/n;}
+  SD={sym:s,price:+t.lastPrice,chg:+t.priceChangePercent,atr};
+  if(!$('entry').value)$('entry').value=SD.price;
+  $('symInfo').innerHTML=`Цена <b class="mono">${fP(SD.price)}</b> · 24h <b class="mono ${SD.chg>=0?'up':'dn'}">${SD.chg>=0?'+':''}${SD.chg.toFixed(2)}%</b> · ATR(15m) <b class="mono">${fP(atr)}</b> (${(atr/SD.price*100).toFixed(2)}%)`;
+  calc();
+}
+
+// ===== calculator =====
+let LAST=null;
+['entry','sl','tp','lev'].forEach(id=>$(id).addEventListener('input',calc));
+$('sym').addEventListener('input',()=>{if(SD.sym&&cleanSym($('sym').value)!==SD.sym){SD={};$('symInfo').textContent='';}calc();});
+document.querySelectorAll('.mc').forEach(c=>c.onchange=gateOpen);
+
+function calc(){
+  const side=segVal('sideSeg'),type=segVal('typeSeg'),mode=segVal('modeSeg');
+  const E=num($('entry').value),SL=num($('sl').value),TP=num($('tp').value),lev=num($('lev').value)||S.set.lev;
+  const st=S.set,fIn=(type==='limit'?st.maker:st.taker)/100,fSL=st.taker/100,fTP=st.maker/100,mmr=st.mmr/100;
+  const bal=S.balance,ds=S.dayStart?.bal??bal,base=Math.min(bal??0,ds??0);
+  const riskU=Math.min(base*st.riskPct/100,st.riskCap);
+  const checks=[];LAST=null;
+  if(!(E>0)||!(SL>0)||bal==null){
+    $('res').innerHTML=`<tr><td class="mu">${bal==null?'Прво внеси салдо.':'Внеси влез и SL.'}</td><td></td></tr>`;
+    renderChecks([]);return;
+  }
+  const dir=side==='L'?1:-1;
+  const slOk=dir*(E-SL)>0;
+  const dist=Math.abs(E-SL);
+  const perUnitLoss=dist+E*fIn+SL*fSL;
+  let qty=riskU/perUnitLoss;
+  let notional=qty*E,margin=notional/lev;
+  const lossAtSL=qty*perUnitLoss;
+  const feeIn=qty*E*fIn;
+  let gainTP=NaN,rr=NaN,feeTP=NaN;
+  const tpOk=!(TP>0)||dir*(TP-E)>0;
+  if(TP>0&&tpOk){feeTP=qty*TP*fTP;gainTP=qty*Math.abs(TP-E)-feeIn-feeTP;rr=gainTP/lossAtSL;}
+  const be=side==='L'?E*(1+fIn)/(1-fTP):E*(1-fIn)/(1+fTP);
+  const coll=mode==='cross'?bal:margin;
+  let liq=side==='L'?(qty*E-coll)/(qty*(1-mmr)):(coll+qty*E)/(qty*(1+mmr));
+  const liqBad=slOk&&(side==='L'?liq>=SL:liq<=SL);
+  const atrMul=isFinite(SD.atr)&&SD.sym===cleanSym($('sym').value)?dist/SD.atr:NaN;
+  const slPct=dist/E*100;
+
+  $('res').innerHTML=`
+    <tr class="key"><td>Ризик</td><td class="yl">${fU(riskU)} USDT</td></tr>
+    <tr class="key"><td>Количина</td><td>${fQ(qty)} ${cleanSym($('sym').value)||''}</td></tr>
+    <tr><td>Позиција (notional)</td><td>${fU(notional)} USDT</td></tr>
+    <tr><td>Маржа @${lev}x</td><td class="${margin>bal?'dn':''}">${fU(margin)} USDT</td></tr>
+    <tr><td>SL растојание</td><td>${slPct.toFixed(2)}%${isFinite(atrMul)?' · '+atrMul.toFixed(2)+' ATR':''}</td></tr>
+    <tr><td>Загуба на SL (со провизии)</td><td class="dn">−${lossAtSL.toFixed(2)}</td></tr>
+    <tr><td>Добивка на TP (нето)</td><td class="up">${isFinite(gainTP)?'+'+gainTP.toFixed(2):'—'}</td></tr>
+    <tr class="key"><td>R:R нето</td><td class="${rr>=2?'up':isFinite(rr)?'dn':''}">${isFinite(rr)?rr.toFixed(2):'—'}</td></tr>
+    <tr><td>Провизии влез + излез</td><td>${(feeIn+(isFinite(feeTP)?feeTP:qty*SL*fSL)).toFixed(3)}</td></tr>
+    <tr><td>Breakeven</td><td>${fP(be)}</td></tr>
+    <tr><td>Ликвидација ~ (${mode==='cross'?'cross, цело салдо':'isolated'})</td><td class="${liqBad?'dn':''}">${liq>0?fP(liq):'нема'}</td></tr>`;
+
+  const t=new Date(),h=t.getHours(),wd=t.getDay();
+  const ls=lockState();
+  const csym=cleanSym($('sym').value);
+  const cl=csym&&S.coinLocks[csym]>now();
+  checks.push([!ls,ls?('Пауза/лок: '+ls.why):'Нема пауза или лок']);
+  checks.push([!cl,cl?('Ист коин заклучен до '+hhmm(S.coinLocks[csym])):'Коинот не е во лок (2–3h правило)']);
+  checks.push([slOk,slOk?'SL на правилна страна':'SL е на погрешна страна од влезот']);
+  checks.push([tpOk,tpOk?'TP на правилна страна':'TP е на погрешна страна']);
+  checks.push([isFinite(atrMul)?atrMul<=1.5:null,isFinite(atrMul)?('SL '+atrMul.toFixed(2)+' ATR (≤1.5)'):'SL ≤ 1.5 ATR: вчитај коин за ATR']);
+  checks.push([isFinite(rr)?rr>=2:null,isFinite(rr)?('R:R нето '+rr.toFixed(2)+' (≥2)'):'R:R ≥ 2: внеси TP']);
+  checks.push([!liqBad,liqBad?'Ликвидација ПРЕД SL':'Ликвидација после SL']);
+  checks.push([margin<=bal,margin<=bal?'Маржата е во салдото':'Маржата е поголема од салдото: зголеми левериџ или намали']);
+  if(side==='L'&&isFinite(SD.chg)&&SD.sym===csym)checks.push([SD.chg<20,SD.chg<20?'Не е CHASE (24h < +20%)':'CHASE: 24h +'+SD.chg.toFixed(1)+'%, нов long блокиран']);
+  checks.push([!(h<7),h<7?'Ноќен влез 00–07: твоите податоци −168 USDT':'Не е ноќен прозорец']);
+  const satWin=(wd===5&&h>=22)||(wd===6&&h<9);
+  if(satWin)checks.push([false,'Петок навечер / сабота наутро: најтенка ликвидност за Alpha']);
+  checks.push([S.open.length<S.set.maxOpen,S.open.length<S.set.maxOpen?'Отворени '+S.open.length+'/'+S.set.maxOpen:'Макс отворени позиции']);
+  renderChecks(checks);
+  LAST={sym:csym||'?',side,type,mode,E,SL,TP:TP>0?TP:null,lev,qty,notional,margin,riskU,rr,hard:checks.filter(c=>c[0]===false).length};
+  gateOpen();
+}
+function renderChecks(c){
+  $('chk').innerHTML=c.length?c.map(([ok,t])=>`<li><span>${ok===null?'·':ok?'✔':'✗'}</span><span class="${ok===false?'dn':ok?'':'mu'}">${t}</span></li>`).join(''):'<li><span>·</span><span class="mu">Пресметката ги пополнува проверките.</span></li>';
+}
+function gateOpen(){
+  const b=$('openBtn'),man=[...document.querySelectorAll('.mc')].every(c=>c.checked);
+  if(!LAST){b.disabled=true;$('openHint').textContent='';return;}
+  const ls=lockState();
+  b.disabled=!man;
+  b.textContent=ls?'⚠ Отвори (пауза активна)':LAST.hard?'⚠ Отвори ('+LAST.hard+' ✗)':'▶ Отвори трејд';
+  $('openHint').textContent=!man?'Штиклирај ги трите рачни проверки.':ls||LAST.hard?'Влез со ✗ или за време на пауза бара потврда и се брои како прескокнато правило.':'Запиши го влезот откако налогот е поставен на Binance.';
+}
+$('openBtn').onclick=()=>{
+  if(!LAST)return;
+  const ls=lockState(),cl=S.coinLocks[LAST.sym]>now();
+  let override=false;
+  if(ls||LAST.hard||cl){
+    const a=prompt((ls?ls.why+'. ':'')+(LAST.hard?LAST.hard+' проверки се ✗. ':'')+'Напиши ПЛАН за да влезеш. Ќе се запише како прескокнато правило.');
+    if(!a||a.trim().toUpperCase()!=='ПЛАН'){toast('Влезот не е запишан');return;}
+    override=true;
+  }
+  S.open.push(Object.assign({},LAST,{id:now(),openTs:now(),override}));
+  save();
+  document.querySelectorAll('.mc').forEach(c=>c.checked=false);
+  renderStatus();calc();
+  toast('Запишан влез: '+LAST.sym+' '+(LAST.side==='L'?'LONG':'SHORT')+'. Тајмерот за држење тече.');
+};
+
+// ===== open trades =====
+function renderOpen(){
+  $('openBlk').style.display=S.open.length?'block':'none';
+  if(!S.open.length){$('openList').innerHTML='';return;}
+  const t=now(),mh=S.set.minHold*60000;
+  // same set of trades: update timers in place (keeps inputs and taps intact)
+  const sig=S.open.map(o=>o.id).join(',');
+  if(sig===renderOpen._sig){S.open.forEach(o=>{const p=$('pg-'+o.id);if(p){const pr=Math.min((t-o.openTs)/mh,1);p.style.width=(pr*100)+'%';p.className=pr>=1?'done':'';}const l=$('lt-'+o.id);if(l)l.textContent=holdTxt(o,t,mh);});return;}
+  renderOpen._sig=sig;
+  $('openList').innerHTML=S.open.map(o=>{
+    const pr=Math.min((t-o.openTs)/mh,1);
+    return`<div class="ot">
+      <div class="ot-top"><span class="${o.side==='L'?'up':'dn'}">${o.side==='L'?'▲':'▼'} ${o.sym}</span><span class="mu">${hhmm(o.openTs)}${o.override?' · ⚠':''}</span></div>
+      <div class="mono" style="font-size:12px;color:var(--text2);margin-top:4px">влез ${fP(o.E)} · SL ${fP(o.SL)}${o.TP?' · TP '+fP(o.TP):''} · ${fQ(o.qty)} @${o.lev}x · ризик ${fU(o.riskU)}</div>
+      <div class="prog"><i id="pg-${o.id}" class="${pr>=1?'done':''}" style="width:${pr*100}%"></i></div>
+      <div class="mono" style="font-size:11px" id="lt-${o.id}">${holdTxt(o,t,mh)}</div>
+      <div class="ot-close">
+        <input class="pnlIn" data-id="${o.id}" type="number" inputmode="decimal" step="0.01" placeholder="нето PnL USDT (−2.40)">
+        <button class="btn sm" data-close="${o.id}">Затвори</button>
+        <button class="btn sm red" data-del="${o.id}" title="Избриши без запис">✕</button>
+      </div></div>`;}).join('');
+  $('openList').querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeTrade(+b.dataset.close));
+  $('openList').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Да се избрише записот без затворање?')){S.open=S.open.filter(o=>o.id!==+b.dataset.del);save();renderStatus();}});
+}
+function holdTxt(o,t,mh){const left=o.openTs+mh-t;return left>0?'уште '+mmss(left)+' до минимално држење':'✔ минималното држење помина ('+Math.round((t-o.openTs)/60000)+' мин)';}
+
+function closeTrade(id){
+  const o=S.open.find(x=>x.id===id);if(!o)return;
+  const inp=document.querySelector('.pnlIn[data-id="'+id+'"]');
+  const pnl=num(inp?.value);
+  if(!isFinite(pnl)){toast('Внеси нето PnL во USDT (минус за загуба)');inp?.focus();return;}
+  const t=now(),hold=(t-o.openTs)/60000,st=S.set;
+  S.open=S.open.filter(x=>x.id!==id);
+  S.log.push({sym:o.sym,side:o.side,openTs:o.openTs,closeTs:t,pnl,hold,override:o.override,early:hold<st.minHold});
+  if(S.balance!=null)S.balance=+(S.balance+pnl).toFixed(4);
+  S.coinLocks[o.sym]=t+st.coinLock*60000;
+  // cooldown
+  let msg='';
+  if(pnl>=st.bigWin){S.lockUntil=nextDayStart();S.lockWhy='Победа ≥ +'+st.bigWin+' USDT: готово за денес';msg='Голема победа. Готово за денес.';}
+  else if(pnl>0){S.cdUntil=t+st.cdWin*60000;S.cdWhy='Пауза по победа';}
+  else{S.cdUntil=t+st.cdLoss*60000;S.cdWhy='Пауза по загуба';}
+  const lg=todayLog(),net=lg.reduce((a,x)=>a+x.pnl,0);
+  if(net<=-st.dayLoss){S.lockUntil=nextDayStart();S.lockWhy='Дневен лимит −'+st.dayLoss+' USDT';msg='Дневниот лимит е достигнат.';}
+  else if(todayOpened()>=st.maxTrades&&!S.open.length){S.lockUntil=Math.max(S.lockUntil,nextDayStart());S.lockWhy='Макс '+st.maxTrades+' трејдови денес';}
+  save();renderBal();renderStatus();renderLog();calc();
+  if(pnl>0)toast((msg?msg+' ':'')+'Ским '+st.skim+'%: префрли '+(pnl*st.skim/100).toFixed(2)+' USDT во Earn.',7000);
+  else toast(msg||('Пауза '+st.cdLoss+' мин. Не враќај веднаш.'),5000);
+}
+
+// ===== log =====
+function renderLog(){
+  const lg=todayLog().slice().reverse();
+  if(!lg.length){$('logT').innerHTML='<tr><td class="mu">Нема затворени трејдови денес.</td></tr>';$('logHint').textContent='';return;}
+  $('logT').innerHTML='<tr><th>време</th><th>коин</th><th>држ.</th><th style="text-align:right">PnL</th></tr>'+lg.map(x=>`<tr><td>${hhmm(x.openTs)}</td><td class="${x.side==='L'?'up':'dn'}">${x.side==='L'?'▲':'▼'} ${x.sym}${x.override?' ⚠':''}</td><td class="${x.early?'yl':''}">${Math.round(x.hold)}м</td><td style="text-align:right" class="${x.pnl>=0?'up':'dn'}">${x.pnl>=0?'+':''}${x.pnl.toFixed(2)}</td></tr>`).join('');
+  const all=S.log,early=all.filter(x=>x.early),late=all.filter(x=>!x.early);
+  const s=a=>a.reduce((p,x)=>p+x.pnl,0);
+  $('logHint').innerHTML=`Вкупно запишано: ${all.length} · држени под ${S.set.minHold} мин: <b class="mono ${s(early)>=0?'up':'dn'}">${fU(s(early))}</b> (${early.length}) · над: <b class="mono ${s(late)>=0?'up':'dn'}">${fU(s(late))}</b> (${late.length})`;
+}
+
+// ===== settings =====
+function renderSet(){document.querySelectorAll('[data-s]').forEach(i=>i.value=S.set[i.dataset.s]);if(!$('lev').value)$('lev').value=S.set.lev;}
+document.querySelectorAll('[data-s]').forEach(i=>i.addEventListener('change',()=>{const v=num(i.value);if(isFinite(v)){S.set[i.dataset.s]=v;save();renderBal();renderStatus();calc();}}));
+$('setReset').onclick=()=>{S.set=Object.assign({},DEF);save();renderSet();renderBal();renderStatus();calc();toast('Поставките се вратени');};
+$('wipeBtn').onclick=()=>{if(confirm('Да се избрише целиот дневник, локови и паузи?')){S.log=[];S.open=[];S.coinLocks={};S.cdUntil=0;S.lockUntil=0;save();renderStatus();renderLog();calc();}};
+$('exportBtn').onclick=()=>{const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='ascout-tools-'+dayKey(now())+'.json';document.body.appendChild(a);a.click();a.remove();};
+
+// =====================================================
+// ===== HOURS: market pattern by hour of day ==========
+// =====================================================
+$('coins').value=MINE;
+$('cMine').onclick=()=>{$('coins').value=MINE;};
+$('cTop').onclick=async()=>{
+  $('hInfo').textContent='Вчитувам топ по волумен…';
+  const t=await api('/ticker/24hr');
+  if(!t){$('hInfo').innerHTML='<span class="dn">Binance API недостапен.</span>';return;}
+  const skip=new Set(['BTC','ETH','USDC','FDUSD','BNB','SOL','XRP']);
+  const top=t.filter(x=>x.symbol.endsWith('USDT')&&!x.symbol.includes('_')).map(x=>({s:x.symbol.replace(/USDT$/,''),v:+x.quoteVolume})).filter(x=>!skip.has(x.s)).sort((a,b)=>b.v-a.v).slice(0,30).map(x=>x.s);
+  $('coins').value=top.join(' ')+' BTC';
+  $('hInfo').textContent='Топ 30 по 24h волумен (без големите), плус BTC како референца.';
+};
+
+let HR=null,MY=null;
+$('hScan').onclick=scanHours;
+async function fetchKl(sym,days){
+  const end=now(),start=end-days*86400000;let from=start,out=[];
+  for(let i=0;i<4;i++){
+    const k=await api(`/klines?symbol=${sym}USDT&interval=15m&limit=1500&startTime=${from}`);
+    if(!k||!k.length)break;
+    out=out.concat(k);
+    if(k.length<1500)break;
+    from=k[k.length-1][0]+1;
+    await sleep(120);
+  }
+  return out.slice(0,-1);// drop live candle
+}
+function analyzeCoin(kl){
+  const H=Array.from({length:24},()=>({r:0,v:0,w:0,n:0,wn:0}));
+  const DH=Array.from({length:7},()=>Array.from({length:24},()=>({r:0,n:0})));
+  const bk=new Map();let tr=0,tv=0,tn=0;
+  for(const k of kl){
+    const o=+k[1],h=+k[2],l=+k[3],c=+k[4],qv=+k[7];if(!(o>0))continue;
+    const d=new Date(k[0]),hr=d.getHours(),dw=(d.getDay()+6)%7;
+    const r=(h-l)/o*100;
+    H[hr].r+=r;H[hr].v+=qv;H[hr].n++;tr+=r;tv+=qv;tn++;
+    if(h>l){H[hr].w+=(h-l-Math.abs(c-o))/(h-l);H[hr].wn++;}
+    DH[dw][hr].r+=r;DH[dw][hr].n++;
+    const key=d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()+'-'+hr;
+    if(!bk.has(key))bk.set(key,[]);bk.get(key).push([o,c]);
+  }
+  if(tn<96)return null;
+  const mr=tr/tn,mv=tv/tn;
+  const ER=Array.from({length:24},()=>({s:0,n:0}));
+  for(const[key,arr]of bk){
+    if(arr.length<3)continue;
+    const hr=+key.split('-')[3];let prev=arr[0][0],path=0;
+    for(const[,c]of arr){path+=Math.abs(c-prev);prev=c;}
+    if(path>0){ER[hr].s+=Math.abs(arr[arr.length-1][1]-arr[0][0])/path;ER[hr].n++;}
+  }
+  return{
+    r:H.map(x=>x.n?x.r/x.n/mr:NaN),
+    v:H.map(x=>x.n?x.v/x.n/mv:NaN),
+    w:H.map(x=>x.wn?x.w/x.wn:NaN),
+    er:ER.map(x=>x.n?x.s/x.n:NaN),
+    dh:DH.map(row=>row.map(x=>x.n?x.r/x.n/mr:NaN))
+  };
+}
+const med=a=>{a=a.filter(isFinite).sort((x,y)=>x-y);if(!a.length)return NaN;const m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2;};
+const avg=a=>{a=a.filter(isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;};
+
+async function scanHours(){
+  const coins=[...new Set($('coins').value.toUpperCase().split(/[\s,;]+/).map(cleanSym).filter(Boolean))];
+  if(!coins.length){toast('Внеси барем еден коин');return;}
+  const days=+$('days').value;
+  $('hScan').disabled=true;$('hScan').textContent='Мерам…';
+  const res=[],fail=[];let done=0;
+  const B=4;
+  for(let i=0;i<coins.length;i+=B){
+    const ch=coins.slice(i,i+B);
+    const out=await Promise.all(ch.map(async s=>{const k=await fetchKl(s,days);return[s,k.length?analyzeCoin(k):null];}));
+    out.forEach(([s,a])=>a?res.push([s,a]):fail.push(s));
+    done+=ch.length;$('hProg').style.width=(done/coins.length*100)+'%';
+    $('hInfo').textContent=`${done}/${coins.length} коини…`;
+    await sleep(150);
+  }
+  $('hScan').disabled=false;$('hScan').textContent='Измери шема';
+  if(!res.length){$('hInfo').innerHTML='<span class="dn">Нема податоци. Провери ја врската или симболите.</span>';return;}
+  const A=res.map(x=>x[1]);
+  HR={coins:res.map(x=>x[0]),fail,days,
+    r:[...Array(24)].map((_,h)=>med(A.map(a=>a.r[h]))),
+    v:[...Array(24)].map((_,h)=>med(A.map(a=>a.v[h]))),
+    w:[...Array(24)].map((_,h)=>avg(A.map(a=>a.w[h]))),
+    er:[...Array(24)].map((_,h)=>avg(A.map(a=>a.er[h]))),
+    dh:[...Array(7)].map((_,d)=>[...Array(24)].map((_,h)=>med(A.map(a=>a.dh[d][h]))))};
+  $('hInfo').textContent=`${res.length} коини · ${days} дена${fail.length?' · без податоци: '+fail.join(', '):''}`;
+  renderHours();
+}
+function classify(h){
+  const mER=avg(HR.er),mW=avg(HR.w);
+  const r=HR.r[h],er=HR.er[h],w=HR.w[h];
+  if(r<0.8)return['c-dd','мртво'];
+  if(er>=mER*1.04&&w<=mW*1.01)return['c-tr','тренд'];
+  if(w>=mW*1.02&&er<mER)return['c-ch','фитили'];
+  return['c-mx','мешано'];
+}
+function renderHours(){
+  if(!HR)return;
+  const cur=new Date().getHours(),maxR=Math.max(...HR.r.filter(isFinite));
+  const cls=[...Array(24)].map((_,h)=>classify(h));
+  const pick=(name)=>cls.map((c,h)=>c[1]===name?h:-1).filter(h=>h>=0);
+  const trend=pick('тренд').sort((a,b)=>HR.er[b]-HR.er[a]),chaos=pick('фитили').sort((a,b)=>HR.w[b]-HR.w[a]),dead=pick('мртво');
+  const hs=a=>a.length?a.map(h=>String(h).padStart(2,'0')+'h').join(', '):'—';
+  let myHead='',myCell=()=>'';
+  if(MY){
+    myHead='<th>мои: n</th><th>нето</th><th>≥1h нето</th>';
+    myCell=h=>{const m=MY.byH[h];return m.n?`<td>${m.n}</td><td class="${m.net>=0?'up':'dn'}">${fU(m.net,1)}</td><td class="${m.netL>=0?'up':'dn'}">${m.nL?fU(m.netL,1):'—'}</td>`:'<td class="mu">—</td><td></td><td></td>';};
+  }
+  let html=`<div class="blk sum"><h3>Резиме</h3>
+    <p><span class="cls c-tr">тренд</span> најчисто движење: <b class="mono">${hs(trend)}</b></p>
+    <p><span class="cls c-ch">фитили</span> лов на стопови: <b class="mono">${hs(chaos)}</b></p>
+    <p><span class="cls c-dd">мртво</span> мал опсег: <b class="mono">${hs(dead)}</b></p>
+    <p class="hint">Опсегот и чистотата на движењето кажуваат колку и колку чисто се движи, не во која насока. Насоката останува на OI/CVD.</p></div>`;
+  html+=`<div class="blk"><h3>По час <small>локално време</small></h3><div class="wide"><table class="hrs">
+    <tr><th>час</th><th>опсег</th><th>волумен</th><th>тренд</th><th>фитил</th><th>тип</th>${myHead}</tr>`+
+    [...Array(24)].map((_,h)=>`<tr class="${h===cur?'now':''}"><td>${String(h).padStart(2,'0')}h</td>
+      <td><span class="bar" style="width:${Math.round(HR.r[h]/maxR*46)}px"></span>${HR.r[h].toFixed(2)}</td>
+      <td>${HR.v[h].toFixed(2)}</td><td>${(HR.er[h]*100).toFixed(0)}%</td><td>${(HR.w[h]*100).toFixed(0)}%</td>
+      <td><span class="cls ${cls[h][0]}">${cls[h][1]}</span></td>${myCell(h)}</tr>`).join('')+
+    `</table></div><p class="hint">Опсег и волумен: 1.00 = просечен час за коинот. Тренд = нето поместување во часот поделено со изодениот пат (повисоко = почисто). Фитил = дел од 15m свеќата што е фитил (повисоко = повеќе лажни пробиви).</p></div>`;
+  // heatmap
+  const all=HR.dh.flat().filter(isFinite),lo=Math.min(...all),hi=Math.max(...all);
+  html+=`<div class="blk"><h3>Опсег по ден и час</h3><div class="wide"><div class="heat"><div></div>`+
+    [...Array(24)].map((_,h)=>`<div>${h}</div>`).join('')+
+    HR.dh.map((row,d)=>`<div>${DOW[d]}</div>`+row.map((v,h)=>{const t=isFinite(v)?(v-lo)/(hi-lo||1):0;return`<div title="${DOW[d]} ${h}h ${isFinite(v)?v.toFixed(2):'—'}" style="background:rgba(0,229,255,${(0.06+t*0.8).toFixed(2)});color:${t>0.55?'#07070f':'var(--text2)'}">${isFinite(v)?v.toFixed(1):''}</div>`;}).join('')).join('')+
+    `</div></div></div>`;
+  if(MY)html+=myHoldBlock();
+  $('hOut').innerHTML=html;
+}
+
+// ===== my trades CSV =====
+$('csv').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const m=f.name.match(/UTC([+-]\d{1,2})/);const off=m?parseInt(m[1],10):1;
+  const rd=new FileReader();
+  rd.onload=()=>{try{MY=parseTrades(rd.result,off);$('csvInfo').innerHTML=`${MY.n} затворени позиции · нето <b class="mono ${MY.net>=0?'up':'dn'}">${fU(MY.net)}</b> · време UTC${off>=0?'+':''}${off} претворено во локално`+(MY.pre?` · ${MY.pre} позиции почнати пред периодот се исклучени`:'');if(HR)renderHours();else{$('hOut').innerHTML=myHoldBlock();}}catch(err){$('csvInfo').innerHTML='<span class="dn">Не можам да го прочитам фајлот: '+err.message+'</span>';}};
+  rd.readAsText(f);
+};
+function parseTrades(txt,off){
+  const lines=txt.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+  const hd=lines[0].split(',').map(x=>x.trim());
+  const ix=n=>{const i=hd.indexOf(n);if(i<0)throw new Error('нема колона '+n);return i;};
+  const iT=ix('Time'),iS=ix('Symbol'),iSd=ix('Side'),iQ=ix('Quantity'),iA=ix('Amount'),iF=ix('Fee'),iR=ix('Realized Profit');
+  const iId=hd.indexOf('Trade ID');
+  const os=(off>=0?'+':'-')+String(Math.abs(off)).padStart(2,'0')+':00';
+  const rows=lines.slice(1).map(l=>{const c=l.split(',');return{t:new Date(c[iT].trim().replace(' ','T')+os).getTime(),s:c[iS].trim(),side:c[iSd].trim(),q:parseFloat(c[iQ]),a:parseFloat(c[iA]),fee:parseFloat(c[iF]),rp:parseFloat(c[iR]),id:iId>=0?+c[iId]:0};}).filter(r=>isFinite(r.t)&&isFinite(r.q));
+  rows.sort((a,b)=>a.t-b.t||a.id-b.id);
+  const bySym={};rows.forEach(r=>(bySym[r.s]=bySym[r.s]||[]).push(r));
+  const pos=[];let pre=0;
+  for(const s in bySym){
+    let q=0,cur=null;
+    for(const r of bySym[s]){
+      const sq=(r.side==='BUY'?1:-1)*r.q,prev=q;q=+(q+sq).toFixed(8);
+      if(!cur)cur={s,dir:sq>0?'L':'S',open:r.t,rp:0,fee:0,rpOpen:0,first:true};
+      cur.rp+=r.rp;cur.fee+=r.fee;
+      if(cur.first&&r.rp!==0)cur.rpOpen++;// realized on the opening fill = position began before file
+      cur.first=false;
+      const eps=1e-8*Math.max(1,Math.abs(prev));
+      if(Math.abs(q)<eps||(prev!==0&&Math.sign(q)!==Math.sign(prev))){
+        cur.close=r.t;if(cur.rpOpen)pre++;else pos.push(cur);cur=null;
+        if(Math.abs(q)>=eps)cur={s,dir:q>0?'L':'S',open:r.t,rp:0,fee:0,rpOpen:0,first:false};
+      }
+    }
+  }
+  const byH=Array.from({length:24},()=>({n:0,net:0,nL:0,netL:0}));
+  const bins=[[0,1,'<1м'],[1,5,'1–5м'],[5,15,'5–15м'],[15,60,'15–60м'],[60,240,'1–4h'],[240,1e9,'>4h']].map(b=>({lo:b[0],hi:b[1],l:b[2],n:0,net:0,w:0}));
+  let net=0;
+  pos.forEach(p=>{
+    p.net=p.rp-p.fee;p.hold=(p.close-p.open)/60000;net+=p.net;
+    const h=new Date(p.open).getHours();byH[h].n++;byH[h].net+=p.net;if(p.hold>=60){byH[h].nL++;byH[h].netL+=p.net;}
+    const b=bins.find(b=>p.hold>=b.lo&&p.hold<b.hi);if(b){b.n++;b.net+=p.net;if(p.net>0)b.w++;}
+  });
+  return{n:pos.length,net,byH,bins,pre};
+}
+function myHoldBlock(){
+  if(!MY)return'';
+  return`<div class="blk"><h3>Мои трејдови по време на држење</h3><div class="wide"><table class="hrs" style="min-width:0">
+    <tr><th>држење</th><th>позиции</th><th>win rate</th><th>нето</th></tr>`+
+    MY.bins.map(b=>`<tr><td>${b.l}</td><td>${b.n}</td><td>${b.n?Math.round(b.w/b.n*100)+'%':'—'}</td><td class="${b.net>=0?'up':'dn'}">${fU(b.net,1)}</td></tr>`).join('')+
+    `</table></div></div>`;
+}
+
+// ===== init =====
+renderSet();ensureDay();renderBal();renderLog();renderStatus();calc();
+setInterval(()=>{const before=lockState();renderStatus();const after=lockState();if(before&&!after){toast('Паузата заврши.');calc();}},1000);
+</script>
+</body>
+</html>
