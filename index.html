@@ -799,6 +799,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
       <div class="flow-title">// ФОРМИ · M1 СВЕЌИ + M2 СТРУКТУРИ · 15m 1h 4h 1d</div>
       <div id="patContent"></div>
     </div>
+    <!-- TEMPO PANEL (2026-11-10-b) -->
+    <div class="dp-clean" id="dpTempo" style="display:none">
+      <div class="flow-title">// 🎵 ТЕМПО · РИТАМ НА БРАНОВИТЕ 15m</div>
+      <div id="tempoContent"></div>
+    </div>
     <!-- MONEY FLOW PANEL -->
     <div class="dp-flow" id="dpFlow" style="display:none">
       <div class="flow-title">// MONEY FLOW ANALYSIS <span class="flow-badge" id="flowBadge" style="display:none"></span></div>
@@ -1281,6 +1286,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-10-b  🎵 TEMPO (observation only). Prompted by IDOL.P 04-09.11: holds 15m-4h = 21 positions +115,
+//    holds <15m = 64 positions -153 (WR 3%); the coin swung 0.0300 <-> 0.034-0.0355 in 3-8h legs.
+//    ZigZag on closed 15m high/low, reversal = 3 x ATR14 (prev bar); last 12 legs = current regime.
+//    Per coin: median leg up/down (IQR), amplitude, pullback inside a leg, rhythm CV, floor/ceiling,
+//    current leg (direction, elapsed vs median, phase, window for the turn). Normal regime = ATR
+//    0.6-1.6x the 7d median and 24h < +20%. Row tag 🎵 only for CV <= 0.85 in a normal regime; tap =
+//    popup with guidance (min hold ~1/2 leg, SL >= 1.2x pullback, TP ~ leg). Detail panel + ❓ help.
+//    One 15m klines call (1000 bars) per coin, background build for the shortlist (max 30) 8 s after a
+//    scan, cached 15 min; SKIPPED in headless browsers (Telegram bot unchanged). No SCORE/gate/ALARM change.
 //  2026-11-10-a  🧮 TOOLS link in the control row (next to 🧪) -> ./tools.html, a separate page
 //    (risk calculator from balance, cooldown/locks, market pattern by hour). No scan, gate, SCORE,
 //    ALARM or bot logic changed; tools.html does not touch the scanner state.
@@ -1363,7 +1377,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-10-a';
+const APP_BUILD='2026-11-10-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -2180,7 +2194,7 @@ async function doScanPass(){
       await sleep(sl);
     }
   }
-  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));if(typeof ignFinalizeScan==='function')try{ignFinalizeScan();}catch(e){}S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildClean();enrichSrc(S.signals);}
+  if(!S.abort){S.signals=assignMomentumRanks(buildSignals(S._partial));if(typeof ignFinalizeScan==='function')try{ignFinalizeScan();}catch(e){}S_setups=[];renderList();setDot('live');document.getElementById('prog').style.display='none';toast(`✅ ${S.signals.length} сигнали · ${S.signals.filter(s=>s.isAlpha).length} Alpha`);startBuildClean();enrichSrc(S.signals);if(typeof startBuildTempo==='function')setTimeout(startBuildTempo,8000);}
 }
 
 // ── MOMENTUM RANKS (v2.4) ───────────────────────────────────
@@ -3268,6 +3282,7 @@ function rowHTML(s){
   // CLEAN15 (v2.6) — an actionable entry outranks every descriptive tag
   const clT=blk?'':cleanTagHTML(s.coin);if(clT)tags.push(clT);
   const stT=blk?'':structTagHTML(s.coin);if(stT)tags.push(stT);   // v2.7 TRND + LOC
+  if(!blk&&typeof tempoTagHTML==='function'){const tp=tempoTagHTML(s.coin);if(tp)tags.push(tp);}   // 2026-11-10-b TEMPO
   if(!blk&&typeof patTagHTML==='function'){const pt=patTagHTML(s);if(pt)tags.push(pt);}   // 2026-10-27-a PATTERNS
   // CONFLUENCE tag — always first if present
   if(s.confLabel){
@@ -3372,6 +3387,7 @@ function openDetail(coin){
   loadCciObvCross(coin);
   loadCleanDetail(coin);
   if(typeof loadPatDetail==='function')loadPatDetail(coin);   // 2026-10-27-a
+  if(typeof loadTempoDetail==='function')loadTempoDetail(coin);   // 2026-11-10-b
   if(typeof renderNewsDetail==='function')renderNewsDetail(coin);
 }
 
@@ -3391,6 +3407,7 @@ async function refreshDetail(){
   loadCciObvCross(coin);
   loadCleanDetail(coin,true);
   if(typeof loadPatDetail==='function')loadPatDetail(coin,true);   // 2026-10-27-a
+  if(typeof loadTempoDetail==='function')loadTempoDetail(coin,true);   // 2026-11-10-b
   btn.classList.remove('spin');toast(`↻ ${coin} освежен`);
 }
 
@@ -5836,7 +5853,7 @@ function toggleHelp(){
   const val=v=>typeof v==='function'?v():v;
   let html='<input id="hlpQ" placeholder="🔍 Барај кратенка (пр. REVAL, FLIP, OI◆)..." oninput="helpFilter(this.value)" autocomplete="off" autocorrect="off" spellcheck="false" '
     +'style="width:100%;box-sizing:border-box;margin-bottom:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px">';
-  helpSections().concat(typeof patHelpSections==='function'?patHelpSections():[]).forEach(function(sec){   // 2026-10-27-a
+  helpSections().concat(typeof patHelpSections==='function'?patHelpSections():[]).concat(typeof tempoHelpSections==='function'?tempoHelpSections():[]).forEach(function(sec){   // 2026-10-27-a
     html+='<div class="hlp-sec" style="margin-bottom:18px">'
       +'<div style="font-family:var(--mono);font-size:12px;font-weight:bold;color:var(--accent);margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">'+esc(sec.h)+'</div>'
       +'<div style="display:flex;flex-direction:column;gap:8px">';
@@ -9678,6 +9695,237 @@ function patHelpSections(){
   return[gen,m1,m2];
 }
 
+</script>
+
+<script>
+// ==========================================================
+// 2026-11-10-b  TEMPO -- per-coin swing rhythm on CLOSED 15m bars.
+// Observation only: no SCORE vote, no gate, no ALARM, not sent to Telegram.
+// Background build is skipped in headless browsers (the Telegram bot), so the
+// bot run is unchanged. User gets: row tag, popup on tap, detail panel, help.
+// Method: ZigZag on high/low with reversal = TEMPO_K x ATR14(15m) (previous bar),
+// legs = consecutive pivots, last TEMPO_LEGS legs = current regime.
+// ==========================================================
+const TEMPO_TF='15m',TEMPO_BARS=1000,TEMPO_K=3,TEMPO_LEGS=12,TEMPO_MIN_LEGS=6;
+const TEMPO_MAX_COINS=30,TEMPO_TTL=15*60000,TEMPO_BAR_MIN=15;
+const TEMPO_ATR_LO=0.6,TEMPO_ATR_HI=1.6,TEMPO_CV_GOOD=0.55,TEMPO_CV_MID=0.85;
+let _tempo={},_tempoBuilding=false;
+
+const tmpHeadless=()=>{try{return !!navigator.webdriver||/HeadlessChrome/.test(navigator.userAgent);}catch(e){return false;}};
+const tmpSort=a=>a.filter(x=>isFinite(x)).sort((x,y)=>x-y);
+const tmpQ=(a,p)=>{a=tmpSort(a);if(!a.length)return NaN;const i=(a.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return a[lo]+(a[hi]-a[lo])*(i-lo);};
+const tmpMed=a=>tmpQ(a,0.5);
+const tmpCV=a=>{a=a.filter(isFinite);if(a.length<2)return NaN;const m=a.reduce((x,y)=>x+y,0)/a.length;const v=a.reduce((x,y)=>x+(y-m)*(y-m),0)/(a.length-1);return m>0?Math.sqrt(v)/m:NaN;};
+function tmpDur(min){if(!isFinite(min))return '—';if(min<90)return Math.round(min)+' мин';const h=min/60;return String(h<10?h.toFixed(1):Math.round(h)).replace(/\.0$/,'')+'h';}
+function tmpDurShort(min){if(!isFinite(min))return '?';if(min<90)return Math.round(min)+'m';const h=min/60;return String(h<10?h.toFixed(1):Math.round(h)).replace(/\.0$/,'')+'h';}
+function tmpHM(t){const d=new Date(t),n=new Date();const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');return d.toDateString()===n.toDateString()?hm:d.getDate()+'.'+(d.getMonth()+1)+' '+hm;}
+const tmpPct=(x,d)=>isFinite(x)?(x*100).toFixed(d==null?1:d)+'%':'—';
+
+function tmpATR(H,L,C,len){
+  const n=C.length,out=new Array(n).fill(NaN);let s=0,prev=NaN;
+  for(let i=0;i<n;i++){
+    const tr=i===0?H[i]-L[i]:Math.max(H[i]-L[i],Math.abs(H[i]-C[i-1]),Math.abs(L[i]-C[i-1]));
+    if(i<len-1){s+=tr;continue;}
+    if(i===len-1){s+=tr;prev=s/len;out[i]=prev;continue;}
+    prev=(prev*(len-1)+tr)/len;out[i]=prev;
+  }
+  return out;
+}
+
+// ZigZag on high/low. Reversal when price moves k*ATR(prev bar) against the running extreme.
+function tmpZigZag(H,L,atr,k){
+  const n=H.length,piv=[];let dir=0,hiP=H[0],hiI=0,loP=L[0],loI=0;
+  for(let i=1;i<n;i++){
+    if(dir>=0&&H[i]>hiP){hiP=H[i];hiI=i;}
+    if(dir<=0&&L[i]<loP){loP=L[i];loI=i;}
+    const a=atr[i-1];if(!isFinite(a))continue;
+    const th=k*a;
+    if(dir>=0&&hiP-L[i]>=th&&hiI<i){
+      if(dir===0&&loI<hiI)piv.push({t:'L',i:loI,p:loP});
+      piv.push({t:'H',i:hiI,p:hiP});dir=-1;loP=L[i];loI=i;
+    }else if(dir<=0&&H[i]-loP>=th&&loI<i){
+      if(dir===0&&hiI<loI)piv.push({t:'H',i:hiI,p:hiP});
+      piv.push({t:'L',i:loI,p:loP});dir=1;hiP=H[i];hiI=i;
+    }
+  }
+  return{piv,dir,ext:dir<0?{i:loI,p:loP}:dir>0?{i:hiI,p:hiP}:null};
+}
+
+async function tempoEval(coin,force){
+  const h=_tempo[coin];
+  if(!force&&h&&Date.now()-h.at<TEMPO_TTL)return h;
+  const kl=await apiFetch(`/klines?symbol=${coin}USDT&interval=${TEMPO_TF}&limit=${TEMPO_BARS}`);
+  if(!kl||kl.length<200)return null;
+  const kc=(+kl[kl.length-1][6]>Date.now())?kl.slice(0,-1):kl;   // closed bars only
+  const T=kc.map(k=>+k[0]),H=kc.map(k=>+k[2]),L=kc.map(k=>+k[3]),C=kc.map(k=>+k[4]);
+  const n=C.length,atr=tmpATR(H,L,C,14);
+  const zz=tmpZigZag(H,L,atr,TEMPO_K),P=zz.piv;
+  // legs between confirmed pivots
+  const all=[];
+  for(let k=1;k<P.length;k++){
+    const a=P[k-1],b=P[k],up=b.t==='H';
+    let pull=0;
+    if(up){let m=H[a.i];for(let j=a.i+1;j<=b.i;j++){m=Math.max(m,H[j]);pull=Math.max(pull,(m-L[j])/m);}}
+    else{let m=L[a.i];for(let j=a.i+1;j<=b.i;j++){m=Math.min(m,L[j]);pull=Math.max(pull,(H[j]-m)/m);}}
+    all.push({up,from:T[a.i],to:T[b.i],dur:(b.i-a.i)*TEMPO_BAR_MIN,amp:up?(b.p-a.p)/a.p:(a.p-b.p)/a.p,pull,p0:a.p,p1:b.p});
+  }
+  const legs=all.slice(-TEMPO_LEGS);
+  const ups=legs.filter(x=>x.up),dns=legs.filter(x=>!x.up);
+  const durs=legs.map(x=>x.dur);
+  const r={coin,at:Date.now(),barT:T[n-1],price:C[n-1],nLegs:legs.length,legs,
+    medAll:tmpMed(durs),cv:tmpCV(durs),
+    up:{med:tmpMed(ups.map(x=>x.dur)),q1:tmpQ(ups.map(x=>x.dur),0.25),q3:tmpQ(ups.map(x=>x.dur),0.75),amp:tmpMed(ups.map(x=>x.amp)),pull:tmpMed(ups.map(x=>x.pull)),n:ups.length},
+    dn:{med:tmpMed(dns.map(x=>x.dur)),q1:tmpQ(dns.map(x=>x.dur),0.25),q3:tmpQ(dns.map(x=>x.dur),0.75),amp:tmpMed(dns.map(x=>x.amp)),pull:tmpMed(dns.map(x=>x.pull)),n:dns.length},
+    span:legs.length?(legs[legs.length-1].to-legs[0].from)/3600000:NaN};
+  // regime: ATR now vs 7-day median, 24h change
+  const atrNow=atr[n-1],atrMed=tmpMed(atr.slice(-672));
+  r.atrRatio=atrNow/atrMed;r.atrPct=atrNow/C[n-1];
+  const tk=(typeof _tMap!=='undefined')?_tMap[coin]:null;
+  r.chg24=tk?parseFloat(tk.priceChangePercent):NaN;
+  r.normal=r.atrRatio>=TEMPO_ATR_LO&&r.atrRatio<=TEMPO_ATR_HI&&!(r.chg24>=20);
+  // rhythm shift: last 4 legs vs the ones before
+  if(legs.length>=8){const a=tmpMed(legs.slice(-4).map(x=>x.dur)),b=tmpMed(legs.slice(0,-4).map(x=>x.dur));r.shift=a/b;}else r.shift=NaN;
+  // current leg (from last confirmed pivot)
+  const lp=P[P.length-1];
+  if(lp&&zz.ext){
+    const dir=lp.t==='H'?'dn':'up',D=r[dir];
+    const el=(n-1-lp.i)*TEMPO_BAR_MIN;
+    const sofar=dir==='up'?(zz.ext.p-lp.p)/lp.p:(lp.p-zz.ext.p)/lp.p;
+    const prog=isFinite(D.med)&&D.med>0?el/D.med:NaN;
+    r.cur={dir,start:T[lp.i],p0:lp.p,ext:zz.ext.p,extT:T[zz.ext.i],el,sofar,prog,
+      winLo:isFinite(D.q1)?T[lp.i]+D.q1*60000:NaN,winHi:isFinite(D.q3)?T[lp.i]+D.q3*60000:NaN,
+      phase:!isFinite(prog)?'?':prog<0.34?'рано':prog<0.75?'среде':prog<=1.25?'доцна':'пречекорен'};
+  }
+  // floor / ceiling from the last 2 confirmed lows / highs
+  const lows=P.filter(x=>x.t==='L').slice(-2).map(x=>x.p),highs=P.filter(x=>x.t==='H').slice(-2).map(x=>x.p);
+  if(lows.length&&highs.length){r.floor=Math.min(...lows);r.ceil=Math.max(...highs);r.pos=r.ceil>r.floor?(r.price-r.floor)/(r.ceil-r.floor):NaN;}
+  r.q=legs.length<TEMPO_MIN_LEGS||r.up.n<2||r.dn.n<2?'none':!r.normal?'abn':r.cv<=TEMPO_CV_GOOD?'good':r.cv<=TEMPO_CV_MID?'mid':'irr';
+  _tempo[coin]=r;
+  return r;
+}
+
+// -- row tag: only when the coin has a usable rhythm --------
+function tempoTagHTML(coin){
+  const r=_tempo[coin];if(!r||(r.q!=='good'&&r.q!=='mid'))return '';
+  const c=r.q==='good'?'var(--green)':'var(--yellow)';
+  const cur=r.cur&&isFinite(r.cur.prog)?(r.cur.dir==='up'?'▲':'▼')+Math.round(Math.min(r.cur.prog,9.99)*100)+'%':'';
+  return '<span class="ctag" data-coin="'+coin+'" onclick="event.stopPropagation();tempoPop(this.dataset.coin)" style="background:transparent;color:'+c
+    +';border:1px solid '+c+';font-family:var(--mono);cursor:pointer">🎵'+tmpDurShort(r.medAll)+cur+'</span>';
+}
+
+function tmpQualTxt(r){
+  if(r.q==='none')return['var(--muted)','Нема доволно бранови ('+r.nLegs+' < '+TEMPO_MIN_LEGS+'): коинот се движи премалку за мерење'];
+  if(r.q==='abn')return['var(--orange)','Режимот НЕ е нормален'+(r.chg24>=20?' (24h +'+r.chg24.toFixed(0)+'%)':'')+' · ATR '+r.atrRatio.toFixed(1)+'× од 7д медијан: темпото не важи'];
+  if(r.q==='irr')return['var(--orange)','Нерегуларен ритам (CV '+r.cv.toFixed(2)+'): нема темпо за тргување'];
+  if(r.q==='mid')return['var(--yellow)','Умерен ритам (CV '+r.cv.toFixed(2)+') · нормален режим (ATR '+r.atrRatio.toFixed(1)+'×)'];
+  return['var(--green)','Стабилен ритам (CV '+r.cv.toFixed(2)+') · нормален режим (ATR '+r.atrRatio.toFixed(1)+'×)'];
+}
+
+function tempoHTML(r){
+  if(!r)return '<div style="font-family:var(--mono);font-size:11px;color:var(--text2)">Нема 15m податоци за темпо (потребни 200+ свеќи) или Binance не одговара.</div>';
+  const [qc,qt]=tmpQualTxt(r);
+  const row=(l,v,c)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">'+l+'</span><b style="color:'+(c||'var(--text)')+';text-align:right">'+v+'</b></div>';
+  let o='<div style="font-family:var(--mono);font-size:12px;line-height:1.5">';
+  o+='<div style="color:'+qc+';font-weight:bold;margin-bottom:8px">'+qt+'</div>';
+  if(r.q==='none'){return o+'</div>';}
+  o+=row('Бран (медијан, '+r.nLegs+' бранови · '+(isFinite(r.span)?Math.round(r.span)+'h':'—')+')',tmpDur(r.medAll));
+  o+=row('▲ бран горе',tmpDur(r.up.med)+' ('+tmpDur(r.up.q1)+'–'+tmpDur(r.up.q3)+') · +'+tmpPct(r.up.amp),'var(--green)');
+  o+=row('▼ бран долу',tmpDur(r.dn.med)+' ('+tmpDur(r.dn.q1)+'–'+tmpDur(r.dn.q3)+') · −'+tmpPct(r.dn.amp),'var(--red)');
+  o+=row('Типично повлекување во бран','▲ '+tmpPct(r.up.pull)+' · ▼ '+tmpPct(r.dn.pull));
+  if(isFinite(r.floor))o+=row('Под / таван (последни пивоти)',fmt(r.floor)+' / '+fmt(r.ceil)+(isFinite(r.pos)?' · цена на '+Math.round(r.pos*100)+'%':''));
+  if(isFinite(r.shift)&&(r.shift>2||r.shift<0.5))o+=row('⚠ Ритамот се менува','последни 4 бранови '+r.shift.toFixed(1)+'× од претходните','var(--orange)');
+  if(r.cur){
+    const c=r.cur,up=c.dir==='up';
+    o+='<div style="margin:10px 0 4px;color:var(--accent);font-weight:bold">СЕГА</div>';
+    o+=row('Тековен бран',(up?'▲ од ':'▼ од ')+tmpHM(c.start)+' ('+fmt(c.p0)+')',up?'var(--green)':'var(--red)');
+    o+=row('Поминато',tmpDur(c.el)+' од типични '+tmpDur(r[c.dir].med)+(isFinite(c.prog)?' · '+Math.round(c.prog*100)+'%':''));
+    o+=row('Фаза',c.phase,c.phase==='рано'?'var(--green)':c.phase==='среде'?'var(--text)':c.phase==='доцна'?'var(--yellow)':'var(--orange)');
+    o+=row('Поместено досега',(up?'+':'−')+tmpPct(c.sofar)+' од типични '+(up?'+':'−')+tmpPct(r[c.dir].amp));
+    if(isFinite(c.winLo))o+=row('Прозорец за крај на бранот',c.winHi<Date.now()?'поминат ('+tmpHM(c.winLo)+'–'+tmpHM(c.winHi)+')':tmpHM(c.winLo)+'–'+tmpHM(c.winHi),c.winHi<Date.now()?'var(--orange)':'var(--text)');
+  }
+  // guidance
+  const g=[];
+  if(r.q==='abn'||r.q==='irr'){
+    g.push('Не тргувај по темпо додека '+(r.q==='abn'?'режимот не се врати во нормала (ATR 0.6–1.6× од медијан)':'ритамот не се стабилизира')+'.');
+  }else{
+    g.push('<b>Минимално држење ~'+tmpDur(r.medAll/2)+'</b> (половина бран). Помалку од тоа е шум за овој коин.');
+    g.push('SL за лонг ≥ '+tmpPct(Math.max(r.up.pull*1.2,r.atrPct))+' од влезот, за шорт ≥ '+tmpPct(Math.max(r.dn.pull*1.2,r.atrPct))+' (1.2× типичното повлекување, мин. 1 ATR), или зад подот / таванот.');
+    g.push('TP ≈ типичен бран: лонг +'+tmpPct(r.up.amp)+', шорт −'+tmpPct(r.dn.amp)+' (или спротивната зона).');
+    g.push('Влез само <b>рано</b> во нов бран (првите ~'+tmpDur(r.medAll/3)+' по свртувањето). Доцна / пречекорен бран = не влегувај во неговата насока.');
+    if(r.cur){
+      const c=r.cur,up=c.dir==='up';
+      if(c.phase==='доцна'||c.phase==='пречекорен')g.push('Сега: '+(up?'бранот горе':'бранот долу')+' е зрел → не '+(up?'лонг':'шорт')+'. Чекај свртување '+(up?'кај таванот':'кај подот')+' и потврда (CLEAN15 / OI+CVD).');
+      else if(c.phase==='рано')g.push('Сега: ран '+(up?'бран горе':'бран долу')+'. Ако влегуваш '+(up?'лонг':'шорт')+', држи го до прозорецот за крај, не скалпирај.');
+      else g.push('Сега: среде бран. Нов влез во насока на бранот има помал простор, за спротивна насока е прерано.');
+    }
+  }
+  g.push('<span style="color:var(--muted)">Темпото кажува колку долго и колку далеку, не во која насока. Насоката: OI коини + цена, CVD, CLEAN15.</span>');
+  o+='<div style="margin:10px 0 4px;color:var(--accent);font-weight:bold">НАСОКИ</div><ul style="margin:0;padding-left:16px;font-family:var(--ui);font-size:12px;line-height:1.55">'+g.map(x=>'<li style="margin:3px 0">'+x+'</li>').join('')+'</ul>';
+  o+='<div style="margin-top:8px;font-size:10px;color:var(--muted)">15m затворени свеќи · ZigZag '+TEMPO_K+'×ATR14 · последни '+TEMPO_LEGS+' бранови · освежено '+tmpHM(r.at)+'</div>';
+  return o+'</div>';
+}
+
+// -- popup on tag tap --------------------------------------
+async function tempoPop(coin){
+  let ov=document.getElementById('tmpOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='tmpOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:750;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=e=>{if(e.target===ov)ov.style.display='none';};
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  const shell=b=>'<div style="width:100%;max-width:560px;max-height:88vh;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:16px 16px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px))">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><b style="font-family:var(--mono);font-size:15px;color:var(--text)">🎵 ТЕМПО · '+coin+'.P</b>'
+    +'<span><button onclick="openDetail(\''+coin+'\');document.getElementById(\'tmpOv\').style.display=\'none\'" style="background:var(--card);border:1px solid var(--border);color:var(--accent);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:11px;cursor:pointer;margin-right:6px">детали</button>'
+    +'<button onclick="document.getElementById(\'tmpOv\').style.display=\'none\'" style="background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:11px;cursor:pointer">✕</button></span></div>'+b+'</div>';
+  ov.innerHTML=shell('<div style="font-family:var(--mono);font-size:11px;color:var(--text2)">Го мерам ритамот…</div>');
+  let r=null;try{r=await tempoEval(coin);}catch(e){console.warn('TEMPO',coin,e);}
+  if(ov.style.display!=='none')ov.innerHTML=shell(tempoHTML(r));
+}
+
+// -- detail panel ------------------------------------------
+async function loadTempoDetail(coin,force){
+  const box=document.getElementById('dpTempo'),ct=document.getElementById('tempoContent');
+  if(!box||!ct)return;
+  box.style.display='block';
+  ct.innerHTML='<span class="flow-spinner"></span><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">Го мерам ритамот на брановите (15m)…</span>';
+  let r=null;try{r=await tempoEval(coin,force);}catch(e){console.warn('TEMPO',coin,e);}
+  if(S.detailCoin!==coin)return;
+  ct.innerHTML=tempoHTML(r);
+  if(r&&(r.q==='good'||r.q==='mid'))renderList();
+}
+
+// -- background build after each scan (user browser only) --
+async function startBuildTempo(){
+  if(_tempoBuilding||tmpHeadless())return;
+  _tempoBuilding=true;
+  try{
+    const list=(typeof pickCleanShortlist==='function'?pickCleanShortlist():S.signals.map(s=>s.coin))
+      .filter(c=>!(typeof blockReason==='function'&&blockReason(c))).slice(0,TEMPO_MAX_COINS);
+    for(let k=0;k<list.length;k+=4){
+      if(S.abort)break;
+      await Promise.all(list.slice(k,k+4).map(c=>tempoEval(c).catch(()=>null)));
+      await sleep(200);
+    }
+    renderList();
+  }catch(e){console.warn('TEMPO build',e);}
+  _tempoBuilding=false;
+}
+
+// -- help --------------------------------------------------
+function tempoHelpSections(){
+  const g='var(--green)',y='var(--yellow)',a='var(--accent)',o='var(--orange)',m='var(--muted)';
+  return[{h:'🎵 ТЕМПО — ритам на брановите (15m, 2026-11-10-b)',items:[
+    {tag:'🎵3.5h▼80%',col:g,what:'Типична должина на еден бран на коинот (медијан од последните '+TEMPO_LEGS+' бранови на 15m), па насоката на тековниот бран и колку од типичното траење е поминато. Зелено = стабилен ритам, жолто = умерен.',when:'Се покажува само кога коинот има мерливо темпо И е во нормален режим. Се гради автоматски по скен за shortlist (FAV + топ SCORE), најмногу '+TEMPO_MAX_COINS+' коини; во детали за секој коин.',action:'Клик на тагот = насоки: минимално држење, SL, TP, фаза, прозорец за крај на бранот.'},
+    {tag:'Бран',col:a,what:()=>'Движење од swing дно до swing врв (или обратно). Нов бран почнува кога цената ќе се врати '+TEMPO_K+'× ATR(15m) од последниот екстрем (ZigZag). Помали движења се шум внатре во бранот.'},
+    {tag:'Нормален режим',col:y,what:()=>'ATR(15m) сега е '+TEMPO_ATR_LO+'–'+TEMPO_ATR_HI+'× од 7-дневниот медијан и 24h промена < +20%. Надвор од тоа (пумпа, паника) темпото не важи.',action:'Ненормален режим = не тргувај по темпо.'},
+    {tag:'Ритам (CV)',col:a,what:()=>'Колку се разликуваат должините на брановите. CV ≤ '+TEMPO_CV_GOOD+' = стабилен, ≤ '+TEMPO_CV_MID+' = умерен, над тоа = нерегуларен (нема таг).'},
+    {tag:'Фаза',col:o,what:'рано (< ⅓ од типичниот бран) · среде · доцна (≈ типичното траење) · пречекорен (> 1.25×).',action:'Влез само рано во нов бран. Доцна / пречекорен = не во насоката на бранот, чекај свртување со потврда.'},
+    {tag:'Насоки',col:g,what:'Минимално држење ≈ ½ бран. SL ≥ 1.2× типичното повлекување во бранот. TP ≈ типична амплитуда на бранот.',action:'Само опис: не гласа во SCORE, не е гејт, не оди на Telegram. Насоката и понатаму: OI коини + цена, CVD, CLEAN15 / checklist.'},
+    {tag:'⚠ Ритамот се менува',col:o,what:'Последните 4 бранови се повеќе од 2× подолги или пократки од претходните: коинот влегува во нов режим, темпото уште не е стабилно.'}
+  ]}];
+}
 </script>
 
 </body>

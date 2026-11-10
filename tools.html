@@ -152,7 +152,7 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
   <div class="blk">
     <h3>Салдо <small>Futures, USDT</small></h3>
     <div class="inline">
-      <label class="f">Моментално салдо<input id="bal" type="number" inputmode="decimal" step="0.01" placeholder="74.45"></label>
+      <label class="f">Моментално салдо<input id="bal" type="number" inputmode="decimal" step="0.01" placeholder="внеси салдо"></label>
       <button class="btn" id="balSave">Зачувај</button>
     </div>
     <p class="hint" id="balInfo">Внеси салдо. Ризикот се пресметува од помалото меѓу моменталното салдо и салдото на почеток на денот.</p>
@@ -180,6 +180,11 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
       <label class="f">Левериџ<input id="lev" type="number" inputmode="numeric" step="1" min="1" max="125"></label>
       <div><label class="f">Маржа</label>
         <div class="seg" id="modeSeg"><button class="n on" data-v="cross">CROSS</button><button class="n" data-v="iso">ISOLATED</button></div></div>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <div><label class="f">Големина по</label>
+        <div class="seg" id="sizeSeg"><button class="n on" data-v="risk">РИЗИК</button><button class="n" data-v="margin">% САЛДО</button></div></div>
+      <label class="f" id="mpWrap" style="visibility:hidden">Маржа % од салдо<input id="mpct" type="number" inputmode="decimal" step="0.5" min="0"></label>
     </div>
 
     <table class="res" id="res"><tr><td class="mu">Внеси влез и SL.</td><td></td></tr></table>
@@ -228,6 +233,9 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
         <label class="f">Мин. држење (мин)<input data-s="minHold" type="number" step="5"></label>
         <label class="f">Ским % од добивка<input data-s="skim" type="number" step="1"></label>
         <label class="f">Нов ден почнува (час)<input data-s="dayStartH" type="number" step="1" min="0" max="23"></label>
+        <label class="f">Макс маржа % од салдо<input data-s="maxMarginPct" type="number" step="1"></label>
+        <label class="f">Макс изложеност (× салдо)<input data-s="maxExpX" type="number" step="0.5"></label>
+        <label class="f">Маржа % default<input data-s="mpDefault" type="number" step="0.5"></label>
       </div>
       <p class="hint">Големата победа и дневниот лимит ја заклучуваат страницата до „нов ден“. Ноќниот прозорец 00–07 е предупредување од твоите податоци (−168 USDT на влезови во тоа време).</p>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -251,7 +259,7 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
     </div>
     <button class="btn go" id="hScan" style="margin-top:10px">Измери шема</button>
     <div class="pbar"><i id="hProg"></i></div>
-    <p class="hint" id="hInfo">15m свеќи, локално време на уредот. Секој коин е нормализиран на својот просек, па 1.00 = просечен час.</p>
+    <p class="hint" id="hInfo">15m свеќи, локално време на уредот. Секој коин е нормализиран на својот просек (1.00 = просечен час), па се зема медијан од сите коини. За шема на <b>еден коин</b> впиши само него.</p>
   </div>
 
   <div class="blk">
@@ -270,7 +278,7 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
 const FAPI='https://fapi.binance.com/fapi/v1';
 const PROXY='https://api.allorigins.win/raw?url=';
 const KEY='ascoutTools_v1';
-const DEF={riskPct:2,riskCap:3,lev:10,maker:0.02,taker:0.05,mmr:1.0,cdLoss:15,cdWin:30,bigWin:15,dayLoss:10,maxTrades:5,maxOpen:2,coinLock:120,minHold:60,skim:10,dayStartH:8};
+const DEF={riskPct:2,riskCap:3,lev:10,maker:0.02,taker:0.05,mmr:1.0,cdLoss:15,cdWin:30,bigWin:15,dayLoss:10,maxTrades:5,maxOpen:2,coinLock:120,minHold:60,skim:10,dayStartH:8,maxMarginPct:15,maxExpX:3,mpDefault:10};
 const MINE='ON ONE IDOL DOOD Q BEAT BLESS BULLA JCT AIO BIRB TRUTH AIN MERL STRK ARIA METIS CYBER ESPORTS SKR SIREN GTC BTC';
 const DOW=['Пон','Вто','Сре','Чет','Пет','Саб','Нед'];
 
@@ -323,6 +331,9 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
 function seg(id,cb){const el=$(id);el.querySelectorAll('button').forEach(b=>b.onclick=()=>{el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));cb&&cb(b.dataset.v);calc();});}
 function segVal(id){return $(id).querySelector('button.on').dataset.v;}
 seg('sideSeg');seg('typeSeg');seg('modeSeg');
+seg('sizeSeg',v=>{S.sizeMode=v;save();$('mpWrap').style.visibility=v==='margin'?'visible':'hidden';});
+(function(){const v=S.sizeMode||'risk';$('sizeSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$('mpWrap').style.visibility=v==='margin'?'visible':'hidden';$('mpct').value=S.mpct!=null?S.mpct:S.set.mpDefault;})();
+$('mpct').addEventListener('input',()=>{const v=num($('mpct').value);if(isFinite(v)){S.mpct=v;save();}calc();});
 
 // ===== status (cooldown / locks) =====
 function lockState(){
@@ -371,10 +382,14 @@ function renderBal(){
   $('balInfo').innerHTML=S.balance==null?'Внеси салдо. Ризикот се пресметува од помалото меѓу моменталното салдо и салдото на почеток на денот.':
     `Почеток на ден: <b class="mono">${fU(ds)}</b> · база: <b class="mono">${fU(base)}</b> · ризик по трејд: <b class="mono yl">${fU(r)} USDT</b>`+(b>ds?'<br><span class="yl">Салдото е над почетокот на денот: добивката не ја зголемува позицијата до утре.</span>':'');
 }
-$('balSave').onclick=()=>{const v=num($('bal').value);if(!isFinite(v)||v<0){toast('Внеси валидно салдо');return;}
+function saveBal(quiet){const v=num($('bal').value);if(!isFinite(v)||v<0){if(!quiet)toast('Внеси валидно салдо');return;}
+  if(S.balance===v){if(!quiet)toast('Салдо: '+fU(v)+' USDT');return;}
   const first=S.balance==null;S.balance=v;
   if(first||!S.dayStart||S.dayStart.key!==dayKey(now()))S.dayStart={key:dayKey(now()),bal:v};
-  save();renderBal();calc();toast('Салдо зачувано: '+fU(v)+' USDT');};
+  save();renderBal();calc();toast('Салдо зачувано: '+fU(v)+' USDT');}
+$('balSave').onclick=()=>saveBal(false);
+$('bal').addEventListener('change',()=>saveBal(true));
+$('bal').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('bal').blur();saveBal(false);}});
 
 // ===== symbol data =====
 let SD={};// {sym, price, chg, atr}
@@ -414,9 +429,15 @@ function calc(){
   const slOk=dir*(E-SL)>0;
   const dist=Math.abs(E-SL);
   const perUnitLoss=dist+E*fIn+SL*fSL;
-  let qty=riskU/perUnitLoss;
+  const sizeMode=segVal('sizeSeg'),mp=num($('mpct').value);
+  if(!(base>0)){$('res').innerHTML='<tr><td class="mu">Салдото е 0.</td><td></td></tr>';renderChecks([]);return;}
+  if(sizeMode==='margin'&&!(mp>0)){$('res').innerHTML='<tr><td class="mu">Внеси маржа % од салдо.</td><td></td></tr>';renderChecks([]);return;}
+  let qty=sizeMode==='margin'?(base*mp/100)*lev/E:riskU/perUnitLoss;
   let notional=qty*E,margin=notional/lev;
-  const lossAtSL=qty*perUnitLoss;
+  const marginPct=margin/base*100,expX=notional/base;
+  const maxMpRisk=(riskU/perUnitLoss)*E/lev/base*100;
+  const openNot=S.open.reduce((a,o)=>a+(o.notional||0),0),totExpX=(openNot+notional)/base;
+  const lossAtSL=qty*perUnitLoss,lossPct=lossAtSL/base*100;
   const feeIn=qty*E*fIn;
   let gainTP=NaN,rr=NaN,feeTP=NaN;
   const tpOk=!(TP>0)||dir*(TP-E)>0;
@@ -429,12 +450,13 @@ function calc(){
   const slPct=dist/E*100;
 
   $('res').innerHTML=`
-    <tr class="key"><td>Ризик</td><td class="yl">${fU(riskU)} USDT</td></tr>
+    <tr class="key"><td>Маржа @${lev}x</td><td class="${marginPct>st.maxMarginPct?'dn':'bl'}">${fU(margin)} USDT · ${marginPct.toFixed(1)}%</td></tr>
+    <tr class="key"><td>Загуба на SL (со провизии)</td><td class="${lossAtSL>riskU*1.001?'dn':'yl'}">−${lossAtSL.toFixed(2)} · ${lossPct.toFixed(1)}%</td></tr>
+    <tr><td>Ризик-лимит (${st.riskPct}%, макс ${fU(st.riskCap)})</td><td>${fU(riskU)} USDT</td></tr>
+    ${sizeMode==='margin'?`<tr><td>Макс маржа за ризик-лимитот</td><td class="${mp>maxMpRisk?'dn':'up'}">${maxMpRisk.toFixed(1)}% од салдо</td></tr>`:''}
     <tr class="key"><td>Количина</td><td>${fQ(qty)} ${cleanSym($('sym').value)||''}</td></tr>
-    <tr><td>Позиција (notional)</td><td>${fU(notional)} USDT</td></tr>
-    <tr><td>Маржа @${lev}x</td><td class="${margin>bal?'dn':''}">${fU(margin)} USDT</td></tr>
+    <tr><td>Позиција (notional)</td><td class="${expX>st.maxExpX?'dn':''}">${fU(notional)} USDT · ${expX.toFixed(2)}× салдо</td></tr>
     <tr><td>SL растојание</td><td>${slPct.toFixed(2)}%${isFinite(atrMul)?' · '+atrMul.toFixed(2)+' ATR':''}</td></tr>
-    <tr><td>Загуба на SL (со провизии)</td><td class="dn">−${lossAtSL.toFixed(2)}</td></tr>
     <tr><td>Добивка на TP (нето)</td><td class="up">${isFinite(gainTP)?'+'+gainTP.toFixed(2):'—'}</td></tr>
     <tr class="key"><td>R:R нето</td><td class="${rr>=2?'up':isFinite(rr)?'dn':''}">${isFinite(rr)?rr.toFixed(2):'—'}</td></tr>
     <tr><td>Провизии влез + излез</td><td>${(feeIn+(isFinite(feeTP)?feeTP:qty*SL*fSL)).toFixed(3)}</td></tr>
@@ -453,6 +475,9 @@ function calc(){
   checks.push([isFinite(rr)?rr>=2:null,isFinite(rr)?('R:R нето '+rr.toFixed(2)+' (≥2)'):'R:R ≥ 2: внеси TP']);
   checks.push([!liqBad,liqBad?'Ликвидација ПРЕД SL':'Ликвидација после SL']);
   checks.push([margin<=bal,margin<=bal?'Маржата е во салдото':'Маржата е поголема од салдото: зголеми левериџ или намали']);
+  if(sizeMode==='margin')checks.push([lossAtSL<=riskU*1.001,lossAtSL<=riskU*1.001?('Загуба на SL '+lossAtSL.toFixed(2)+' ≤ лимит '+riskU.toFixed(2)+' ('+lossPct.toFixed(1)+'% од салдо)'):('Загуба на SL '+lossAtSL.toFixed(2)+' > лимит '+riskU.toFixed(2)+': намали на ≤ '+maxMpRisk.toFixed(1)+'% маржа или приближи SL')]);
+  checks.push([marginPct<=st.maxMarginPct,'Маржа '+marginPct.toFixed(1)+'% од салдо (≤ '+st.maxMarginPct+'%)']);
+  checks.push([totExpX<=st.maxExpX,'Вкупна изложеност '+totExpX.toFixed(2)+'× салдо'+(openNot>0?' со отворените':'')+' (≤ '+st.maxExpX+'×)']);
   if(side==='L'&&isFinite(SD.chg)&&SD.sym===csym)checks.push([SD.chg<20,SD.chg<20?'Не е CHASE (24h < +20%)':'CHASE: 24h +'+SD.chg.toFixed(1)+'%, нов long блокиран']);
   checks.push([!(h<7),h<7?'Ноќен влез 00–07: твоите податоци −168 USDT':'Не е ноќен прозорец']);
   const satWin=(wd===5&&h>=22)||(wd===6&&h<9);
@@ -635,22 +660,39 @@ async function scanHours(){
   }
   $('hScan').disabled=false;$('hScan').textContent='Измери шема';
   if(!res.length){$('hInfo').innerHTML='<span class="dn">Нема податоци. Провери ја врската или симболите.</span>';return;}
-  const A=res.map(x=>x[1]);
-  HR={coins:res.map(x=>x[0]),fail,days,
+  HR={coins:res.map(x=>x[0]),per:Object.fromEntries(res),fail,days};
+  const ex=new Set(S.hrExcl||[]);
+  HR.sel=new Set(HR.coins.filter(c=>!ex.has(c)));
+  if(!HR.sel.size)HR.sel=new Set(HR.coins);
+  aggHours();
+}
+// aggregate only the selected coins (no refetch)
+function aggHours(){
+  const A=HR.coins.filter(c=>HR.sel.has(c)).map(c=>HR.per[c]);
+  Object.assign(HR,{
     r:[...Array(24)].map((_,h)=>med(A.map(a=>a.r[h]))),
     v:[...Array(24)].map((_,h)=>med(A.map(a=>a.v[h]))),
     w:[...Array(24)].map((_,h)=>avg(A.map(a=>a.w[h]))),
     er:[...Array(24)].map((_,h)=>avg(A.map(a=>a.er[h]))),
-    dh:[...Array(7)].map((_,d)=>[...Array(24)].map((_,h)=>med(A.map(a=>a.dh[d][h]))))};
-  $('hInfo').textContent=`${res.length} коини · ${days} дена${fail.length?' · без податоци: '+fail.join(', '):''}`;
+    dh:[...Array(7)].map((_,d)=>[...Array(24)].map((_,h)=>med(A.map(a=>a.dh[d][h]))))});
+  S.hrExcl=HR.coins.filter(c=>!HR.sel.has(c));save();
+  $('hInfo').textContent=`${HR.sel.size} од ${HR.coins.length} коини во пресметката · ${HR.days} дена${HR.fail.length?' · без податоци: '+HR.fail.join(', '):''}`;
   renderHours();
 }
+function peakH(a){let b=-1,bv=-1;a.r.forEach((v,h)=>{if(isFinite(v)&&v>bv){bv=v;b=h;}});return b;}
+function hrPick(c){
+  if(HR.one){HR.sel=new Set([c]);}
+  else{if(HR.sel.has(c)){if(HR.sel.size>1)HR.sel.delete(c);else{toast('Барем еден коин мора да остане');return;}}else HR.sel.add(c);}
+  aggHours();
+}
+function hrAll(on){HR.sel=on?new Set(HR.coins):new Set([HR.coins[0]]);if(!on)toast('Остана само '+HR.coins[0]+'. Избери други со допир.');aggHours();}
+function hrOne(v){HR.one=v;renderHours();}
 function classify(h){
   const mER=avg(HR.er),mW=avg(HR.w);
   const r=HR.r[h],er=HR.er[h],w=HR.w[h];
   if(r<0.8)return['c-dd','мртво'];
-  if(er>=mER*1.04&&w<=mW*1.01)return['c-tr','тренд'];
-  if(w>=mW*1.02&&er<mER)return['c-ch','фитили'];
+  if(er>=mER*1.06&&w<=mW)return['c-tr','тренд'];
+  if(w>=mW*1.03&&er<=mER*0.98)return['c-ch','фитили'];
   return['c-mx','мешано'];
 }
 function renderHours(){
@@ -662,11 +704,26 @@ function renderHours(){
   const hs=a=>a.length?a.map(h=>String(h).padStart(2,'0')+'h').join(', '):'—';
   let myHead='',myCell=()=>'';
   if(MY){
-    myHead='<th>мои: n</th><th>нето</th><th>≥1h нето</th>';
-    myCell=h=>{const m=MY.byH[h];return m.n?`<td>${m.n}</td><td class="${m.net>=0?'up':'dn'}">${fU(m.net,1)}</td><td class="${m.netL>=0?'up':'dn'}">${m.nL?fU(m.netL,1):'—'}</td>`:'<td class="mu">—</td><td></td><td></td>';};
+    // my trades: only the coins selected above (all coins if none of mine are in the list)
+    const mine=MY.pos.filter(p=>HR.sel.has(p.c)),src=mine.length?mine:MY.pos;
+    const bh=Array.from({length:24},()=>({n:0,net:0,nL:0,netL:0}));
+    src.forEach(p=>{const b=bh[p.h];b.n++;b.net+=p.net;if(p.hold>=60){b.nL++;b.netL+=p.net;}});
+    myHead='<th>мои'+(mine.length?'':' (сите)')+': n</th><th>нето</th><th>≥1h нето</th>';
+    myCell=h=>{const m=bh[h];return m.n?`<td>${m.n}</td><td class="${m.net>=0?'up':'dn'}">${fU(m.net,1)}</td><td class="${m.netL>=0?'up':'dn'}">${m.nL?fU(m.netL,1):'—'}</td>`:'<td class="mu">—</td><td></td><td></td>';};
   }
-  let html=`<div class="blk sum"><h3>Резиме</h3>
-    <p><span class="cls c-tr">тренд</span> најчисто движење: <b class="mono">${hs(trend)}</b></p>
+  const chips=`<div class="blk"><h3>Коини во пресметката <small>${HR.sel.size}/${HR.coins.length} · допир = вклучи/исклучи</small></h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn sm" onclick="hrAll(true)">Сите</button>
+      <button class="btn sm" onclick="hrAll(false)">Ниеден</button>
+      <div class="seg" style="margin:0;min-width:170px"><button class="n${HR.one?'':' on'}" onclick="hrOne(false)">ПОВЕЌЕ</button><button class="n${HR.one?' on':''}" onclick="hrOne(true)">САМО ЕДЕН</button></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${HR.coins.map(c=>{const on=HR.sel.has(c),pk=peakH(HR.per[c]);return`<button onclick="hrPick('${c}')" style="font-family:var(--mono);font-size:12px;padding:6px 9px;border-radius:6px;cursor:pointer;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'rgba(0,229,255,.12)':'var(--bg)'};color:${on?'var(--accent)':'var(--muted)'}${on?'':';text-decoration:line-through'}">${c}<span style="opacity:.6;font-size:10px;margin-left:4px">${pk>=0?String(pk).padStart(2,'0')+'h':''}</span></button>`;}).join('')}</div>
+    <p class="hint">Бројот до коинот е неговиот најактивен час. САМО ЕДЕН: допирот ја покажува шемата само на тој коин.${HR.sel.size===1?' <b class="yl">Еден коин = ~'+HR.days+' мерења по час, побучно од група.</b>':''}</p></div>`;
+  const byR=[...Array(24).keys()].filter(h=>isFinite(HR.r[h])).sort((a,b)=>HR.r[b]-HR.r[a]);
+  const erV=HR.er.filter(isFinite),erSpread=(Math.max(...erV)-Math.min(...erV))*100;
+  let html=chips+`<div class="blk sum"><h3>Резиме${HR.sel.size===1?' · '+[...HR.sel][0]:''}</h3>
+    <p><span class="cls c-mx">активност</span> највеќе движење: <b class="mono">${hs(byR.slice(0,3))}</b> · најмирно: <b class="mono">${hs(byR.slice(-3).reverse())}</b></p>
+    <p><span class="cls c-tr">тренд</span> најчисто движење: <b class="mono">${hs(trend)}</b>${erSpread<5?' <span class="mu">(разликата меѓу часовите е само '+erSpread.toFixed(0)+' п.п.: нема изразен тренд-час)</span>':''}</p>
     <p><span class="cls c-ch">фитили</span> лов на стопови: <b class="mono">${hs(chaos)}</b></p>
     <p><span class="cls c-dd">мртво</span> мал опсег: <b class="mono">${hs(dead)}</b></p>
     <p class="hint">Опсегот и чистотата на движењето кажуваат колку и колку чисто се движи, не во која насока. Насоката останува на OI/CVD.</p></div>`;
@@ -729,7 +786,7 @@ function parseTrades(txt,off){
     const h=new Date(p.open).getHours();byH[h].n++;byH[h].net+=p.net;if(p.hold>=60){byH[h].nL++;byH[h].netL+=p.net;}
     const b=bins.find(b=>p.hold>=b.lo&&p.hold<b.hi);if(b){b.n++;b.net+=p.net;if(p.net>0)b.w++;}
   });
-  return{n:pos.length,net,byH,bins,pre};
+  return{n:pos.length,net,byH,bins,pre,pos:pos.map(p=>({c:p.s.replace(/USDT$/,''),h:new Date(p.open).getHours(),net:p.net,hold:p.hold}))};
 }
 function myHoldBlock(){
   if(!MY)return'';
