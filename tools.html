@@ -152,7 +152,7 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
   <div class="blk">
     <h3>Салдо <small>Futures, USDT</small></h3>
     <div class="inline">
-      <label class="f">Моментално салдо<input id="bal" type="number" inputmode="decimal" step="0.01" placeholder="внеси салдо"></label>
+      <label class="f">Моментално салдо<input id="bal" type="text" inputmode="decimal" autocomplete="off" step="0.01" placeholder="внеси салдо"></label>
       <button class="btn" id="balSave">Зачувај</button>
     </div>
     <p class="hint" id="balInfo">Внеси салдо. Ризикот се пресметува од помалото меѓу моменталното салдо и салдото на почеток на денот.</p>
@@ -172,19 +172,19 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
         <div class="seg" id="typeSeg"><button class="n on" data-v="limit">LIMIT</button><button class="n" data-v="market">MARKET</button></div></div>
     </div>
     <div class="row3" style="margin-bottom:8px">
-      <label class="f">Влез<input id="entry" type="number" inputmode="decimal" step="any"></label>
-      <label class="f">SL<input id="sl" type="number" inputmode="decimal" step="any"></label>
-      <label class="f">TP (опц.)<input id="tp" type="number" inputmode="decimal" step="any"></label>
+      <label class="f">Влез<input id="entry" type="text" inputmode="decimal" autocomplete="off" step="any"></label>
+      <label class="f">SL<input id="sl" type="text" inputmode="decimal" autocomplete="off" step="any"></label>
+      <label class="f">TP (опц.)<input id="tp" type="text" inputmode="decimal" autocomplete="off" step="any"></label>
     </div>
     <div class="row" style="margin-bottom:10px">
-      <label class="f">Левериџ<input id="lev" type="number" inputmode="numeric" step="1" min="1" max="125"></label>
+      <label class="f">Левериџ<input id="lev" type="text" inputmode="numeric" autocomplete="off" step="1" min="1" max="125"></label>
       <div><label class="f">Маржа</label>
         <div class="seg" id="modeSeg"><button class="n on" data-v="cross">CROSS</button><button class="n" data-v="iso">ISOLATED</button></div></div>
     </div>
     <div class="row" style="margin-bottom:10px">
       <div><label class="f">Големина по</label>
         <div class="seg" id="sizeSeg"><button class="n on" data-v="risk">РИЗИК</button><button class="n" data-v="margin">% САЛДО</button></div></div>
-      <label class="f" id="mpWrap" style="visibility:hidden">Маржа % од салдо<input id="mpct" type="number" inputmode="decimal" step="0.5" min="0"></label>
+      <label class="f" id="mpWrap" style="visibility:hidden">Маржа % од салдо<input id="mpct" type="text" inputmode="decimal" autocomplete="off" step="0.5" min="0"></label>
     </div>
 
     <table class="res" id="res"><tr><td class="mu">Внеси влез и SL.</td><td></td></tr></table>
@@ -217,25 +217,25 @@ table.hrs tr.now td{background:rgba(0,229,255,.06)}
     <details class="set">
       <summary>⚙ Правила и поставки</summary>
       <div class="row3">
-        <label class="f">Ризик % од база<input data-s="riskPct" type="number" step="0.1"></label>
-        <label class="f">Макс ризик USDT<input data-s="riskCap" type="number" step="0.1"></label>
-        <label class="f">Левериџ default<input data-s="lev" type="number" step="1"></label>
-        <label class="f">Maker %<input data-s="maker" type="number" step="0.001"></label>
-        <label class="f">Taker %<input data-s="taker" type="number" step="0.001"></label>
-        <label class="f">MMR % (ликв.)<input data-s="mmr" type="number" step="0.1"></label>
-        <label class="f">Пауза по загуба (мин)<input data-s="cdLoss" type="number" step="1"></label>
-        <label class="f">Пауза по победа (мин)<input data-s="cdWin" type="number" step="1"></label>
-        <label class="f">Голема победа = крај на ден (USDT)<input data-s="bigWin" type="number" step="0.5"></label>
-        <label class="f">Дневен лимит загуба (USDT)<input data-s="dayLoss" type="number" step="0.5"></label>
-        <label class="f">Макс трејдови/ден<input data-s="maxTrades" type="number" step="1"></label>
-        <label class="f">Макс отворени<input data-s="maxOpen" type="number" step="1"></label>
-        <label class="f">Лок на ист коин (мин)<input data-s="coinLock" type="number" step="5"></label>
-        <label class="f">Мин. држење (мин)<input data-s="minHold" type="number" step="5"></label>
-        <label class="f">Ским % од добивка<input data-s="skim" type="number" step="1"></label>
-        <label class="f">Нов ден почнува (час)<input data-s="dayStartH" type="number" step="1" min="0" max="23"></label>
-        <label class="f">Макс маржа % од салдо<input data-s="maxMarginPct" type="number" step="1"></label>
-        <label class="f">Макс изложеност (× салдо)<input data-s="maxExpX" type="number" step="0.5"></label>
-        <label class="f">Маржа % default<input data-s="mpDefault" type="number" step="0.5"></label>
+        <label class="f">Ризик % од база<input data-s="riskPct" type="text" inputmode="decimal" autocomplete="off" step="0.1"></label>
+        <label class="f">Макс ризик USDT<input data-s="riskCap" type="text" inputmode="decimal" autocomplete="off" step="0.1"></label>
+        <label class="f">Левериџ default<input data-s="lev" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Maker %<input data-s="maker" type="text" inputmode="decimal" autocomplete="off" step="0.001"></label>
+        <label class="f">Taker %<input data-s="taker" type="text" inputmode="decimal" autocomplete="off" step="0.001"></label>
+        <label class="f">MMR % (ликв.)<input data-s="mmr" type="text" inputmode="decimal" autocomplete="off" step="0.1"></label>
+        <label class="f">Пауза по загуба (мин)<input data-s="cdLoss" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Пауза по победа (мин)<input data-s="cdWin" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Голема победа = крај на ден (USDT)<input data-s="bigWin" type="text" inputmode="decimal" autocomplete="off" step="0.5"></label>
+        <label class="f">Дневен лимит загуба (USDT)<input data-s="dayLoss" type="text" inputmode="decimal" autocomplete="off" step="0.5"></label>
+        <label class="f">Макс трејдови/ден<input data-s="maxTrades" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Макс отворени<input data-s="maxOpen" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Лок на ист коин (мин)<input data-s="coinLock" type="text" inputmode="decimal" autocomplete="off" step="5"></label>
+        <label class="f">Мин. држење (мин)<input data-s="minHold" type="text" inputmode="decimal" autocomplete="off" step="5"></label>
+        <label class="f">Ским % од добивка<input data-s="skim" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Нов ден почнува (час)<input data-s="dayStartH" type="text" inputmode="decimal" autocomplete="off" step="1" min="0" max="23"></label>
+        <label class="f">Макс маржа % од салдо<input data-s="maxMarginPct" type="text" inputmode="decimal" autocomplete="off" step="1"></label>
+        <label class="f">Макс изложеност (× салдо)<input data-s="maxExpX" type="text" inputmode="decimal" autocomplete="off" step="0.5"></label>
+        <label class="f">Маржа % default<input data-s="mpDefault" type="text" inputmode="decimal" autocomplete="off" step="0.5"></label>
       </div>
       <p class="hint">Големата победа и дневниот лимит ја заклучуваат страницата до „нов ден“. Ноќниот прозорец 00–07 е предупредување од твоите податоци (−168 USDT на влезови во тоа време).</p>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -307,12 +307,12 @@ function todayLog(){const k=dayKey(now());return S.log.filter(x=>dayKey(x.openTs
 function todayOpened(){const k=dayKey(now());return todayLog().length+S.open.filter(o=>dayKey(o.openTs)===k).length;}
 
 // ===== helpers =====
-function num(v){const n=parseFloat(String(v).replace(',','.'));return isFinite(n)?n:NaN;}
+function num(v){const n=parseFloat(String(v==null?'':v).trim().replace(/\s/g,'').replace(/,/g,'.').replace(/[−–]/g,'-'));return isFinite(n)?n:NaN;}
 function fP(p){if(!isFinite(p))return'—';const a=Math.abs(p);if(a>=1000)return p.toLocaleString('en-US',{maximumFractionDigits:2});if(a>=1)return p.toFixed(4);if(a>=0.01)return p.toFixed(5);if(a>=0.0001)return p.toFixed(7);return p.toPrecision(4);}
 function fU(n,d=2){return isFinite(n)?(n>=0?'':'−')+Math.abs(n).toFixed(d):'—';}
 function fQ(q){if(!isFinite(q))return'—';if(q>=100)return Math.floor(q).toLocaleString('en-US');if(q>=1)return q.toFixed(2);return q.toFixed(4);}
 function mmss(ms){ms=Math.max(0,ms);const t=Math.ceil(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0');}
-function hhmm(ts){return new Date(ts).toLocaleTimeString('mk-MK',{hour:'2-digit',minute:'2-digit'});}
+function hhmm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function toast(m,ms=4000){const t=$('toast');t.textContent=m;t.style.opacity='1';clearTimeout(toast._t);toast._t=setTimeout(()=>t.style.opacity='0',ms);}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 async function api(ep){
@@ -396,7 +396,8 @@ function renderStatus(){
   // day bar
   const lg=todayLog(),net=lg.reduce((a,x)=>a+x.pnl,0);
   $('dTr').textContent=todayOpened()+'/'+S.set.maxTrades;
-  $('dNet').textContent=fU(net);$('dNet').className=net>0?'up':net<0?'dn':'';
+  const rD=lg.filter(x=>x.r!=null).reduce((a,x)=>a+x.r,0);
+  $('dNet').textContent=fU(net)+(lg.some(x=>x.r!=null)?' · '+(rD>=0?'+':'')+rD.toFixed(1)+'R':'');$('dNet').className=net>0?'up':net<0?'dn':'';
   const rem=S.set.dayLoss+Math.min(net,0);
   $('dLim').textContent=fU(rem);$('dLim').className=rem<=S.set.dayLoss*0.3?'dn':'';
   $('dOv').textContent=lg.filter(x=>x.override).length+S.open.filter(o=>o.override).length;
@@ -482,7 +483,7 @@ function calc(){
 
   $('res').innerHTML=`
     <tr class="key"><td>Маржа @${lev}x</td><td class="${marginPct>st.maxMarginPct?'dn':'bl'}">${fU(margin)} USDT · ${marginPct.toFixed(1)}%</td></tr>
-    <tr class="key"><td>Загуба на SL (со провизии)</td><td class="${lossAtSL>riskU*1.001?'dn':'yl'}">−${lossAtSL.toFixed(2)} · ${lossPct.toFixed(1)}%</td></tr>
+    <tr class="key"><td>Загуба на SL = 1R (со провизии)</td><td class="${lossAtSL>riskU*1.001?'dn':'yl'}">−${lossAtSL.toFixed(2)} · ${lossPct.toFixed(1)}%</td></tr>
     <tr><td>Ризик-лимит (${st.riskPct}%, макс ${fU(st.riskCap)})</td><td>${fU(riskU)} USDT</td></tr>
     ${sizeMode==='margin'?`<tr><td>Макс маржа за ризик-лимитот</td><td class="${mp>maxMpRisk?'dn':'up'}">${maxMpRisk.toFixed(1)}% од салдо</td></tr>`:''}
     <tr class="key"><td>Количина</td><td>${fQ(qty)} ${cleanSym($('sym').value)||''}</td></tr>
@@ -507,7 +508,7 @@ function calc(){
   $('mcOIwrap').style.display=oiAuto?'none':'';
   if(oiAuto)$('mcOI').checked=true;else if($('mcOI').dataset.auto==='1')$('mcOI').checked=false;
   $('mcOI').dataset.auto=oiAuto?'1':'0';
-  if(oi)checks.push([oi.fresh?oi.ok:null,'OI◆ 3×15m '+(oi.oiChg>=0?'+':'')+oi.oiChg.toFixed(2)+'% · цена '+(oi.pxAtr>=0?'+':'')+oi.pxAtr.toFixed(2)+' ATR во насоката · DOM '+oi.dom+' → <b>'+oi.st+'</b>: '+oi.why+(oi.fresh?' ('+hhmm(oi.t)+')':' · <b>старо ('+hhmm(oi.t)+'), притисни Вчитај</b>')]);
+  if(oi)checks.push([oi.fresh?oi.ok:null,'OI◆ 3×15m '+(oi.oiChg>=0?'+':'')+oi.oiChg.toFixed(2)+'% · цена '+(oi.pxAtr>=0?'+':'')+oi.pxAtr.toFixed(2)+' ATR во насоката · DOM '+oi.dom+' → <b>'+oi.st+'</b>: '+oi.why+(oi.fresh?' · <span class="mu">последна затворена 15m: '+hhmm(oi.t)+', следна '+hhmm(oi.t+900000)+'</span>':' · <b>старо ('+hhmm(oi.t)+'), притисни Вчитај</b>')]);
   else checks.push([null,csym?'OI◆ + цена: притисни „Вчитај цена + ATR“ за автоматска проверка':'OI◆ + цена: внеси коин и притисни Вчитај']);
   checks.push([isFinite(atrMul)?atrMul<=1.5:null,isFinite(atrMul)?('SL '+atrMul.toFixed(2)+' ATR (≤1.5)'):'SL ≤ 1.5 ATR: вчитај коин за ATR']);
   checks.push([isFinite(rr)?rr>=2:null,isFinite(rr)?('R:R нето '+rr.toFixed(2)+' (≥2)'):'R:R ≥ 2: внеси TP']);
@@ -522,7 +523,7 @@ function calc(){
   if(satWin)checks.push([false,'Петок навечер / сабота наутро: најтенка ликвидност за Alpha']);
   checks.push([S.open.length<S.set.maxOpen,S.open.length<S.set.maxOpen?'Отворени '+S.open.length+'/'+S.set.maxOpen:'Макс отворени позиции']);
   renderChecks(checks);
-  LAST={sym:csym||'?',side,type,mode,E,SL,TP:TP>0?TP:null,lev,qty,notional,margin,riskU,rr,hard:checks.filter(c=>c[0]===false).length};
+  LAST={sym:csym||'?',side,type,mode,E,SL,TP:TP>0?TP:null,lev,qty,notional,margin,riskU,R:lossAtSL,p2R:E+dir*2*perUnitLoss,rr,hard:checks.filter(c=>c[0]===false).length};
   gateOpen();
 }
 function renderChecks(c){
@@ -534,7 +535,7 @@ function gateOpen(){
   const ls=lockState();
   b.disabled=!man;
   b.textContent=ls?'⚠ Отвори (пауза активна)':LAST.hard?'⚠ Отвори ('+LAST.hard+' ✗)':'▶ Отвори трејд';
-  $('openHint').textContent=!man?'Штиклирај ги трите рачни проверки.':ls||LAST.hard?'Влез со ✗ или за време на пауза бара потврда и се брои како прескокнато правило.':'Запиши го влезот откако налогот е поставен на Binance.';
+  $('openHint').textContent=!man?'Штиклирај ги рачните проверки ('+[...document.querySelectorAll('.mc')].filter(c=>c.closest('label').style.display!=='none').length+').':ls||LAST.hard?'Влез со ✗ или за време на пауза бара потврда и се брои како прескокнато правило.':'Запиши го влезот откако налогот е поставен на Binance.';
 }
 $('openBtn').onclick=()=>{
   if(!LAST)return;
@@ -565,15 +566,17 @@ function renderOpen(){
     const pr=Math.min((t-o.openTs)/mh,1);
     return`<div class="ot">
       <div class="ot-top"><span class="${o.side==='L'?'up':'dn'}">${o.side==='L'?'▲':'▼'} ${o.sym}</span><span class="mu">${hhmm(o.openTs)}${o.override?' · ⚠':''}</span></div>
-      <div class="mono" style="font-size:12px;color:var(--text2);margin-top:4px">влез ${fP(o.E)} · SL ${fP(o.SL)}${o.TP?' · TP '+fP(o.TP):''} · ${fQ(o.qty)} @${o.lev}x · ризик ${fU(o.riskU)}</div>
+      <div class="mono" style="font-size:12px;color:var(--text2);margin-top:4px">влез ${fP(o.E)} · SL ${fP(o.SL)}${o.TP?' · TP '+fP(o.TP):''} · ${fQ(o.qty)} @${o.lev}x · 1R = ${fU(o.R||o.riskU)}</div>${o.p2R?`<div class="mono yl" style="font-size:11px;margin-top:3px">+2R @ ${fP(o.p2R)} → затвори 50%, SL на ${fP(o.E)} (breakeven)</div>`:''}
       <div class="prog"><i id="pg-${o.id}" class="${pr>=1?'done':''}" style="width:${pr*100}%"></i></div>
       <div class="mono" style="font-size:11px" id="lt-${o.id}">${holdTxt(o,t,mh)}</div>
       <div class="ot-close">
-        <input class="pnlIn" data-id="${o.id}" type="number" inputmode="decimal" step="0.01" placeholder="нето PnL USDT (−2.40)">
+        <button class="btn sm" data-neg="${o.id}" title="промени знак">±</button>
+        <input class="pnlIn" data-id="${o.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="нето PnL USDT (−2,40)">
         <button class="btn sm" data-close="${o.id}">Затвори</button>
         <button class="btn sm red" data-del="${o.id}" title="Избриши без запис">✕</button>
       </div></div>`;}).join('');
   $('openList').querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeTrade(+b.dataset.close));
+  $('openList').querySelectorAll('[data-neg]').forEach(b=>b.onclick=()=>{const i=document.querySelector('.pnlIn[data-id="'+b.dataset.neg+'"]');if(!i)return;const v=i.value.trim();i.value=v.startsWith('-')||v.startsWith('−')?v.replace(/^[-−]/,''):'-'+v;i.focus();});
   $('openList').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Да се избрише записот без затворање?')){S.open=S.open.filter(o=>o.id!==+b.dataset.del);save();renderStatus();}});
 }
 function holdTxt(o,t,mh){const left=o.openTs+mh-t;return left>0?'уште '+mmss(left)+' до минимално држење':'✔ минималното држење помина ('+Math.round((t-o.openTs)/60000)+' мин)';}
@@ -585,7 +588,8 @@ function closeTrade(id){
   if(!isFinite(pnl)){toast('Внеси нето PnL во USDT (минус за загуба)');inp?.focus();return;}
   const t=now(),hold=(t-o.openTs)/60000,st=S.set;
   S.open=S.open.filter(x=>x.id!==id);
-  S.log.push({sym:o.sym,side:o.side,openTs:o.openTs,closeTs:t,pnl,hold,override:o.override,early:hold<st.minHold});
+  const R1=o.R||o.riskU;
+  S.log.push({sym:o.sym,side:o.side,openTs:o.openTs,closeTs:t,pnl,hold,override:o.override,early:hold<st.minHold,R1,r:R1>0?pnl/R1:null});
   if(S.balance!=null)S.balance=+(S.balance+pnl).toFixed(4);
   S.coinLocks[o.sym]=t+st.coinLock*60000;
   // cooldown
@@ -605,10 +609,14 @@ function closeTrade(id){
 function renderLog(){
   const lg=todayLog().slice().reverse();
   if(!lg.length){$('logT').innerHTML='<tr><td class="mu">Нема затворени трејдови денес.</td></tr>';$('logHint').textContent='';return;}
-  $('logT').innerHTML='<tr><th>време</th><th>коин</th><th>држ.</th><th style="text-align:right">PnL</th></tr>'+lg.map(x=>`<tr><td>${hhmm(x.openTs)}</td><td class="${x.side==='L'?'up':'dn'}">${x.side==='L'?'▲':'▼'} ${x.sym}${x.override?' ⚠':''}</td><td class="${x.early?'yl':''}">${Math.round(x.hold)}м</td><td style="text-align:right" class="${x.pnl>=0?'up':'dn'}">${x.pnl>=0?'+':''}${x.pnl.toFixed(2)}</td></tr>`).join('');
+  const fR=r=>r==null?'—':(r>=0?'+':'')+r.toFixed(1)+'R';
+  $('logT').innerHTML='<tr><th>време</th><th>коин</th><th>држ.</th><th style="text-align:right">R</th><th style="text-align:right">PnL</th></tr>'+lg.map(x=>`<tr><td>${hhmm(x.openTs)}</td><td class="${x.side==='L'?'up':'dn'}">${x.side==='L'?'▲':'▼'} ${x.sym}${x.override?' ⚠':''}</td><td class="${x.early?'yl':''}">${Math.round(x.hold)}м</td><td style="text-align:right;font-weight:bold" class="${x.r==null?'mu':x.r>=0?'up':'dn'}">${fR(x.r)}</td><td style="text-align:right" class="${x.pnl>=0?'up':'dn'}">${x.pnl>=0?'+':''}${x.pnl.toFixed(2)}</td></tr>`).join('');
   const all=S.log,early=all.filter(x=>x.early),late=all.filter(x=>!x.early);
   const s=a=>a.reduce((p,x)=>p+x.pnl,0);
-  $('logHint').innerHTML=`Вкупно запишано: ${all.length} · држени под ${S.set.minHold} мин: <b class="mono ${s(early)>=0?'up':'dn'}">${fU(s(early))}</b> (${early.length}) · над: <b class="mono ${s(late)>=0?'up':'dn'}">${fU(s(late))}</b> (${late.length})`;
+  const rs=all.filter(x=>x.r!=null),sr=a=>a.reduce((p,x)=>p+x.r,0);
+  const w=rs.filter(x=>x.r>0),l=rs.filter(x=>x.r<=0);
+  const rLine=rs.length?`<br>Во R (${rs.length} трејдови): вкупно <b class="mono ${sr(rs)>=0?'up':'dn'}">${fR(sr(rs))}</b> · по трејд <b class="mono ${sr(rs)>=0?'up':'dn'}">${fR(sr(rs)/rs.length)}</b> · просечна победа <b class="mono up">${w.length?fR(sr(w)/w.length):'—'}</b> · просечна загуба <b class="mono dn">${l.length?fR(sr(l)/l.length):'—'}</b>`+(l.some(x=>x.r<-1.2)?` · <span class="dn">${l.filter(x=>x.r<-1.2).length}× загуба поголема од 1R (SL поместен или без SL?)</span>`:''):'';
+  $('logHint').innerHTML=`Вкупно запишано: ${all.length} · држени под ${S.set.minHold} мин: <b class="mono ${s(early)>=0?'up':'dn'}">${fU(s(early))}</b> (${early.length}) · над: <b class="mono ${s(late)>=0?'up':'dn'}">${fU(s(late))}</b> (${late.length})`+rLine;
 }
 
 // ===== settings =====
