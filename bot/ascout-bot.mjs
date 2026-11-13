@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.5 (🔥⚡🧯 ALARM + /igstats, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.6 (🔥⚡🧯 ALARM + /igstats with R trade sims, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -466,16 +466,50 @@ function igJudge(x, kl) {
   }
   return r;
 }
+// 2026-11-10 v1.6: does the alarm make money as a TRADE? 8h window (32 x 15m), first touch, SL+TP same bar = SL.
+//  🧯 ГАСИ short: entry = alarm price, SL just over the peak, TP1 .382, TP2 .5 of the leg.
+//  🔥 RUN short: leg = base low -> alarm price; SL alarm + .236 leg, TP1 alarm - .382 leg, TP2 - .5 leg.
+//  🔥 IGNITE / ⚡ EARLY pull-back long: limit at .618 of base low -> running high after the alarm,
+//     SL at .786, TP1 = that high (≈ 3.7R). NOFILL when .618 never comes inside the 8h.
+const IG_SIM_BARS = 32;
+function simPullback(x, kl) {
+  let hi = x.px; const lo = x.lo;
+  if (!(lo > 0 && lo < hi)) return null;
+  for (let i = 0; i < kl.length; i++) {
+    const H = +kl[i][2], L = +kl[i][3], leg = hi - lo, lvl = hi - 0.618 * leg;
+    if (L <= lvl) {
+      const sl = hi - 0.786 * leg, t = { side: 'L', entry: lvl, sl, tp1: hi, tp2: null, et: 'MKT', rr: (hi - lvl) / (lvl - sl) };
+      if (L <= sl) return { res: 'SL', tp2: false, R: -1, entry: lvl };
+      return { ...judge(t, kl.slice(i + 1)), entry: lvl };
+    }
+    if (H > hi) hi = H;
+  }
+  return { res: 'NOFILL', tp2: false, R: 0 };
+}
+function simShort(entry, sl, tp1, tp2, kl) {
+  if (!(sl > entry)) return null;
+  if (!(tp1 < entry)) { if (tp2 != null && tp2 < entry) { tp1 = tp2; tp2 = null; } else return null; }
+  if (tp2 != null && !(tp2 < tp1)) tp2 = null;
+  const t = { side: 'S', entry, sl, tp1, tp2, et: 'MKT', rr: (entry - tp1) / (sl - entry) };
+  return judge(t, kl);
+}
+function igSim(x, kl) {
+  if (x.kind === 'GASI') return x.peak > 0 && x.f382 > 0 ? simShort(x.px, x.peak * 1.003, x.f382, x.f5, kl) : null;
+  if (x.kind === 'RUN') { if (!(x.lo > 0 && x.lo < x.px)) return null; const leg = x.px - x.lo; return simShort(x.px, x.px + 0.236 * leg, x.px - 0.382 * leg, x.px - 0.5 * leg, kl); }
+  return simPullback(x, kl);
+}
 let igResolving = false;
 async function resolveIg() {
   if (igResolving) return; igResolving = true;
   try {
-    const due = state.igTrack.filter(x => !x.res && x.px > 0 && Date.now() >= x.t + 4 * 3600e3 + 60e3).slice(0, 30);
+    const now = Date.now();
+    const due = state.igTrack.filter(x => x.px > 0 && ((!x.res && now >= x.t + 4 * 3600e3 + 60e3) || (x.sim === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3))).slice(0, 30);
     for (const x of due) {
-      const kl = await bklines(x.coin + 'USDT', Math.floor(x.t / BAR) * BAR, 17);
+      const kl = await bklines(x.coin + 'USDT', Math.floor(x.t / BAR) * BAR, IG_SIM_BARS + 1);
       if (!kl) continue;
-      const k = kl.filter(r => +r[6] > x.t).slice(0, 16);
-      x.res = k.length >= 4 ? igJudge(x, k) : { na: true };
+      const k = kl.filter(r => +r[6] > x.t);
+      if (!x.res && now >= x.t + 4 * 3600e3 + 60e3) { const k4 = k.slice(0, 16); x.res = k4.length >= 4 ? igJudge(x, k4) : { na: true }; }
+      if (x.sim === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3) x.sim = k.length >= 8 ? igSim(x, k.slice(0, IG_SIM_BARS)) : null;
       await sleep(150);
     }
     if (due.length) save();
@@ -494,6 +528,18 @@ function igStats(hours) {
   }
   const G = done.filter(x => x.kind === 'GASI');
   if (G.length) t += `\n<b>🧯 ГАСИ</b> · ${G.length}\nпо алармот: макс пад 4h ${pc(med(G.map(x => x.res.dn4)))} · макс раст 4h ${pc(med(G.map(x => x.res.up4)))} · крај 4h ${pc(med(G.map(x => x.res.end4)))}\nнов врв (squeeze) ${G.filter(x => x.res.newHi).length}/${G.length} · до .382 ${G.filter(x => x.res.hit382).length}/${G.length} · до .5 ${G.filter(x => x.res.hit5).length}/${G.length}\n`;
+  const S = T.filter(x => x.sim && x.sim.res);
+  if (S.length) {
+    t += `\n<b>💰 Трејд симулација · 8h</b> (SL и TP во иста свеќа = SL)\n`;
+    for (const g of [['GASI', '🧯 ГАСИ шорт · SL над врвот · TP .382/.5'], ['RUN', '🔥 RUN шорт · SL +.236 · TP −.382/−.5'], ['IGNITE', '🔥 IGNITE лимит .618 · SL .786 · TP врв'], ['EARLY', '⚡ EARLY лимит .618 · SL .786 · TP врв']]) {
+      const a = S.filter(x => x.kind === g[0]); if (!a.length) continue;
+      const sl = a.filter(x => x.sim.res === 'SL').length, tp = a.filter(x => x.sim.res === 'TP1').length, tp2 = a.filter(x => x.sim.tp2).length;
+      const none = a.filter(x => x.sim.res === 'NONE').length, nf = a.filter(x => x.sim.res === 'NOFILL').length;
+      const f = a.filter(x => x.sim.res !== 'NOFILL'), exp = f.length ? f.reduce((q, x) => q + x.sim.R, 0) / f.length : 0;
+      const v = sl + tp >= 8 ? (exp > 0.2 ? 'носи ✅' : exp < -0.2 ? 'губи ❌' : 'неутрално ➖') : 'премалку примери';
+      t += `${g[1]} · ${a.length}\nSL прв ${sl} · TP1 прв ${tp}${tp2 ? ' (TP2 ' + tp2 + ')' : ''} · ништо ${none}${nf ? ' · непополнет ' + nf : ''} · просек ${exp >= 0 ? '+' : ''}${exp.toFixed(2)}R → ${v}\n`;
+    }
+  }
   const L = T.filter(x => x.kind !== 'GASI' && x.first && x.first.px > 0);
   if (L.length) t += `\n<b>Доцнење</b> (прв кандидат → аларм): медијана ${Math.round(med(L.map(x => (x.t - x.first.t) / 60000)))} мин · цена ${pc(med(L.map(x => x.px / x.first.px - 1)))}\n`;
   t += '\n<b>Последни</b>\n' + [...T].sort((a, b) => b.t - a.t).slice(0, 10).map(x => {
@@ -501,7 +547,8 @@ function igStats(hours) {
     const res = !r ? 'отворено' : r.na ? 'n/a' : x.kind === 'GASI' ? `4h ${pc(r.dn4)} / ${pc(r.up4)}${r.newHi ? ' ⚠нов врв' : ''}${r.hit5 ? ' .5✔' : r.hit382 ? ' .382✔' : ''}`
       : `4h ${pc(r.up4)} / ${pc(r.dn4)}${r.pb618 ? ' .618✔' : r.pb5 ? ' .5✔' : ''}`;
     const lead = x.first && x.kind !== 'GASI' ? ` · прв ${hhmm(x.first.t)} ${pc(x.px / x.first.px - 1)}` : '';
-    return `${hhmm(x.t)} ${ic} ${esc(x.coin)} ${x.score}${lead} · ${res}`;
+    const sim = x.sim && x.sim.res ? ` · трејд ${x.sim.res === 'NOFILL' ? 'непоп.' : (x.sim.R >= 0 ? '+' : '') + x.sim.R + 'R'}` : '';
+    return `${hhmm(x.t)} ${ic} ${esc(x.coin)} ${x.score}${lead} · ${res}${sim}`;
   }).join('\n');
   return t;
 }
