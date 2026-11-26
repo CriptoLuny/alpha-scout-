@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.6 (🔥⚡🧯 ALARM + /igstats with R trade sims, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.7 (🔥⚡🧯 ALARM + /igstats trade-variant sims, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -368,6 +368,7 @@ async function loadAlarmPage() {
   log('alarm tab loaded', aInfo);
 }
 const pc = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const fp = p => !(p > 0) ? '—' : p >= 1000 ? p.toFixed(1) : p >= 1 ? p.toFixed(4) : p >= 0.01 ? p.toFixed(5) : p.toPrecision(4);
 const binLinks = c => `<a href="https://www.binance.com/en/futures/${c}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${c}USDT">CoinGlass</a>`;
 function leadTxt(e) {
   const L = state.igLog[e.coin]?.first;
@@ -385,9 +386,13 @@ function igMsg(e) {
       `➡ Крај на тренд: без нов лонг / заштити профит. Шорт само по план: ретест .236 ${esc(e.f236)}, SL над ${esc(e.peak)}, цели .382 ${esc(e.f382)} / .5 ${esc(e.f5)}\n` + binLinks(e.coin);
   }
   const up = e.dir > 0, run = e.kind === 'RUN', early = e.kind === 'EARLY';
-  const plan = early ? '➡ Најрана фаза (една силна свеќа), уште не е потврдено. Следи: план = повлекување / CLEAN15'
-    : run ? '⚠ Веќе трча (≥25% за 1.5h): CHASE ризик, само план за повлекување'
-    : up ? '➡ Не е влез: план = повлекување .5/.618 + CLEAN15' : '➡ Паѓа со волумен: провери дали е дамп/ликвидации, шорт само по план';
+  // v1.7 plan texts from /igstats 240h: after 🔥 the median 4h close is -3%, a .618 pull-back long hit TP 1 of 19;
+  // RUN shorts went 4/4 to TP2 (small n) -> RUN is shown as a short candidate with its levels.
+  let runLv = '';
+  if (run && up && e.loN > 0 && e.pxN > e.loN) { const leg = e.pxN - e.loN; runLv = ` · SL ${fp(e.pxN + 0.236 * leg)} · цели ${fp(e.pxN - 0.382 * leg)} / ${fp(e.pxN - 0.5 * leg)}`; }
+  const plan = early ? '➡ Рано, непотврдено. Не е лонг: влез само со ✅ CLEAN15'
+    : run ? (up ? '⚠ RUN: не брзај по него. Кандидат за ШОРТ по план' + runLv + ' (мал број примери)' : '⚠ RUN надолу: не брзај, шорт само по план')
+    : up ? '➡ Не е лонг: по 🔥 цената во медијана паѓа, а .618 не држи. Влез само со ✅ CLEAN15 или чекај 🧯 ГАСИ' : '➡ Паѓа со волумен: провери дали е дамп/ликвидации, шорт само по план';
   const head = early ? `⚡ <b>РАНО ПАЛЕЊЕ · ${esc(e.coin)}.P ${up ? '▲' : '▼'} EARLY ${e.score}</b>` : `🔥 <b>${run ? 'RUN' : 'ПАЛЕЊЕ'} · ${esc(e.coin)}.P ${up ? '▲' : '▼'} ${esc(e.phase)} ${e.score}</b>`;
   return head + '\n' +
     `PX ${esc(e.px)} · 5m ${pc(e.d5)} · 15m ${pc(e.d15)} · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
@@ -486,30 +491,49 @@ function simPullback(x, kl) {
   }
   return { res: 'NOFILL', tp2: false, R: 0 };
 }
-function simShort(entry, sl, tp1, tp2, kl) {
+function simShort(entry, sl, tp1, tp2, kl, et = 'MKT') {
   if (!(sl > entry)) return null;
   if (!(tp1 < entry)) { if (tp2 != null && tp2 < entry) { tp1 = tp2; tp2 = null; } else return null; }
   if (tp2 != null && !(tp2 < tp1)) tp2 = null;
-  const t = { side: 'S', entry, sl, tp1, tp2, et: 'MKT', rr: (entry - tp1) / (sl - entry) };
+  const t = { side: 'S', entry, sl, tp1, tp2, et, rr: (entry - tp1) / (sl - entry) };
   return judge(t, kl);
 }
-function igSim(x, kl) {
-  if (x.kind === 'GASI') return x.peak > 0 && x.f382 > 0 ? simShort(x.px, x.peak * 1.003, x.f382, x.f5, kl) : null;
-  if (x.kind === 'RUN') { if (!(x.lo > 0 && x.lo < x.px)) return null; const leg = x.px - x.lo; return simShort(x.px, x.px + 0.236 * leg, x.px - 0.382 * leg, x.px - 0.5 * leg, kl); }
-  return simPullback(x, kl);
+// v1.7: several trade geometries per alarm, so the one that turns the hit-rate into R can be picked from data
+const SIM_VARIANTS = {
+  GASI: [['A', 'маркет · SL врв · TP .382/.5'], ['B', 'маркет · SL врв · TP .5/.618'], ['C', 'лимит ретест .236 · SL врв · TP .5/.618'], ['D', 'маркет · SL ½ до врвот · TP .382/.5']],
+  RUN: [['R1', 'маркет · SL +.236 · TP −.382/−.5'], ['R2', 'маркет · SL +.382 · TP −.5/−.618']],
+  IGNITE: [['P', 'лимит .618 · SL .786 · TP врв']],
+  EARLY: [['P', 'лимит .618 · SL .786 · TP врв']],
+};
+function igSims(x, kl) {
+  const o = {};
+  if (x.kind === 'GASI') {
+    if (!(x.peak > 0 && x.legLow > 0 && x.peak > x.legLow)) return o;
+    const leg = x.peak - x.legLow, f = r => x.peak - r * leg, slP = x.peak * 1.003;
+    o.A = simShort(x.px, slP, f(0.382), f(0.5), kl);
+    o.B = simShort(x.px, slP, f(0.5), f(0.618), kl);
+    o.C = x.px >= f(0.236) ? simShort(x.px, slP, f(0.5), f(0.618), kl) : simShort(f(0.236), slP, f(0.5), f(0.618), kl, 'LIMIT');
+    o.D = simShort(x.px, x.px + 0.5 * (x.peak - x.px), f(0.382), f(0.5), kl);
+  } else if (x.kind === 'RUN') {
+    if (!(x.lo > 0 && x.lo < x.px)) return o;
+    const leg = x.px - x.lo;
+    o.R1 = simShort(x.px, x.px + 0.236 * leg, x.px - 0.382 * leg, x.px - 0.5 * leg, kl);
+    o.R2 = simShort(x.px, x.px + 0.382 * leg, x.px - 0.5 * leg, x.px - 0.618 * leg, kl);
+  } else o.P = simPullback(x, kl);
+  return o;
 }
 let igResolving = false;
 async function resolveIg() {
   if (igResolving) return; igResolving = true;
   try {
     const now = Date.now();
-    const due = state.igTrack.filter(x => x.px > 0 && ((!x.res && now >= x.t + 4 * 3600e3 + 60e3) || (x.sim === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3))).slice(0, 30);
+    const due = state.igTrack.filter(x => x.px > 0 && ((!x.res && now >= x.t + 4 * 3600e3 + 60e3) || (x.sims === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3))).slice(0, 40);
     for (const x of due) {
       const kl = await bklines(x.coin + 'USDT', Math.floor(x.t / BAR) * BAR, IG_SIM_BARS + 1);
       if (!kl) continue;
       const k = kl.filter(r => +r[6] > x.t);
       if (!x.res && now >= x.t + 4 * 3600e3 + 60e3) { const k4 = k.slice(0, 16); x.res = k4.length >= 4 ? igJudge(x, k4) : { na: true }; }
-      if (x.sim === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3) x.sim = k.length >= 8 ? igSim(x, k.slice(0, IG_SIM_BARS)) : null;
+      if (x.sims === undefined && now >= x.t + IG_SIM_BARS * BAR + 60e3) { x.sims = k.length >= 8 ? igSims(x, k.slice(0, IG_SIM_BARS)) : {}; delete x.sim; }
       await sleep(150);
     }
     if (due.length) save();
@@ -528,17 +552,22 @@ function igStats(hours) {
   }
   const G = done.filter(x => x.kind === 'GASI');
   if (G.length) t += `\n<b>🧯 ГАСИ</b> · ${G.length}\nпо алармот: макс пад 4h ${pc(med(G.map(x => x.res.dn4)))} · макс раст 4h ${pc(med(G.map(x => x.res.up4)))} · крај 4h ${pc(med(G.map(x => x.res.end4)))}\nнов врв (squeeze) ${G.filter(x => x.res.newHi).length}/${G.length} · до .382 ${G.filter(x => x.res.hit382).length}/${G.length} · до .5 ${G.filter(x => x.res.hit5).length}/${G.length}\n`;
-  const S = T.filter(x => x.sim && x.sim.res);
+  const S = T.filter(x => x.sims);
   if (S.length) {
     t += `\n<b>💰 Трејд симулација · 8h</b> (SL и TP во иста свеќа = SL)\n`;
-    for (const g of [['GASI', '🧯 ГАСИ шорт · SL над врвот · TP .382/.5'], ['RUN', '🔥 RUN шорт · SL +.236 · TP −.382/−.5'], ['IGNITE', '🔥 IGNITE лимит .618 · SL .786 · TP врв'], ['EARLY', '⚡ EARLY лимит .618 · SL .786 · TP врв']]) {
-      const a = S.filter(x => x.kind === g[0]); if (!a.length) continue;
-      const sl = a.filter(x => x.sim.res === 'SL').length, tp = a.filter(x => x.sim.res === 'TP1').length, tp2 = a.filter(x => x.sim.tp2).length;
-      const none = a.filter(x => x.sim.res === 'NONE').length, nf = a.filter(x => x.sim.res === 'NOFILL').length;
-      const f = a.filter(x => x.sim.res !== 'NOFILL'), exp = f.length ? f.reduce((q, x) => q + x.sim.R, 0) / f.length : 0;
-      const v = sl + tp >= 8 ? (exp > 0.2 ? 'носи ✅' : exp < -0.2 ? 'губи ❌' : 'неутрално ➖') : 'премалку примери';
-      t += `${g[1]} · ${a.length}\nSL прв ${sl} · TP1 прв ${tp}${tp2 ? ' (TP2 ' + tp2 + ')' : ''} · ништо ${none}${nf ? ' · непополнет ' + nf : ''} · просек ${exp >= 0 ? '+' : ''}${exp.toFixed(2)}R → ${v}\n`;
+    for (const [kind, title] of [['GASI', '🧯 ГАСИ шорт'], ['RUN', '🔥 RUN шорт'], ['IGNITE', '🔥 IGNITE лонг'], ['EARLY', '⚡ EARLY лонг']]) {
+      const a = S.filter(x => x.kind === kind); if (!a.length) continue;
+      t += `<b>${title}</b>\n`;
+      for (const [v, desc] of SIM_VARIANTS[kind]) {
+        const r = a.map(x => x.sims[v]).filter(z => z && z.res); if (!r.length) continue;
+        const sl = r.filter(z => z.res === 'SL').length, tp = r.filter(z => z.res === 'TP1').length, tp2 = r.filter(z => z.tp2).length;
+        const none = r.filter(z => z.res === 'NONE').length, nf = r.filter(z => z.res === 'NOFILL').length;
+        const fl = r.filter(z => z.res !== 'NOFILL'), exp = fl.length ? fl.reduce((q, z) => q + z.R, 0) / fl.length : 0;
+        const vd = sl + tp >= 8 ? (exp > 0.2 ? '✅' : exp < -0.2 ? '❌' : '➖') : '·';
+        t += `${v} ${desc}\n   SL ${sl} · TP1 ${tp}${tp2 ? ' (TP2 ' + tp2 + ')' : ''} · ништо ${none}${nf ? ' · непоп. ' + nf : ''} → ${exp >= 0 ? '+' : ''}${exp.toFixed(2)}R ${vd}\n`;
+      }
     }
+    t += '✅ ≥ +0.2R · ➖ неутрално · ❌ ≤ −0.2R · «·» под 8 решени\n';
   }
   const L = T.filter(x => x.kind !== 'GASI' && x.first && x.first.px > 0);
   if (L.length) t += `\n<b>Доцнење</b> (прв кандидат → аларм): медијана ${Math.round(med(L.map(x => (x.t - x.first.t) / 60000)))} мин · цена ${pc(med(L.map(x => x.px / x.first.px - 1)))}\n`;
@@ -547,7 +576,8 @@ function igStats(hours) {
     const res = !r ? 'отворено' : r.na ? 'n/a' : x.kind === 'GASI' ? `4h ${pc(r.dn4)} / ${pc(r.up4)}${r.newHi ? ' ⚠нов врв' : ''}${r.hit5 ? ' .5✔' : r.hit382 ? ' .382✔' : ''}`
       : `4h ${pc(r.up4)} / ${pc(r.dn4)}${r.pb618 ? ' .618✔' : r.pb5 ? ' .5✔' : ''}`;
     const lead = x.first && x.kind !== 'GASI' ? ` · прв ${hhmm(x.first.t)} ${pc(x.px / x.first.px - 1)}` : '';
-    const sim = x.sim && x.sim.res ? ` · трејд ${x.sim.res === 'NOFILL' ? 'непоп.' : (x.sim.R >= 0 ? '+' : '') + x.sim.R + 'R'}` : '';
+    const z = x.sims ? (x.sims.A || x.sims.R1 || x.sims.P) : null;
+    const sim = z && z.res ? ` · трејд ${z.res === 'NOFILL' ? 'непоп.' : (z.R >= 0 ? '+' : '') + z.R + 'R'}` : '';
     return `${hhmm(x.t)} ${ic} ${esc(x.coin)} ${x.score}${lead} · ${res}${sim}`;
   }).join('\n');
   return t;
