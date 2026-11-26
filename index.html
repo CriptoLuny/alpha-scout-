@@ -1286,6 +1286,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-26-a  CLEAN15 G9 SWEEP: TP1 1.0-2.0R passes WITHOUT a TP2 >= 2R (grade B, flag 'TP1 x.xR без TP2≥2R').
+//    Bot forward tracking 7 days (/nearstats, 4h window, SL/TP same bar = SL): G9·SWEEP 9/10 = 155 cases,
+//    +0.27R. Split by the G9 note: TP1 1.0-2.0R n 23 · SL 7 · TP1 14 (TP2 9) · +0.73R; TP1 0.5-1.0R +0.14R;
+//    TP1 < 0.5R +0.28R (tiny wins, fees eat them); SL > 1.5 ATR n 38 · SL 3 · TP1 24 · +0.52R (overlaps the
+//    R:R groups -> not changed yet, needs an SL x R:R cross-tab). TREND and SL <= 1.5 ATR are unchanged.
+//    The bot tracks these B setups separately (✅B·TP1 1-2R) so the rule can be reverted if the edge fades.
 //  2026-11-10-c  🎵 TEMPO confirmation. User: show the tag only when the coin algorithmically HAS a tempo,
 //    tap = open the coin detail. Six tests, all must pass: >=10 legs (>=3 up, >=3 down); duration CV <= 0.50;
 //    persistence = median(newer half)/median(older half) in 0.67-1.5; amplitude CV <= 0.6; median leg >= 2%;
@@ -1384,7 +1390,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-10-c';
+const APP_BUILD='2026-11-26-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -5230,8 +5236,11 @@ function clnSide(c){
     // Such a setup is graded B through the flag (take part at TP1, SL to BE, rest to TP2).
     const rr2=risk>0?(tp2-entry)/risk:0,tp2Real=tc.some(v=>v>tp1+CLEAN_TP_GAP_ATR*atr);
     const part9=rr<CLEAN_RR_MIN&&rr>=CLEAN_RR_TP1_MIN&&tp2Real&&rr2>=CLEAN_RR_MIN;
-    const ok9=slAtr<=CLEAN_SL_MAX_ATR&&(rr>=CLEAN_RR_MIN||part9);
+    // 2026-11-26-a: SWEEP only -- TP1 1.0-2.0R passes without a TP2 >= 2R (bot tracking: G9 SWEEP with TP1 1-2R = +0.73R)
+    const part9s=!part9&&mode==='SWEEP'&&rr<CLEAN_RR_MIN&&rr>=CLEAN_RR_TP1_MIN;
+    const ok9=slAtr<=CLEAN_SL_MAX_ATR&&(rr>=CLEAN_RR_MIN||part9||part9s);
     if(ok9&&part9)flags.push('TP1 '+rr.toFixed(1)+'R делумно → TP2 '+rr2.toFixed(1)+'R');
+    if(ok9&&part9s)flags.push('TP1 '+rr.toFixed(1)+'R без TP2≥2R');
     add('G9','Ризик',ok9,'SL '+slAtr.toFixed(2)+' ATR · R:R '+rr.toFixed(2)+' · TP2 '+rr2.toFixed(2)+'R'
       +(slAtr>CLEAN_SL_MAX_ATR?' (SL > '+CLEAN_SL_MAX_ATR+' ATR)':'')+(!ok9&&rr<CLEAN_RR_MIN?' (< '+CLEAN_RR_MIN+')':''));
   }else add('G9','Ризик',false,'—');
@@ -5730,7 +5739,7 @@ function helpSections(){
     {tag:'G6 · Моментум',col:a,what:'TREND: MOMz во насоката на влезот И наклонот (MSLP) во истата насока, без FLIP против. SWEEP: спротивното движење не смее да забрзува — MOMz се свртел на последната свеќа или MSLP веќе е во насоката.'},
     {tag:'G7 · Компресија',col:cy,what:'SQZ ON на тригер-свеќата (Bollinger внатре во Keltner) → ✗.',action:'Чекај release — компресијата нема позната насока додека не пукне.'},
     {tag:'G8 · Crowding',col:pu,what:()=>'Лонг ✗ ако: FR > +'+CLEAN_FR_MAX+'%; или L/S ▲OVB (> '+CLEAN_LS_OVB+') со растечка премија; или premium index падне ≥ '+Math.round(CLEAN_PREM_DROP*100)+'% од 2h максимум додека OI◆ (8 свеќи) расте > '+CLEAN_PREM_OI+'%. Шорт огледално.',when:'Премијата се чита од Binance premium index (15m) — суровата премија што го движи funding-от. Премија што се гаси под растечки OI = новите позиции не се лонгови што плаќаат.'},
-    {tag:'G9 · Ризик',col:r,what:()=>'TREND: SL = ниво − '+CLEAN_SL_ATR+' ATR (стоповите на толпата се НА нивото). SWEEP: SL = под фитилот − '+CLEAN_SL_SWEEP_BUF+' ATR (таа ликвидност е веќе земена). SL ≤ '+CLEAN_SL_MAX_ATR+' ATR од влезот. TP1 = прва структура спроти влезот; по SWEEP на опсег — врвот на опсегот и подалеку. R:R до TP1 ≥ '+CLEAN_RR_MIN+'.',action:'Ако R:R < 2 → WAIT за подобра цена или sweep.'},
+    {tag:'G9 · Ризик',col:r,what:()=>'TREND: SL = ниво − '+CLEAN_SL_ATR+' ATR (стоповите на толпата се НА нивото). SWEEP: SL = под фитилот − '+CLEAN_SL_SWEEP_BUF+' ATR (таа ликвидност е веќе земена). SL ≤ '+CLEAN_SL_MAX_ATR+' ATR од влезот. TP1 = прва структура спроти влезот; по SWEEP на опсег — врвот на опсегот и подалеку. R:R до TP1 ≥ '+CLEAN_RR_MIN+'. Исклучоци (само B): TP1 '+CLEAN_RR_TP1_MIN+'–'+CLEAN_RR_MIN+'R со вистински TP2 ≥ '+CLEAN_RR_MIN+'R; кај SWEEP TP1 '+CLEAN_RR_TP1_MIN+'–'+CLEAN_RR_MIN+'R и без TP2.',action:'Ако R:R < 1 → WAIT за подобра цена или sweep. B со TP1 1–2R: дел на TP1, SL на BE.'},
     {tag:'G10 · Замка',col:am,what:()=>'Тесен опсег (≤ '+CLEAN_TRAP_ATR+' ATR, ≥ '+CLEAN_TRAP_BARS+' свеќи) + OI◆ +'+CLEAN_TRAP_OI+'% во опсегот + L/S ▲OVB за лонг (▼OVS за шорт) = позиции натрупани, стоповите под/над опсегот се мета.',action:'Лонг во опсегот ✗. Дозволен е само SWEEP под дното + reclaim (OI паѓа на sweep, CVD расте на reclaim). Шорт огледално.'},
     {tag:'A / B / WAIT',col:y,what:()=>'A = сите 10 гејтови. B = 10/10 + контекст-флаг: OI во коини ≥ '+Math.round(CLEAN_OI_MAX30*100)+'% од 30d максимум (таван), последната 4h или 1D свеќа има фитил против влезот, петок 20h – сабота 06h UTC (тенка ликвидност), или нема структура за TP1 (TP1 = 2R). WAIT = барем еден паднат гејт.',action:'A = цела позиција · B = половина · WAIT = не.'},
     {tag:'ВЛЕЗ MKT / LIMIT',col:a,what:()=>'MKT = close-от е во рамки на '+CLEAN_LOC_ATR+' ATR од нивото. LIMIT = чекај ретест на ниво ± '+CLEAN_LOC_ATR+' ATR; ако не се наполни, нема влез.'},
