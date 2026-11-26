@@ -1,4 +1,4 @@
-// aSCOUT Telegram bot v1.7 (🔥⚡🧯 ALARM + /igstats trade-variant sims, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
+// aSCOUT Telegram bot v1.8 (🔥⚡🧯 ALARM + /igstats trade-variant sims, B-flag split incl. TP1 1-2R, /why, /near, /nearstats, quiet hours) - runs the REAL aSCOUT page (GitHub Pages) in headless Chromium.
 // Every build you commit is picked up on the next full scan: zero porting, same logic as the phone.
 // Cycle per 15m bar:  close-PRE_MIN -> full scan (shortlist)  |  close+DELAY_SEC -> CLEAN15 on the
 // just-closed bar -> A/B alerts (+ Setups v2 GO/WATCH gate via suGate).
@@ -186,7 +186,8 @@ function recordDiag(r) {
     if (p && now - p < CFG.cooldownMin * 60e3) continue;
     state.trackSeen[k] = now;
     const softFlush = (d.flags || []).some(f => /мал flush/i.test(f));
-    const gate = pass === 10 ? (d.nflags ? (softFlush ? 'B·мал flush' : 'B') : 'A') : d.fails[0].id;
+    const tp1only = (d.flags || []).some(f => /без TP2/i.test(f));   // scanner 2026-11-26-a: SWEEP TP1 1-2R without TP2 >= 2R
+    const gate = pass === 10 ? (d.nflags ? (softFlush ? 'B·мал flush' : tp1only ? 'B·TP1 1-2R' : 'B') : 'A') : d.fails[0].id;
     state.track.push({ coin: d.coin, side: d.side, mode: d.mode || '—', gate, note: pass === 10 ? '' : d.fails[0].note,
       t0: d.closeT, entry: d.entry, et: d.et, sl: d.sl, tp1: d.tp1, tp2: d.tp2, rr: d.rr, res: null });
   }
