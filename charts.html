@@ -38,14 +38,14 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 .cd{color:var(--mut);font-size:12px}
 .tools{margin-left:auto;display:flex;gap:2px;align-items:center}
 .tools select.pv{width:auto}
-.tools select{min-height:30px;padding:2px 4px;font-size:13px}
+.tools select{min-height:30px;padding:2px 4px;font-size:13px;min-width:56px;-webkit-appearance:menulist;appearance:auto}
 .tools button{background:none;border:0;color:var(--mut);min-height:32px;min-width:30px;padding:2px 5px;font-size:14px}
 .tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
 .box{position:relative;height:var(--bh);margin-top:3px}
 .cv{position:absolute;inset:0;touch-action:manipulation}
 .lg,.ol{position:absolute;left:4px;z-index:3;pointer-events:none;font-size:11px;display:flex;gap:2px 8px;flex-wrap:wrap;max-width:calc(100% - 70px);text-shadow:0 0 3px #181a20}
 .lg{top:1px}.ol{top:77%}
-@media(max-width:700px){.dense .lg .m,.dense .lg .dt{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}}
+@media(max-width:700px){.lg .m,.lg .dt,.ol .m{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}.tools button{min-width:28px;padding:2px 3px}}
 .up{color:var(--up)}.dn{color:var(--dn)}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -88,7 +88,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <input id="addIn" placeholder="Додај: BTC, ETH" aria-label="Додај коин"><button id="addBtn">+</button>
     <button id="favLoad">⭐ Favorites</button>
     <span class="sep"></span>
-    <span class="lbl">Цртај:</span><div class="chips" id="draw"><button class="chip" data-m="lv">─ Ниво</button><button class="chip" data-m="tl">╱ Тренд</button><button class="chip" data-m="del">🗑</button></div>
+    <span class="lbl">Цртај:</span><div class="chips" id="draw"><button class="chip" data-m="lv">─ Ниво</button><button class="chip" data-m="tl">╱ Тренд</button><button class="chip" data-m="fb">Fib</button><button class="chip" data-m="del">🗑</button></div>
     <span class="mkw"><button class="chip" id="mkBtn" aria-expanded="false">Сигнали ▾</button>
       <span class="mkm" id="mkMenu" hidden>
         <label><input type="checkbox" data-k="ext"> αSCOUT / Telegram (сини)</label>
@@ -100,7 +100,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <button id="backBtn" hidden>← Назад</button>
   </div>
   <div id="charts"></div>
-  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално) · „Сигнали ▾“: CCI крос 0 на горната, нов Sync↑ / Sync↓ / Desync на долната линија (затворена свеќа)<br>▲ L / ▼ S (исклучено по дифолт) = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално) · „Сигнали ▾“: CCI крос 0 на горната, нов Sync↑ / Sync↓ / Desync на долната линија (затворена свеќа)<br>▲ L / ▼ S (исклучено по дифолт) = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · Fib = две допири (почеток=1, крај=0, како TradingView) · двоен клик/тап = тој графикон на цел екран + панелот (цена или A/D) · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
 </section>
 
 <section id="v-market" hidden>
@@ -231,13 +231,16 @@ function signal(d,at){
   return{tr,tags,sc}}
 
 // ---------- charts ----------
+// phone (<700px): always ONE column, coins one under another; Мрежа = how many fit one screen height (1/2/2/3)
 function layout(){
-  const g=store.grid,narrow=innerWidth<700,cols=g===1?1:g===2?(narrow?1:2):g===4?2:(narrow?2:3),rows=Math.ceil(g/cols);
-  const ch=$('charts');ch.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;ch.classList.toggle('dense',cols>1);
-  const used=document.querySelector('header').offsetHeight+(document.querySelector('#v-charts .bar').offsetHeight||0);
-  const cardHd=cols>1&&narrow?60:40;
-  document.documentElement.style.setProperty('--bh',Math.max(150,Math.floor((innerHeight-used)/rows)-cardHd)+'px');
+  const g=store.grid,narrow=innerWidth<700,cols=narrow?1:g===1?1:g===2?2:g===4?2:3,rows=narrow?({1:1,2:2,4:2,6:3})[g]||2:Math.ceil(g/cols);
+  const ch=$('charts');ch.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;ch.classList.toggle('dense',cols>1||(narrow&&rows>2));
+  const used=document.querySelector('header').offsetHeight+(narrow?0:(document.querySelector('#v-charts .bar').offsetHeight||0));
+  document.documentElement.style.setProperty('--bh',Math.max(180,Math.floor((innerHeight-used)/rows)-48)+'px');
+  for(const id in C){marks(id);adMarks(id)}
 }
+// small chart (phone): markers without text and smaller, so they don't pile up
+const smallC=id=>{const el=card(id);return !el||el.clientWidth<600};
 function card(id){return document.querySelector(`.ch[data-id="${CSS.escape(id)}"]`)}
 function makeChart(id){
   const cv=card(id).querySelector('.cv');
@@ -295,10 +298,10 @@ function applyView(id){
 // L/S arrow = the first CLOSED bar where the scanner score crosses +-3 (same rules as the Скенер tab), never on the open bar.
 // ext = markers sent by the αSCOUT Telegram bot (?mk=label~L|S~ms), kept per coin for 30 days.
 function marks(id){
-  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,s=id.split('@')[0],out=[];
+  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,s=id.split('@')[0],out=[],SZ=smallC(id)?0.6:1;
   // a repeat in the same direction only after 20 bars, so a choppy score does not paint an arrow on every bar
   if(store.mk.ls){let prev=0,last=0,li=-99;for(let i=36;i<=k.length-2;i++){const sc=signal(d,i).sc,z=sc>=3?1:sc<=-3?-1:0;
-    if(z&&z!==prev&&(z!==last||i-li>=20)){out.push(z>0?{time:T(k[i].t),position:'belowBar',color:'#2ebd85',shape:'arrowUp',text:'L '+sc}:{time:T(k[i].t),position:'aboveBar',color:'#f6465d',shape:'arrowDown',text:'S '+sc});last=z;li=i}prev=z}}
+    if(z&&z!==prev&&(z!==last||i-li>=20)){out.push(z>0?{time:T(k[i].t),position:'belowBar',color:'#2ebd85',shape:'arrowUp',text:'L '+sc,size:SZ}:{time:T(k[i].t),position:'aboveBar',color:'#f6465d',shape:'arrowDown',text:'S '+sc,size:SZ});last=z;li=i}prev=z}}
   if(store.mk.ext)for(const e of (store.ext||{})[s]||[]){const j=findIdx(k,e.t);if(j<0)continue;
     out.push({time:T(k[j].t),position:e.side==='S'?'aboveBar':'belowBar',color:'#00c2ff',shape:e.side==='S'?'arrowDown':'arrowUp',text:e.label})}
   out.sort((a,b)=>a.time-b.time);c.cs.setMarkers(out);
@@ -306,15 +309,18 @@ function marks(id){
 // ---------- A/D pane alerts (the Pine alertconditions, closed bars only) ----------
 // upper line: CCI crosses 0 (▲ green / ▼ red) · lower line: new OBV+A/D Sync ↑ / Sync ↓ / Desync (first bar of the state)
 function adMarks(id){
-  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,up=[],lo=[];
+  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,up=[],lo=[],sm=smallC(id),Z=sm?0.5:1,tx=v=>sm?'':v;
   const M=store.mk;for(let i=1;i<=k.length-2;i++){const t=T(k[i].t),a=d.cci[i-1],b=d.cci[i];
-    if(M.cci&&a!=null&&b!=null){if(a<=0&&b>0)up.push({time:t,position:'belowBar',color:ADC.up,shape:'arrowUp',text:'CCI'});else if(a>=0&&b<0)up.push({time:t,position:'aboveBar',color:ADC.dn,shape:'arrowDown',text:'CCI'})}
-    const y=d.sy[i];if(y&&y!==d.sy[i-1]&&(y===2?M.desync:M.sync))lo.push(y===1?{time:t,position:'belowBar',color:ADC.up,shape:'circle',text:'Sync↑'}:y===-1?{time:t,position:'aboveBar',color:ADC.dn,shape:'circle',text:'Sync↓'}:{time:t,position:'aboveBar',color:ADC.desync,shape:'circle',text:'Desync'})}
+    if(M.cci&&a!=null&&b!=null){if(a<=0&&b>0)up.push({time:t,position:'belowBar',color:ADC.up,shape:'arrowUp',text:tx('CCI'),size:Z});else if(a>=0&&b<0)up.push({time:t,position:'aboveBar',color:ADC.dn,shape:'arrowDown',text:tx('CCI'),size:Z})}
+    const y=d.sy[i];if(y&&y!==d.sy[i-1]&&(y===2?M.desync:M.sync))lo.push(y===1?{time:t,position:'belowBar',color:ADC.up,shape:'circle',text:tx('Sync↑'),size:Z}:y===-1?{time:t,position:'aboveBar',color:ADC.dn,shape:'circle',text:tx('Sync↓'),size:Z}:{time:t,position:'aboveBar',color:ADC.desync,shape:'circle',text:tx('Desync'),size:Z})}
   c.obv.setMarkers(up);c.obm.setMarkers(lo);
 }
 // ---------- drawings (per coin, shown on every TF) ----------
 let mode=null,pend=null;
-const drw=s=>{store.draw=store.draw||{};return store.draw[s]=store.draw[s]||{lv:[],tl:[]}};
+const drw=s=>{store.draw=store.draw||{};const d=store.draw[s]=store.draw[s]||{lv:[],tl:[]};d.fb=d.fb||[];return d};
+// Fibonacci retracement, TradingView convention: 1 = first tap, 0 = second tap (low->high gives 0 at the top)
+const FIB=[[0,'#787b86'],[0.236,'#f23645'],[0.382,'#ff9800'],[0.5,'#4caf50'],[0.618,'#089981'],[0.786,'#00bcd4'],[1,'#787b86']];
+const fibP=(f,l)=>f.b.p+(f.a.p-f.b.p)*l;
 function drawAll(id){
   const c=C[id];if(!c||!c.d)return;const s=id.split('@')[0],dw=drw(s),k=c.d.k;
   (c.pl||[]).forEach(l=>c.cs.removePriceLine(l));(c.tls||[]).forEach(x=>c.chart.removeSeries(x));c.pl=[];c.tls=[];
@@ -322,20 +328,25 @@ function drawAll(id){
   dw.tl.forEach(t=>{const i=findIdx(k,t.a.t),j=findIdx(k,t.b.t);if(i<0||j<0||i===j)return;
     const ser=c.chart.addLineSeries({color:'#00c2ff',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false,priceFormat:{type:'custom',minMove:10**-c.d.dec,formatter:v=>v.toFixed(c.d.dec)}});
     ser.setData([{time:T(k[i].t),value:t.a.p},{time:T(k[j].t),value:t.b.p}].sort((x,y)=>x.time-y.time));c.tls.push(ser)});
+  dw.fb.forEach(f=>{const i=findIdx(k,f.a.t),j=findIdx(k,f.b.t),st0=Math.min(i,j),L=k.length-1;if(i<0||j<0||st0>=L)return;
+    FIB.forEach(([l,col])=>{const ser=c.chart.addLineSeries({color:col,lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:String(l),crosshairMarkerVisible:false,
+      priceFormat:{type:'custom',minMove:10**-c.d.dec,formatter:v=>v.toFixed(c.d.dec)}});
+      const v=fibP(f,l);ser.setData([{time:T(k[st0].t),value:v},{time:T(k[L].t),value:v}]);c.tls.push(ser)})});
 }
 function redrawSym(s){for(const id in C)if(id.split('@')[0]===s)drawAll(id);save()}
 function setMode(m){mode=mode===m?null:m;pend=null;
   document.querySelectorAll('#draw [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
-  st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
-// double click / double tap: on the price area -> price full height, on the OBV area -> OBV full height; again -> back to Сè
+  st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='fb'?'Fib: допри го почетокот на потегот (1), па крајот (0)':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
+// double click / double tap: THAT chart goes full screen and the tapped pane (price / A/D) takes the full height; again -> back
 let tap=null;
 function dbl(id,p){
   if(!p||!p.point)return;const now=Date.now();
   if(tap&&tap.id===id&&now-tap.t<350&&Math.hypot(p.point.x-tap.x,p.point.y-tap.y)<30){
     tap=null;const pn=store.panels.find(x=>pid(x)===id),el=card(id);if(!pn||!el)return;
-    const v=pn.view||'all',h=el.querySelector('.cv').clientHeight;
-    pn.view=v!=='all'?'all':(p.point.y>h*0.76?'obv':'price');save();
-    el.querySelector('.pv').value=pn.view;applyView(id);return}
+    const v=pn.view||'all',h=el.querySelector('.cv').clientHeight,back=v!=='all'||el.classList.contains('big');
+    pn.view=back?'all':(p.point.y>h*0.76?'obv':'price');save();
+    el.classList.toggle('big',!back);el.querySelector('.pv').value=pn.view;applyView(id);
+    if(!back)el.scrollIntoView({block:'start'});return}
   tap={id,t:now,x:p.point.x,y:p.point.y};
 }
 function onClick(id,p){
@@ -345,12 +356,16 @@ function onClick(id,p){
   if(mode==='lv'){dw.lv.push(price);setMode(null);redrawSym(s);return}
   if(mode==='tl'){if(!pend||pend.id!==id){pend={id,a:{t,p:price}};st('Тренд линија: допри ја втората точка');return}
     dw.tl.push({a:pend.a,b:{t,p:price}});setMode(null);redrawSym(s);return}
+  if(mode==='fb'){if(!pend||pend.id!==id){pend={id,a:{t,p:price}};st('Fib: допри го крајот на потегот (0)');return}
+    dw.fb.push({a:pend.a,b:{t,p:price}});setMode(null);redrawSym(s);return}
   if(mode==='del'){const ts=c.chart.timeScale(),X=v=>ts.timeToCoordinate(T(v)),Y=v=>c.cs.priceToCoordinate(v);let best=null,bd=14;
     dw.lv.forEach((v,i)=>{const yy=Y(v);if(yy==null)return;const dd=Math.abs(yy-p.point.y);if(dd<bd){bd=dd;best=['lv',i]}});
     dw.tl.forEach((v,i)=>{const ia=findIdx(c.d.k,v.a.t),ib=findIdx(c.d.k,v.b.t);if(ia<0||ib<0)return;
       const x1=X(c.d.k[ia].t),y1=Y(v.a.p),x2=X(c.d.k[ib].t),y2=Y(v.b.p);if([x1,y1,x2,y2].some(z=>z==null))return;
       const L2=(x2-x1)**2+(y2-y1)**2,u=L2?Math.max(0,Math.min(1,((p.point.x-x1)*(x2-x1)+(p.point.y-y1)*(y2-y1))/L2)):0,
         dd=Math.hypot(p.point.x-(x1+u*(x2-x1)),p.point.y-(y1+u*(y2-y1)));if(dd<bd){bd=dd;best=['tl',i]}});
+    dw.fb.forEach((f,i)=>{const ia=findIdx(c.d.k,f.a.t),ib=findIdx(c.d.k,f.b.t);if(ia<0||ib<0)return;const x0=X(c.d.k[Math.min(ia,ib)].t);
+      if(x0!=null&&p.point.x<x0-10)return;FIB.forEach(([l])=>{const yy=Y(fibP(f,l));if(yy==null)return;const dd=Math.abs(yy-p.point.y);if(dd<bd){bd=dd;best=['fb',i]}})});
     if(best){dw[best[0]].splice(best[1],1);redrawSym(s);st('Избришано')}}
 }
 function updIdx(id,i){
