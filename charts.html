@@ -56,6 +56,11 @@ th:first-child,td:first-child{width:30px;text-align:center}
 td.s{white-space:normal;text-align:left;font-size:12px;color:var(--mut);min-width:150px}
 tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel)}
 td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
+.mkw{position:relative}
+.mkm{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 4px;display:flex;flex-direction:column;min-width:240px;box-shadow:0 6px 20px #0008}
+.mkm label{display:flex;gap:8px;align-items:center;padding:8px 10px;font-size:14px;color:var(--ink);cursor:pointer}
+.mkm input{min-height:auto;width:18px;height:18px}
+@media(max-width:600px){.mkm{position:fixed;left:10px;right:10px;top:auto;min-width:0}}
 .note{color:var(--mut);font-size:12px;padding:4px 10px}
 [hidden]{display:none!important}
 </style>
@@ -84,11 +89,18 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <button id="favLoad">⭐ Favorites</button>
     <span class="sep"></span>
     <span class="lbl">Цртај:</span><div class="chips" id="draw"><button class="chip" data-m="lv">─ Ниво</button><button class="chip" data-m="tl">╱ Тренд</button><button class="chip" data-m="del">🗑</button></div>
-    <button class="chip" id="sigBtn">▲▼ Сигнали</button>
+    <span class="mkw"><button class="chip" id="mkBtn" aria-expanded="false">Сигнали ▾</button>
+      <span class="mkm" id="mkMenu" hidden>
+        <label><input type="checkbox" data-k="ext"> αSCOUT / Telegram (сини)</label>
+        <label><input type="checkbox" data-k="cci"> CCI крос 0 (A/D горна)</label>
+        <label><input type="checkbox" data-k="sync"> Sync↑ / Sync↓ (A/D долна)</label>
+        <label><input type="checkbox" data-k="desync"> Desync (A/D долна)</label>
+        <label><input type="checkbox" data-k="ls"> L/S скор од Скенер</label>
+      </span></span>
     <button id="backBtn" hidden>← Назад</button>
   </div>
   <div id="charts"></div>
-  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално)<br>▲ L / ▼ S = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално) · „Сигнали ▾“: CCI крос 0 на горната, нов Sync↑ / Sync↓ / Desync на долната линија (затворена свеќа)<br>▲ L / ▼ S (исклучено по дифолт) = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
 </section>
 
 <section id="v-market" hidden>
@@ -143,7 +155,7 @@ const st=t=>$('status').textContent=t;
 let store={};try{store=JSON.parse(localStorage.getItem('ascout-charts')||'{}')}catch(e){}
 store.panels=store.panels||['CLOUSDT','BEATUSDT','KITEUSDT','SIRENUSDT'].map(s=>({s,tf:'4h'}));
 store.tf=store.tf||'4h';store.grid=store.grid||4;store.sync=store.sync??true;store.live=store.live??true;
-store.stf=store.stf||['1h','4h'];store.sig=store.sig??true;store.ext=store.ext||{};store.tab=store.tab||'charts';
+store.stf=store.stf||['1h','4h'];store.mk=Object.assign({ls:false,ext:true,cci:true,sync:true,desync:true},store.mk||{});store.ext=store.ext||{};store.tab=store.tab||'charts';
 const q=new URLSearchParams(location.search);
 if(q.get('s')||q.get('tf')){
   const tf=TFS.includes(q.get('tf'))?q.get('tf'):store.tf;store.tf=tf;
@@ -265,7 +277,7 @@ function setAll(id){
   for(const[n]of MAS){c.ma[n].applyOptions({priceFormat:pf});c.ma[n].setData(d.k.map((x,i)=>d.m[n][i]==null?null:{time:T(x.t),value:d.m[n][i]}).filter(Boolean))}
   c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.ad[i],color:cciCol(d.cci[i])})));
   c.obm.setData(d.k.map((x,i)=>({time:T(x.t),value:d.ad[i]-d.adOff,color:syCol(d.sy[i])})));
-  c.adOff=d.adOff;marks(id);drawAll(id);applyView(id);
+  c.adOff=d.adOff;marks(id);adMarks(id);drawAll(id);applyView(id);
 }
 // ---------- pane view per chart: Сè / Цена (price full height) / OBV (OBV full height with its own axis) ----------
 function applyView(id){
@@ -285,11 +297,20 @@ function applyView(id){
 function marks(id){
   const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,s=id.split('@')[0],out=[];
   // a repeat in the same direction only after 20 bars, so a choppy score does not paint an arrow on every bar
-  if(store.sig){let prev=0,last=0,li=-99;for(let i=36;i<=k.length-2;i++){const sc=signal(d,i).sc,z=sc>=3?1:sc<=-3?-1:0;
+  if(store.mk.ls){let prev=0,last=0,li=-99;for(let i=36;i<=k.length-2;i++){const sc=signal(d,i).sc,z=sc>=3?1:sc<=-3?-1:0;
     if(z&&z!==prev&&(z!==last||i-li>=20)){out.push(z>0?{time:T(k[i].t),position:'belowBar',color:'#2ebd85',shape:'arrowUp',text:'L '+sc}:{time:T(k[i].t),position:'aboveBar',color:'#f6465d',shape:'arrowDown',text:'S '+sc});last=z;li=i}prev=z}}
-  for(const e of (store.ext||{})[s]||[]){const j=findIdx(k,e.t);if(j<0)continue;
+  if(store.mk.ext)for(const e of (store.ext||{})[s]||[]){const j=findIdx(k,e.t);if(j<0)continue;
     out.push({time:T(k[j].t),position:e.side==='S'?'aboveBar':'belowBar',color:'#00c2ff',shape:e.side==='S'?'arrowDown':'arrowUp',text:e.label})}
   out.sort((a,b)=>a.time-b.time);c.cs.setMarkers(out);
+}
+// ---------- A/D pane alerts (the Pine alertconditions, closed bars only) ----------
+// upper line: CCI crosses 0 (▲ green / ▼ red) · lower line: new OBV+A/D Sync ↑ / Sync ↓ / Desync (first bar of the state)
+function adMarks(id){
+  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,up=[],lo=[];
+  const M=store.mk;for(let i=1;i<=k.length-2;i++){const t=T(k[i].t),a=d.cci[i-1],b=d.cci[i];
+    if(M.cci&&a!=null&&b!=null){if(a<=0&&b>0)up.push({time:t,position:'belowBar',color:ADC.up,shape:'arrowUp',text:'CCI'});else if(a>=0&&b<0)up.push({time:t,position:'aboveBar',color:ADC.dn,shape:'arrowDown',text:'CCI'})}
+    const y=d.sy[i];if(y&&y!==d.sy[i-1]&&(y===2?M.desync:M.sync))lo.push(y===1?{time:t,position:'belowBar',color:ADC.up,shape:'circle',text:'Sync↑'}:y===-1?{time:t,position:'aboveBar',color:ADC.dn,shape:'circle',text:'Sync↓'}:{time:t,position:'aboveBar',color:ADC.desync,shape:'circle',text:'Desync'})}
+  c.obv.setMarkers(up);c.obm.setMarkers(lo);
 }
 // ---------- drawings (per coin, shown on every TF) ----------
 let mode=null,pend=null;
@@ -395,7 +416,7 @@ async function refresh(){
   await Promise.all(store.panels.map(async p=>{const id=pid(p),e=cache[id],c=C[id];if(!e||!e.raw.length)return;
     try{const fresh=await klines(p.s,p.tf,2),touched=[];
       for(const x of fresh){const L=e.raw.length-1;if(x.t===e.raw[L].t){e.raw[L]=x;touched.push(L)}else if(x.t>e.raw[L].t){e.raw.push(x);touched.push(L+1)}}
-      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1)marks(id);legend(id)}}catch(err){}}));
+      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1){marks(id);adMarks(id)}legend(id)}}catch(err){}}));
   if(store.tab==='market')renderMarket();
   st('Live · '+new Date().toLocaleTimeString('mk-MK'));
 }
@@ -469,8 +490,12 @@ const addSyms=()=>{const add=$('addIn').value.split(/[\s,;]+/).map(norm).filter(
   store.panels=add.map(s=>({s,tf:store.tf})).concat(store.panels);$('addIn').value='';renderCards()};
 $('addBtn').addEventListener('click',addSyms);$('addIn').addEventListener('keydown',e=>{if(e.key==='Enter')addSyms()});
 $('draw').addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(b)setMode(b.dataset.m)});
-const sigUi=()=>$('sigBtn').classList.toggle('on',!!store.sig);
-$('sigBtn').addEventListener('click',()=>{store.sig=!store.sig;save();sigUi();for(const id in C)marks(id)});sigUi();
+// Сигнали ▾ : choose which marker groups are drawn (saved)
+document.querySelectorAll('#mkMenu input').forEach(x=>x.checked=!!store.mk[x.dataset.k]);
+$('mkBtn').addEventListener('click',e=>{e.stopPropagation();const m=$('mkMenu');m.hidden=!m.hidden;$('mkBtn').setAttribute('aria-expanded',String(!m.hidden))});
+$('mkMenu').addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('click',()=>{if(!$('mkMenu').hidden){$('mkMenu').hidden=true;$('mkBtn').setAttribute('aria-expanded','false')}});
+$('mkMenu').addEventListener('change',e=>{const x=e.target.closest('input[data-k]');if(!x)return;store.mk[x.dataset.k]=x.checked;save();for(const id in C){marks(id);adMarks(id)}});
 $('favLoad').addEventListener('click',()=>{const f=[...favSet()];if(!f.length){st('Немаш Favorites – додај со ☆.');return}setPanels(f.map(norm).slice(0,24))});
 $('backBtn').addEventListener('click',()=>{if(!store.stash)return;store.panels=store.stash.panels;store.grid=store.stash.grid;store.stash=null;renderCards()});
 $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;
