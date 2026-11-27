@@ -37,6 +37,7 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 .hd b{font-size:17px}.px{font-weight:600}
 .cd{color:var(--mut);font-size:12px}
 .tools{margin-left:auto;display:flex;gap:2px;align-items:center}
+.tools select.pv{width:auto}
 .tools select{min-height:30px;padding:2px 4px;font-size:13px}
 .tools button{background:none;border:0;color:var(--mut);min-height:32px;min-width:30px;padding:2px 5px;font-size:14px}
 .tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
@@ -220,9 +221,9 @@ function makeChart(id){
   chart.priceScale('vol').applyOptions({scaleMargins:{top:0.6,bottom:0.27}});
   const cs=chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',wickUpColor:'#2ebd85',wickDownColor:'#f6465d',borderVisible:false});
   const ma={};for(const[n,col]of MAS)ma[n]=chart.addLineSeries({color:col,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
-  const obv=chart.addLineSeries({color:'#f0b90b',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
-  const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
-  chart.priceScale('obv').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
+  const obv=chart.addLineSeries({color:'#f0b90b',lineWidth:1,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
+  const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
+  chart.priceScale('left').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
   const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
   chart.subscribeClick(p=>onClick(id,p));
   chart.subscribeCrosshairMove(p=>{
@@ -246,7 +247,19 @@ function setAll(id){
   for(const[n]of MAS){c.ma[n].applyOptions({priceFormat:pf});c.ma[n].setData(d.k.map((x,i)=>d.m[n][i]==null?null:{time:T(x.t),value:d.m[n][i]}).filter(Boolean))}
   c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.obv[i]})));
   c.obm.setData(d.k.map((x,i)=>d.om[i]==null?null:{time:T(x.t),value:d.om[i]}).filter(Boolean));
-  marks(id);drawAll(id);
+  marks(id);drawAll(id);applyView(id);
+}
+// ---------- pane view per chart: Сè / Цена (price full height) / OBV (OBV full height with its own axis) ----------
+function applyView(id){
+  const c=C[id],el=card(id),p=store.panels.find(x=>pid(x)===id),v=(p&&p.view)||'all';if(!c||!el)return;
+  const P=v!=='obv',O=v!=='price';
+  c.cs.applyOptions({visible:P});for(const n in c.ma)c.ma[n].applyOptions({visible:P});(c.tls||[]).forEach(x=>x.applyOptions({visible:P}));
+  c.vol.applyOptions({visible:P});c.obv.applyOptions({visible:O});c.obm.applyOptions({visible:O});
+  c.chart.applyOptions({leftPriceScale:{visible:v==='obv',borderColor:'#2b3139'},rightPriceScale:{visible:P}});
+  c.chart.priceScale('right').applyOptions({scaleMargins:v==='price'?{top:0.05,bottom:0.05}:{top:0.06,bottom:0.27}});
+  c.chart.priceScale('vol').applyOptions({scaleMargins:v==='price'?{top:0.82,bottom:0}:{top:0.6,bottom:0.27}});
+  c.chart.priceScale('left').applyOptions({scaleMargins:v==='obv'?{top:0.1,bottom:0.05}:{top:0.8,bottom:0.01}});
+  const ol=el.querySelector('.ol');ol.hidden=v==='price';ol.style.top=v==='obv'?'34px':'';
 }
 // ---------- signals on the chart ----------
 // L/S arrow = the first CLOSED bar where the scanner score crosses +-3 (same rules as the Скенер tab), never on the open bar.
@@ -331,6 +344,7 @@ function renderCards(){
   $('charts').innerHTML=store.panels.map(p=>{const id=pid(p),fv=isFav(p.s);
     return `<div class="ch" data-id="${esc(id)}"><div class="hd"><b>${esc(p.s.replace(/USDT$/,''))}</b><span class="px">–</span><span class="pc"></span><span class="cd"></span>
     <span class="tools"><select class="ptf" aria-label="TF">${TFS.map(t=>`<option${t===p.tf?' selected':''}>${t}</option>`).join('')}</select>
+    <select class="pv" aria-label="Приказ">${[['all','Сè'],['price','Цена'],['obv','OBV']].map(([k,l])=>`<option value="${k}"${(p.view||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
     <button data-a="mtf">MTF</button><button data-a="now" aria-label="Назад на сега">⟲</button><button data-a="big" aria-label="Голем приказ">⤢</button>
     <button data-a="fav" class="fv${fv?' on':''}" aria-label="Favorite">${fv?'★':'☆'}</button><button data-a="x" aria-label="Отстрани">×</button></span></div>
     <div class="box"><div class="lg"></div><div class="ol"></div><div class="cv"></div></div></div>`}).join('')||'<p class="note">Нема графикони. Додај коин или отвори од Пазар/Скенер.</p>';
@@ -436,7 +450,7 @@ $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a
   else if(a==='fav'){toggleFav(s);const on=isFav(s);b.classList.toggle('on',on);b.textContent=on?'★':'☆'}
   else if(a==='mtf'){if(!store.stash)store.stash={panels:store.panels,grid:store.grid};store.panels=['15m','1h','4h','1d'].map(tf=>({s,tf}));store.grid=4;renderCards()}
   else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
-$('charts').addEventListener('change',e=>{const sel=e.target.closest('.ptf');if(!sel)return;const id=sel.closest('.ch').dataset.id;
+$('charts').addEventListener('change',e=>{const pv=e.target.closest('.pv');if(pv){const id=pv.closest('.ch').dataset.id,p=store.panels.find(x=>pid(x)===id);if(p){p.view=pv.value;save();applyView(id)}return}const sel=e.target.closest('.ptf');if(!sel)return;const id=sel.closest('.ch').dataset.id;
   const p=store.panels.find(x=>pid(x)===id);if(p){p.tf=sel.value;renderCards()}});
 $('mSearch').addEventListener('input',renderMarket);
 $('cats').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b)return;mCat=b.dataset.c;
