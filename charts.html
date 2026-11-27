@@ -73,7 +73,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
 <header>
   <div class="top">
     <a class="back" href="./index.html">← αSCOUT</a>
-    <h1>Charts</h1>
+    <h1>Charts</h1><span class="lbl" id="build"></span>
     <label class="lv"><input type="checkbox" id="live" style="min-height:auto"> Live</label>
     <nav class="tabs">
       <button data-v="charts">Графикони</button><button data-v="market">Пазар</button><button data-v="scan">Скенер</button>
@@ -138,6 +138,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
 
 <script>
 {
+const CH_BUILD='2026-11-28-a';
 const API='https://fapi.binance.com';
 const TFS=['5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w'];
 const TFMS={'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'6h':216e5,'8h':288e5,'12h':432e5,'1d':864e5,'3d':2592e5,'1w':6048e5};
@@ -268,6 +269,11 @@ function makeChart(id){
   chart.priceScale('left').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
   const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
   chart.subscribeClick(p=>{if(mode)onClick(id,p)});bindDbl(id);
+  // until the user touches this chart, keep it pinned to the newest candle: on every size change
+  // (iPhone lays the page out late) and whenever it scrolls into view
+  const bx=card(id).querySelector('.box');['pointerdown','touchstart','wheel'].forEach(ev=>bx.addEventListener(ev,()=>{c.user=true},{passive:true}));
+  c.ro=new ResizeObserver(()=>{if(!c.user)toNow(id)});c.ro.observe(bx);
+  c.io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)&&!c.user)toNow(id)});c.io.observe(bx);
   chart.subscribeCrosshairMove(p=>{
     c.hover=(p&&p.logical!=null&&p.time!=null&&c.d)?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):null;legend(id);
     if(syncing||!store.sync)return;syncing=true;
@@ -280,6 +286,10 @@ function makeChart(id){
   chart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r&&r.from<15)loadMore(id)});
   return c;
 }
+// show the newest candle at the right edge: ~110 bars on the screen (fewer on a phone), then scroll to "now"
+function toNow(id,spacing){const c=C[id];if(!c||!c.d)return;const ts=c.chart.timeScale(),w=card(id)?.querySelector('.cv')?.clientWidth||0;
+  if(spacing&&w>0)ts.applyOptions({barSpacing:Math.max(2,Math.min(12,(w-70)/110))});
+  ts.scrollToRealTime();requestAnimationFrame(()=>{if(C[id])C[id].chart.timeScale().scrollToRealTime()})}
 function findIdx(k,t){if(!k.length||t<k[0].t)return-1;let lo=0,hi=k.length-1;while(lo<hi){const m=(lo+hi+1)>>1;k[m].t<=t?lo=m:hi=m-1}return lo}
 function setAll(id){
   const c=C[id];if(!c)return;const raw=cache[id].raw,d=c.d=calc(raw),pf={type:'custom',minMove:10**-d.dec,formatter:v=>v<0?'':v.toFixed(d.dec)};
@@ -438,12 +448,11 @@ async function loadPanel(p){
   const id=pid(p);
   try{if(!cache[id]){const raw=await klines(p.s,p.tf,500);cache[id]={raw,done:raw.length<500,loading:false}}else await catchUp(p);
     if(!C[id])return;setAll(id);const n=cache[id].raw.length;
-    const ts=C[id].chart.timeScale();ts.setVisibleLogicalRange({from:Math.max(0,n-110),to:n+5});
-    requestAnimationFrame(()=>{if(C[id])C[id].chart.timeScale().scrollToRealTime()});legend(id)}   // always open at the newest candle
+    toNow(id,true);legend(id)}   // always open at the newest candle
   catch(e){const el=card(id);if(el)el.querySelector('.lg').textContent='Нема податоци за '+p.s+' '+p.tf}
 }
 function renderCards(){
-  for(const id in C){C[id].chart.remove();delete C[id]}
+  for(const id in C){C[id].ro&&C[id].ro.disconnect();C[id].io&&C[id].io.disconnect();C[id].chart.remove();delete C[id]}
   const seen=new Set();store.panels=store.panels.filter(p=>{const id=pid(p);if(seen.has(id))return false;seen.add(id);return true});save();
   $('charts').innerHTML=store.panels.map(p=>{const id=pid(p),fv=isFav(p.s);
     return `<div class="ch" data-id="${esc(id)}"><div class="hd"><b>${esc(p.s.replace(/USDT$/,''))}</b><span class="px">–</span><span class="pc"></span><span class="cd"></span>
@@ -469,7 +478,7 @@ async function refresh(){
   await Promise.all(store.panels.map(async p=>{const id=pid(p),e=cache[id],c=C[id];if(!e||!e.raw.length)return;
     try{const atEnd=c?c.chart.timeScale().scrollPosition()>-2:false,touched=await catchUp(p);
       if(!c)return;
-      if(touched==='full'||touched.length>2){setAll(id);if(atEnd)c.chart.timeScale().scrollToRealTime()}   // gap -> redraw all, stay at "now"
+      if(touched==='full'||touched.length>2){setAll(id);if(atEnd||!c.user)toNow(id)}   // gap -> redraw all, stay at "now"
       else{c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1){marks(id);adMarks(id)}}
       legend(id)}catch(err){}}));
   if(store.tab==='market')renderMarket();
@@ -560,7 +569,7 @@ $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a
   else if(a==='lock')setLock(id,!el.classList.contains('lock'));
   else if(a==='fav'){toggleFav(s);const on=isFav(s);b.classList.toggle('on',on);b.textContent=on?'★':'☆'}
   else if(a==='mtf'){if(!store.stash)store.stash={panels:store.panels,grid:store.grid};store.panels=['15m','1h','4h','1d'].map(tf=>({s,tf}));store.grid=4;renderCards()}
-  else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
+  else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.ro&&c.ro.disconnect();c.io&&c.io.disconnect();c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
 $('charts').addEventListener('change',e=>{const pv=e.target.closest('.pv');if(pv){const id=pv.closest('.ch').dataset.id,p=store.panels.find(x=>pid(x)===id);if(p){p.view=pv.value;save();applyView(id)}return}const sel=e.target.closest('.ptf');if(!sel)return;const id=sel.closest('.ch').dataset.id;
   const p=store.panels.find(x=>pid(x)===id);if(p){p.tf=sel.value;renderCards()}});
 $('mSearch').addEventListener('input',renderMarket);
@@ -587,7 +596,7 @@ setInterval(()=>{document.querySelectorAll('.ch').forEach(el=>{const id=el.datas
   el.querySelector('.cd').textContent='⏱ '+(dd?dd+'d ':'')+[h,m,sc].map(v=>String(v).padStart(2,'0')).join(':')})},1000);
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(layout,150)});
 
-renderSTf();showTab(store.tab);
+$('build').textContent=CH_BUILD;renderSTf();showTab(store.tab);
 (async()=>{try{await loadTickers()}catch(e){st('Не може да се поврзе со Binance API ('+e.message+'). Отвори во Chrome/Safari.');}
   await renderCards();if(store.tab==='charts')st('Вчитано · влечи лево за историја');setLive()})();
 }
