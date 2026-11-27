@@ -44,6 +44,9 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 .tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
 .box{position:relative;height:var(--bh);margin-top:3px}
 .cv{position:absolute;inset:0;touch-action:pan-y}
+.ch.lock .cv,.ch.lock .cv *{touch-action:none}
+.ch.lock .box{outline:1px solid var(--y);outline-offset:-1px}
+.tools .lk.on{color:var(--y)}
 .lg,.ol{position:absolute;left:4px;z-index:3;pointer-events:none;font-size:11px;display:flex;gap:2px 8px;flex-wrap:wrap;max-width:calc(100% - 70px);text-shadow:0 0 3px #181a20}
 .lg{top:1px}.ol{top:77%}
 @media(max-width:700px){.lg .m,.lg .dt,.ol .m{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}.tools button{min-width:28px;padding:2px 3px}}
@@ -101,7 +104,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <button id="backBtn" hidden>← Назад</button>
   </div>
   <div id="charts"></div>
-  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално) · „Сигнали ▾“: CCI крос 0 на горната, нов Sync↑ / Sync↓ / Desync на долната линија (затворена свеќа)<br>▲ L / ▼ S (исклучено по дифолт) = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · Fib = две допири (почеток=1, крај=0, како TradingView) · двоен клик/тап = тој графикон на цел екран + панелот (цена или A/D) · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално) · „Сигнали ▾“: CCI крос 0 на горната, нов Sync↑ / Sync↓ / Desync на долната линија (затворена свеќа)<br>▲ L / ▼ S (исклучено по дифолт) = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · Fib = две допири (почеток=1, крај=0, како TradingView) · двоен клик/тап = тој графикон на цел екран + панелот (цена или A/D) · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ✋ = на телефон сите допири одат на графиконот (pinch, влечење, растегнување на скалите), автоматски вклучено кога е максимизиран · ⟲ сега · ⤢ голем приказ</p>
 </section>
 
 <section id="v-market" hidden>
@@ -345,13 +348,18 @@ function setMode(m){mode=mode===m?null:m;pend=null;
   st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='fb'?'Fib: допри го почетокот на потегот (1), па крајот (0)':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
 // double click / double tap: THAT chart goes full screen and the tapped pane (price / A/D) takes the full height; again -> back
 // maximize / restore one chart. Remembers the page scroll and the chart's visible range, so restore lands exactly where you were.
+// ✋ touch mode: the chart gets ALL gestures on a phone (pinch, drag both ways, stretch the price/time axis);
+// the page does not scroll over it. Off = the page scrolls vertically over the chart. Maximized charts are always in this mode.
+function setLock(id,on){const el=card(id),c=C[id];if(!el)return;el.classList.toggle('lock',on);
+  const b=el.querySelector('.lk');if(b)b.classList.toggle('on',on);
+  if(c)c.chart.applyOptions({handleScroll:{vertTouchDrag:on,horzTouchDrag:true,pressedMouseMove:true,mouseWheel:true},handleScale:{pinch:true,mouseWheel:true,axisPressedMouseMove:{time:true,price:true}}})}
 const maxPrev={};
 function setBig(id,on,view){
   const el=card(id),c=C[id],pn=store.panels.find(x=>pid(x)===id);if(!el)return;
-  if(on){maxPrev[id]={y:scrollY,r:c&&c.chart.timeScale().getVisibleLogicalRange(),v:(pn&&pn.view)||'all'};el.classList.add('big');
+  if(on){const wasLk=el.classList.contains('lock');setLock(id,true);maxPrev[id]={lk:wasLk?1:0,y:scrollY,r:c&&c.chart.timeScale().getVisibleLogicalRange(),v:(pn&&pn.view)||'all'};el.classList.add('big');
     if(pn&&view){pn.view=view;save();el.querySelector('.pv').value=view;applyView(id)}
     requestAnimationFrame(()=>el.scrollIntoView({block:'start'}));return}
-  const pr=maxPrev[id];delete maxPrev[id];el.classList.remove('big');
+  const pr=maxPrev[id];delete maxPrev[id];el.classList.remove('big');if(!(pr&&pr.lk))setLock(id,false);
   const pv=pr?pr.v:'all';if(pn&&(pn.view||'all')!==pv){pn.view=pv;save();el.querySelector('.pv').value=pv;applyView(id)}
   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(pr){scrollTo(0,pr.y);if(pr.r&&C[id])C[id].chart.timeScale().setVisibleLogicalRange(pr.r)}}));
 }
@@ -431,7 +439,7 @@ function renderCards(){
     return `<div class="ch" data-id="${esc(id)}"><div class="hd"><b>${esc(p.s.replace(/USDT$/,''))}</b><span class="px">–</span><span class="pc"></span><span class="cd"></span>
     <span class="tools"><select class="ptf" aria-label="TF">${TFS.map(t=>`<option${t===p.tf?' selected':''}>${t}</option>`).join('')}</select>
     <select class="pv" aria-label="Приказ">${[['all','Сè'],['price','Цена'],['obv','A/D']].map(([k,l])=>`<option value="${k}"${(p.view||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
-    <button data-a="mtf">MTF</button><button data-a="now" aria-label="Назад на сега">⟲</button><button data-a="big" aria-label="Голем приказ">⤢</button>
+    <button data-a="mtf">MTF</button><button data-a="lock" class="lk" aria-label="Допир само за графиконот">✋</button><button data-a="now" aria-label="Назад на сега">⟲</button><button data-a="big" aria-label="Голем приказ">⤢</button>
     <button data-a="fav" class="fv${fv?' on':''}" aria-label="Favorite">${fv?'★':'☆'}</button><button data-a="x" aria-label="Отстрани">×</button></span></div>
     <div class="box"><div class="lg"></div><div class="ol"></div><div class="cv"></div></div></div>`}).join('')||'<p class="note">Нема графикони. Додај коин или отвори од Пазар/Скенер.</p>';
   $('backBtn').hidden=!store.stash;
@@ -537,6 +545,7 @@ $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a
   const el=b.closest('.ch'),id=el.dataset.id,[s]=id.split('@'),c=C[id],a=b.dataset.a;
   if(a==='now'&&c)c.chart.timeScale().scrollToRealTime();
   else if(a==='big')setBig(id,!el.classList.contains('big'));
+  else if(a==='lock')setLock(id,!el.classList.contains('lock'));
   else if(a==='fav'){toggleFav(s);const on=isFav(s);b.classList.toggle('on',on);b.textContent=on?'★':'☆'}
   else if(a==='mtf'){if(!store.stash)store.stash={panels:store.panels,grid:store.grid};store.panels=['15m','1h','4h','1d'].map(tf=>({s,tf}));store.grid=4;renderCards()}
   else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
