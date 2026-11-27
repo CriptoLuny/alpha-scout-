@@ -147,8 +147,10 @@ store.stf=store.stf||['1h','4h'];store.sig=store.sig??true;store.ext=store.ext||
 const q=new URLSearchParams(location.search);
 if(q.get('s')||q.get('tf')){
   const tf=TFS.includes(q.get('tf'))?q.get('tf'):store.tf;store.tf=tf;
-  if(q.get('s')&&q.get('mk')){const s0=norm(q.get('s').split(',')[0]);store.ext[s0]=store.ext[s0]||[];
-    q.get('mk').split(',').forEach(x=>{const[label,side,ms]=x.split('~');if(+ms>0&&!store.ext[s0].some(e=>e.t===+ms&&e.label===label))store.ext[s0].push({label:String(label).slice(0,24),side:side==='S'?'S':'L',t:+ms})});
+  // mk entries: label~L|S~ms (for the first coin, Telegram) or SYM~label~L|S~ms (any coin, αSCOUT 📈 button)
+  if(q.get('s')&&q.get('mk')){const s0=norm(q.get('s').split(',')[0]);
+    q.get('mk').split(',').forEach(x=>{const a=x.split('~'),[sy,label,side,ms]=a.length>=4?[norm(a[0]),a[1],a[2],a[3]]:[s0,a[0],a[1],a[2]];if(!sy)return;
+      const L=store.ext[sy]=store.ext[sy]||[];if(+ms>0&&!L.some(e=>e.t===+ms&&e.label===label))L.push({label:String(label).slice(0,24),side:side==='S'?'S':'L',t:+ms})});
     const lim=Date.now()-30*864e5;for(const k in store.ext)store.ext[k]=store.ext[k].filter(e=>e.t>lim).slice(-20)}
   if(q.get('s')){store.panels=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))].slice(0,24).map(s=>({s,tf}));store.tab='charts';store.stash=null}
   try{history.replaceState(null,'',location.pathname)}catch(e){}

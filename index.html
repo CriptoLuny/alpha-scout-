@@ -1287,6 +1287,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-27-b  📈 CHARTS also sends the αSCOUT signals of the sent coins (last 48h): CLEAN15 grade+side at its bar,
+//    🔥 ПАЛИ / ⚡ EARLY (_igAlerted), 🧯 ГАСИ (_gaAlerted) -> blue arrows in charts.html. Display only; no scan, gate,
+//    SCORE, ALARM or bot logic changed.
 //  2026-11-27-a  📈 CHARTS link in the control row (next to 🧮) -> ./charts.html, a separate page.
 //    Sends the first 12 coins of the CURRENT filtered view (applyFilters, same sort) + the scan TF (1m->5m, all->15m).
 //    charts.html: interactive multi-charts (MA25/50/99/200, volume, OBV+MA7, history, zoom, sync crosshair,
@@ -1396,7 +1399,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-27-a';
+const APP_BUILD='2026-11-27-b';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3943,7 +3946,22 @@ function openCharts(){
   const seen=new Set(),coins=[];
   for(const x of applyFilters()){if(!seen.has(x.coin)){seen.add(x.coin);coins.push(x.coin+'USDT');}if(coins.length>=12)break;}
   const tf=({'1m':'5m','all':'15m'})[S.tf]||S.tf;
-  location.href='./charts.html?tf='+encodeURIComponent(tf)+(coins.length?'&s='+encodeURIComponent(coins.join(',')):'');
+  // 2026-11-27-b: also send the current αSCOUT signals of these coins (last 48h) -> blue arrows on their bar
+  //   CLEAN15 (grade != WAIT, at barT) · 🔥 ПАЛИ / ⚡ EARLY (_igAlerted) · 🧯 ГАСИ (_gaAlerted). Format SYM~label~L|S~ms
+  const mk=[],now=Date.now(),ok=t=>t>0&&now-t<48*3600e3;
+  try{
+    coins.forEach(sym=>{const c=sym.replace(/USDT$/,'');
+      const cl=typeof _clean==='object'&&_clean[c];
+      if(cl&&cl.grade&&cl.grade!=='WAIT'&&(cl.best==='L'||cl.best==='S')&&ok(cl.barT))mk.push([sym,'✅'+cl.grade+' '+cl.best,cl.best,cl.barT]);
+      if(typeof _igAlerted==='object'){
+        const ig=(typeof _igRes!=='undefined'&&_igRes||[]).find(r=>r.coin===c),sd=ig&&ig.g&&ig.g.dir<0?'S':'L';
+        if(ok(_igAlerted[c]))mk.push([sym,'🔥 ПАЛИ',sd,_igAlerted[c]]);
+        if(ok(_igAlerted[c+'#E']))mk.push([sym,'⚡ EARLY',sd,_igAlerted[c+'#E']]);}
+      if(typeof _gaAlerted==='object'&&ok(_gaAlerted[c]))mk.push([sym,'🧯 ГАСИ','S',_gaAlerted[c]]);
+    });
+  }catch(e){}
+  location.href='./charts.html?tf='+encodeURIComponent(tf)+(coins.length?'&s='+encodeURIComponent(coins.join(',')):'')+
+    (mk.length?'&mk='+encodeURIComponent(mk.map(m=>m.join('~')).join(',')):'');
 }
 function setTF(tf,el){S.tf=tf;document.querySelectorAll('.tf').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(S.scanning){stopScan();setTimeout(startScan,400);}}
 function setFil(f,el){
