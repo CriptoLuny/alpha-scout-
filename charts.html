@@ -32,7 +32,8 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 #addIn{width:150px}
 #charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
 .ch{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:5px 6px}
-.ch.big{grid-column:1/-1}.ch.big .box{height:calc(100vh - 150px)}
+.ch{scroll-margin-top:var(--hh,0px)}
+.ch.big{grid-column:1/-1}.ch.big .box{height:calc(100vh - var(--hh,100px) - 60px)}
 .hd{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap}
 .hd b{font-size:17px}.px{font-weight:600}
 .cd{color:var(--mut);font-size:12px}
@@ -42,7 +43,7 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 .tools button{background:none;border:0;color:var(--mut);min-height:32px;min-width:30px;padding:2px 5px;font-size:14px}
 .tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
 .box{position:relative;height:var(--bh);margin-top:3px}
-.cv{position:absolute;inset:0;touch-action:manipulation}
+.cv{position:absolute;inset:0;touch-action:pan-y}
 .lg,.ol{position:absolute;left:4px;z-index:3;pointer-events:none;font-size:11px;display:flex;gap:2px 8px;flex-wrap:wrap;max-width:calc(100% - 70px);text-shadow:0 0 3px #181a20}
 .lg{top:1px}.ol{top:77%}
 @media(max-width:700px){.lg .m,.lg .dt,.ol .m{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}.tools button{min-width:28px;padding:2px 3px}}
@@ -156,13 +157,17 @@ let store={};try{store=JSON.parse(localStorage.getItem('ascout-charts')||'{}')}c
 store.panels=store.panels||['CLOUSDT','BEATUSDT','KITEUSDT','SIRENUSDT'].map(s=>({s,tf:'4h'}));
 store.tf=store.tf||'4h';store.grid=store.grid||4;store.sync=store.sync??true;store.live=store.live??true;
 store.stf=store.stf||['1h','4h'];store.mk=Object.assign({ls:false,ext:true,cci:true,sync:true,desync:true},store.mk||{});store.ext=store.ext||{};store.tab=store.tab||'charts';
+// Telegram sends ASCII codes (clickable links); turn them into the labels shown on the chart
+function mkLabel(x,sd){x=String(x||'');const M={GASI:'🧯 ГАСИ',PALI:'🔥 ПАЛИ',RUN:'🔥 RUN',EARLY:'⚡ EARLY'};
+  if(M[x])return M[x];const c=x.match(/^C15([A-Z]{1,2})$/);if(c)return '✅'+c[1]+' '+sd;return x.slice(0,24)}
 const q=new URLSearchParams(location.search);
 if(q.get('s')||q.get('tf')){
   const tf=TFS.includes(q.get('tf'))?q.get('tf'):store.tf;store.tf=tf;
   // mk entries: label~L|S~ms (for the first coin, Telegram) or SYM~label~L|S~ms (any coin, αSCOUT 📈 button)
   if(q.get('s')&&q.get('mk')){const s0=norm(q.get('s').split(',')[0]);
     q.get('mk').split(',').forEach(x=>{const a=x.split('~'),[sy,label,side,ms]=a.length>=4?[norm(a[0]),a[1],a[2],a[3]]:[s0,a[0],a[1],a[2]];if(!sy)return;
-      const L=store.ext[sy]=store.ext[sy]||[];if(+ms>0&&!L.some(e=>e.t===+ms&&e.label===label))L.push({label:String(label).slice(0,24),side:side==='S'?'S':'L',t:+ms})});
+      const sd=side==='S'?'S':'L',lb=mkLabel(label,sd);
+      const L=store.ext[sy]=store.ext[sy]||[];if(+ms>0&&!L.some(e=>e.t===+ms&&e.label===lb))L.push({label:lb,side:sd,t:+ms})});
     const lim=Date.now()-30*864e5;for(const k in store.ext)store.ext[k]=store.ext[k].filter(e=>e.t>lim).slice(-20)}
   if(q.get('s')){store.panels=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))].slice(0,24).map(s=>({s,tf}));store.tab='charts';store.stash=null}
   try{history.replaceState(null,'',location.pathname)}catch(e){}
@@ -236,6 +241,7 @@ function layout(){
   const g=store.grid,narrow=innerWidth<700,cols=narrow?1:g===1?1:g===2?2:g===4?2:3,rows=narrow?({1:1,2:2,4:2,6:3})[g]||2:Math.ceil(g/cols);
   const ch=$('charts');ch.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;ch.classList.toggle('dense',cols>1||(narrow&&rows>2));
   const used=document.querySelector('header').offsetHeight+(narrow?0:(document.querySelector('#v-charts .bar').offsetHeight||0));
+  document.documentElement.style.setProperty('--hh',document.querySelector('header').offsetHeight+'px');
   document.documentElement.style.setProperty('--bh',Math.max(180,Math.floor((innerHeight-used)/rows)-48)+'px');
   for(const id in C){marks(id);adMarks(id)}
 }
@@ -258,7 +264,7 @@ function makeChart(id){
   const obm=chart.addLineSeries({color:ADC.gray,lineWidth:2,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false,priceFormat:{type:'volume'}});   // A/D - offset, OBV sync colour
   chart.priceScale('left').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
   const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
-  chart.subscribeClick(p=>{if(mode){onClick(id,p);return}dbl(id,p)});
+  chart.subscribeClick(p=>{if(mode)onClick(id,p)});bindDbl(id);
   chart.subscribeCrosshairMove(p=>{
     c.hover=(p&&p.logical!=null&&p.time!=null&&c.d)?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):null;legend(id);
     if(syncing||!store.sync)return;syncing=true;
@@ -338,16 +344,30 @@ function setMode(m){mode=mode===m?null:m;pend=null;
   document.querySelectorAll('#draw [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
   st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='fb'?'Fib: допри го почетокот на потегот (1), па крајот (0)':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
 // double click / double tap: THAT chart goes full screen and the tapped pane (price / A/D) takes the full height; again -> back
-let tap=null;
-function dbl(id,p){
-  if(!p||!p.point)return;const now=Date.now();
-  if(tap&&tap.id===id&&now-tap.t<350&&Math.hypot(p.point.x-tap.x,p.point.y-tap.y)<30){
-    tap=null;const pn=store.panels.find(x=>pid(x)===id),el=card(id);if(!pn||!el)return;
-    const v=pn.view||'all',h=el.querySelector('.cv').clientHeight,back=v!=='all'||el.classList.contains('big');
-    pn.view=back?'all':(p.point.y>h*0.76?'obv':'price');save();
-    el.classList.toggle('big',!back);el.querySelector('.pv').value=pn.view;applyView(id);
-    if(!back)el.scrollIntoView({block:'start'});return}
-  tap={id,t:now,x:p.point.x,y:p.point.y};
+// maximize / restore one chart. Remembers the page scroll and the chart's visible range, so restore lands exactly where you were.
+const maxPrev={};
+function setBig(id,on,view){
+  const el=card(id),c=C[id],pn=store.panels.find(x=>pid(x)===id);if(!el)return;
+  if(on){maxPrev[id]={y:scrollY,r:c&&c.chart.timeScale().getVisibleLogicalRange(),v:(pn&&pn.view)||'all'};el.classList.add('big');
+    if(pn&&view){pn.view=view;save();el.querySelector('.pv').value=view;applyView(id)}
+    requestAnimationFrame(()=>el.scrollIntoView({block:'start'}));return}
+  const pr=maxPrev[id];delete maxPrev[id];el.classList.remove('big');
+  const pv=pr?pr.v:'all';if(pn&&(pn.view||'all')!==pv){pn.view=pv;save();el.querySelector('.pv').value=pv;applyView(id)}
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(pr){scrollTo(0,pr.y);if(pr.r&&C[id])C[id].chart.timeScale().setVisibleLogicalRange(pr.r)}}));
+}
+// double click (mouse) / double tap (touch) on a chart: big + the pane under the finger (price or A/D); again -> back.
+// Native events on the chart box, so it works on iPhone too (the chart library does not report taps reliably there).
+function dblAt(id,yRel){if(mode)return;const el=card(id);if(!el)return;
+  if(el.classList.contains('big'))setBig(id,false);else setBig(id,true,yRel>0.76?'obv':'price')}
+function bindDbl(id){
+  const box=card(id).querySelector('.box');let last=null,multi=false;
+  box.addEventListener('dblclick',e=>{const r=box.getBoundingClientRect();dblAt(id,(e.clientY-r.top)/r.height)});
+  box.addEventListener('touchstart',e=>{if(e.touches.length>1)multi=true},{passive:true});
+  box.addEventListener('touchend',e=>{
+    if(e.touches.length){return}if(multi){multi=false;last=null;return}
+    const t=e.changedTouches[0],now=Date.now(),r=box.getBoundingClientRect();
+    if(last&&now-last.t<320&&Math.hypot(t.clientX-last.x,t.clientY-last.y)<30){last=null;e.preventDefault();dblAt(id,(t.clientY-r.top)/r.height);return}
+    last={t:now,x:t.clientX,y:t.clientY}},{passive:false});
 }
 function onClick(id,p){
   const c=C[id];if(!mode||!c||!c.d||!p||!p.point)return;const s=id.split('@')[0],dw=drw(s);
@@ -516,7 +536,7 @@ $('backBtn').addEventListener('click',()=>{if(!store.stash)return;store.panels=s
 $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   const el=b.closest('.ch'),id=el.dataset.id,[s]=id.split('@'),c=C[id],a=b.dataset.a;
   if(a==='now'&&c)c.chart.timeScale().scrollToRealTime();
-  else if(a==='big'){el.classList.toggle('big');el.scrollIntoView({block:'start',behavior:'smooth'})}
+  else if(a==='big')setBig(id,!el.classList.contains('big'));
   else if(a==='fav'){toggleFav(s);const on=isFav(s);b.classList.toggle('on',on);b.textContent=on?'★':'☆'}
   else if(a==='mtf'){if(!store.stash)store.stash={panels:store.panels,grid:store.grid};store.panels=['15m','1h','4h','1d'].map(tf=>({s,tf}));store.grid=4;renderCards()}
   else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
