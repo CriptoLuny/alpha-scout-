@@ -81,10 +81,13 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <span class="sep"></span>
     <input id="addIn" placeholder="Додај: BTC, ETH" aria-label="Додај коин"><button id="addBtn">+</button>
     <button id="favLoad">⭐ Favorites</button>
+    <span class="sep"></span>
+    <span class="lbl">Цртај:</span><div class="chips" id="draw"><button class="chip" data-m="lv">─ Ниво</button><button class="chip" data-m="tl">╱ Тренд</button><button class="chip" data-m="del">🗑</button></div>
+    <button class="chip" id="sigBtn">▲▼ Сигнали</button>
     <button id="backBtn" hidden>← Назад</button>
   </div>
   <div id="charts"></div>
-  <p class="note">Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+  <p class="note">▲ L / ▼ S = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
 </section>
 
 <section id="v-market" hidden>
@@ -139,10 +142,13 @@ const st=t=>$('status').textContent=t;
 let store={};try{store=JSON.parse(localStorage.getItem('ascout-charts')||'{}')}catch(e){}
 store.panels=store.panels||['CLOUSDT','BEATUSDT','KITEUSDT','SIRENUSDT'].map(s=>({s,tf:'4h'}));
 store.tf=store.tf||'4h';store.grid=store.grid||4;store.sync=store.sync??true;store.live=store.live??true;
-store.stf=store.stf||['1h','4h'];store.tab=store.tab||'charts';
+store.stf=store.stf||['1h','4h'];store.sig=store.sig??true;store.ext=store.ext||{};store.tab=store.tab||'charts';
 const q=new URLSearchParams(location.search);
 if(q.get('s')||q.get('tf')){
   const tf=TFS.includes(q.get('tf'))?q.get('tf'):store.tf;store.tf=tf;
+  if(q.get('s')&&q.get('mk')){const s0=norm(q.get('s').split(',')[0]);store.ext[s0]=store.ext[s0]||[];
+    q.get('mk').split(',').forEach(x=>{const[label,side,ms]=x.split('~');if(+ms>0&&!store.ext[s0].some(e=>e.t===+ms&&e.label===label))store.ext[s0].push({label:String(label).slice(0,24),side:side==='S'?'S':'L',t:+ms})});
+    const lim=Date.now()-30*864e5;for(const k in store.ext)store.ext[k]=store.ext[k].filter(e=>e.t>lim).slice(-20)}
   if(q.get('s')){store.panels=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))].slice(0,24).map(s=>({s,tf}));store.tab='charts';store.stash=null}
   try{history.replaceState(null,'',location.pathname)}catch(e){}
 }
@@ -169,13 +175,14 @@ function rsi(c,n=14){const o=new Array(c.length).fill(null);if(c.length<=n)retur
   for(let i=n+1;i<c.length;i++){const d=c[i]-c[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=l?100-100/(1+g/l):100}return o}
 function calc(k){const c=k.map(x=>x.c),m={};for(const[n]of MAS)m[n]=sma(c,n);
   const obv=[0];for(let i=1;i<k.length;i++)obv[i]=obv[i-1]+(c[i]>c[i-1]?k[i].v:c[i]<c[i-1]?-k[i].v:0);
-  return{k,m,obv,om:sma(obv,7),dec:decOf(c[c.length-1])}}
+  const e12=ema(c,12),e26=ema(c,26),mc=c.map((_,i)=>e12[i]-e26[i]);
+  return{k,m,obv,om:sma(obv,7),mc,sg:ema(mc,9),rs:rsi(c),dec:decOf(c[c.length-1])}}
 
 // signals on the last CLOSED bar (Lc); the open bar is only shown as price
-function signal(d){
-  const{k,m,obv,om}=d,Lc=k.length-2;
+function signal(d,at){
+  const{k,m,obv,om,mc,sg}=d,Lc=at??k.length-2;
   if(Lc<35)return{tr:'Нов',tags:['малку податоци'],sc:0};
-  const c=k[Lc].c,a=m[25],b=m[99],s2=m[200][Lc],cl=k.map(x=>x.c);let sc=0,tr='Range';const tags=[];
+  const c=k[Lc].c,a=m[25],b=m[99],s2=m[200][Lc];let sc=0,tr='Range';const tags=[];
   if(b[Lc]!=null){
     if(c>(s2??b[Lc])&&a[Lc]>b[Lc]){tr='Bull';sc+=2}else if(c<(s2??b[Lc])&&a[Lc]<b[Lc]){tr='Bear';sc-=2}
     for(let i=Lc;i>Lc-5;i--){if(b[i-1]==null)break;
@@ -183,11 +190,10 @@ function signal(d){
       if(a[i-1]>=b[i-1]&&a[i]<b[i]){tags.push('MA25×99↓');sc-=2;break}}}
   const prev=k.slice(Lc-20,Lc),hh=Math.max(...prev.map(x=>x.h)),ll=Math.min(...prev.map(x=>x.l));
   if(c>hh){tags.push('Breakout '+fmt(hh,d.dec));sc+=2}else if(c<ll){tags.push('Breakdown '+fmt(ll,d.dec));sc-=2}
-  const e12=ema(cl,12),e26=ema(cl,26),mc=cl.map((_,i)=>e12[i]-e26[i]),sg=ema(mc,9);
   for(let i=Lc;i>Lc-3;i--){if(mc[i-1]<=sg[i-1]&&mc[i]>sg[i]){tags.push('MACD↑');sc+=1;break}if(mc[i-1]>=sg[i-1]&&mc[i]<sg[i]){tags.push('MACD↓');sc-=1;break}}
   const av=prev.reduce((s,x)=>s+x.v,0)/prev.length,vx=av?k[Lc].v/av:0;
   if(vx>=2.5){const upb=k[Lc].c>=k[Lc].o;tags.push('Vol ×'+vx.toFixed(1)+(upb?'↑':'↓'));sc+=upb?1:-1}
-  const r=rsi(cl)[Lc];if(r!=null&&(r>=70||r<=30))tags.push('RSI '+r.toFixed(0)+(r>=70?' OB':' OS'));
+  const r=d.rs[Lc];if(r!=null&&(r>=70||r<=30))tags.push('RSI '+r.toFixed(0)+(r>=70?' OB':' OS'));
   const ms=[a[Lc],m[50][Lc],b[Lc]].filter(v=>v!=null);
   if(ms.length===3&&(Math.max(...ms)-Math.min(...ms))/c<0.015)tags.push('Компресија MA');
   if(obv[Lc]>om[Lc]){sc+=1;tags.push('OBV↑')}else{sc-=1;tags.push('OBV↓')}
@@ -217,7 +223,8 @@ function makeChart(id){
   const obv=chart.addLineSeries({color:'#f0b90b',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
   const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
   chart.priceScale('obv').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
-  const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null};
+  const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
+  chart.subscribeClick(p=>onClick(id,p));
   chart.subscribeCrosshairMove(p=>{
     c.hover=(p&&p.logical!=null&&p.time!=null&&c.d)?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):null;legend(id);
     if(syncing||!store.sync)return;syncing=true;
@@ -232,13 +239,56 @@ function makeChart(id){
 }
 function findIdx(k,t){if(!k.length||t<k[0].t)return-1;let lo=0,hi=k.length-1;while(lo<hi){const m=(lo+hi+1)>>1;k[m].t<=t?lo=m:hi=m-1}return lo}
 function setAll(id){
-  const c=C[id];if(!c)return;const raw=cache[id].raw,d=c.d=calc(raw),pf={type:'price',precision:d.dec,minMove:10**-d.dec};
+  const c=C[id];if(!c)return;const raw=cache[id].raw,d=c.d=calc(raw),pf={type:'custom',minMove:10**-d.dec,formatter:v=>v<0?'':v.toFixed(d.dec)};
   c.cs.applyOptions({priceFormat:pf});
   c.vol.setData(d.k.map(x=>({time:T(x.t),value:x.v,color:x.c>=x.o?'rgba(46,189,133,.4)':'rgba(246,70,93,.4)'})));
   c.cs.setData(d.k.map(x=>({time:T(x.t),open:x.o,high:x.h,low:x.l,close:x.c})));
   for(const[n]of MAS){c.ma[n].applyOptions({priceFormat:pf});c.ma[n].setData(d.k.map((x,i)=>d.m[n][i]==null?null:{time:T(x.t),value:d.m[n][i]}).filter(Boolean))}
   c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.obv[i]})));
   c.obm.setData(d.k.map((x,i)=>d.om[i]==null?null:{time:T(x.t),value:d.om[i]}).filter(Boolean));
+  marks(id);drawAll(id);
+}
+// ---------- signals on the chart ----------
+// L/S arrow = the first CLOSED bar where the scanner score crosses +-3 (same rules as the Скенер tab), never on the open bar.
+// ext = markers sent by the αSCOUT Telegram bot (?mk=label~L|S~ms), kept per coin for 30 days.
+function marks(id){
+  const c=C[id];if(!c||!c.d)return;const d=c.d,k=d.k,s=id.split('@')[0],out=[];
+  // a repeat in the same direction only after 20 bars, so a choppy score does not paint an arrow on every bar
+  if(store.sig){let prev=0,last=0,li=-99;for(let i=36;i<=k.length-2;i++){const sc=signal(d,i).sc,z=sc>=3?1:sc<=-3?-1:0;
+    if(z&&z!==prev&&(z!==last||i-li>=20)){out.push(z>0?{time:T(k[i].t),position:'belowBar',color:'#2ebd85',shape:'arrowUp',text:'L '+sc}:{time:T(k[i].t),position:'aboveBar',color:'#f6465d',shape:'arrowDown',text:'S '+sc});last=z;li=i}prev=z}}
+  for(const e of (store.ext||{})[s]||[]){const j=findIdx(k,e.t);if(j<0)continue;
+    out.push({time:T(k[j].t),position:e.side==='S'?'aboveBar':'belowBar',color:'#00c2ff',shape:e.side==='S'?'arrowDown':'arrowUp',text:e.label})}
+  out.sort((a,b)=>a.time-b.time);c.cs.setMarkers(out);
+}
+// ---------- drawings (per coin, shown on every TF) ----------
+let mode=null,pend=null;
+const drw=s=>{store.draw=store.draw||{};return store.draw[s]=store.draw[s]||{lv:[],tl:[]}};
+function drawAll(id){
+  const c=C[id];if(!c||!c.d)return;const s=id.split('@')[0],dw=drw(s),k=c.d.k;
+  (c.pl||[]).forEach(l=>c.cs.removePriceLine(l));(c.tls||[]).forEach(x=>c.chart.removeSeries(x));c.pl=[];c.tls=[];
+  dw.lv.forEach(p=>c.pl.push(c.cs.createPriceLine({price:p,color:'#00c2ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:''})));
+  dw.tl.forEach(t=>{const i=findIdx(k,t.a.t),j=findIdx(k,t.b.t);if(i<0||j<0||i===j)return;
+    const ser=c.chart.addLineSeries({color:'#00c2ff',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false,priceFormat:{type:'custom',minMove:10**-c.d.dec,formatter:v=>v.toFixed(c.d.dec)}});
+    ser.setData([{time:T(k[i].t),value:t.a.p},{time:T(k[j].t),value:t.b.p}].sort((x,y)=>x.time-y.time));c.tls.push(ser)});
+}
+function redrawSym(s){for(const id in C)if(id.split('@')[0]===s)drawAll(id);save()}
+function setMode(m){mode=mode===m?null:m;pend=null;
+  document.querySelectorAll('#draw [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+  st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
+function onClick(id,p){
+  const c=C[id];if(!mode||!c||!c.d||!p||!p.point)return;const s=id.split('@')[0],dw=drw(s);
+  const price=c.cs.coordinateToPrice(p.point.y);if(price==null)return;
+  const lg=p.logical!=null?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):c.d.k.length-1,t=c.d.k[lg].t;
+  if(mode==='lv'){dw.lv.push(price);setMode(null);redrawSym(s);return}
+  if(mode==='tl'){if(!pend||pend.id!==id){pend={id,a:{t,p:price}};st('Тренд линија: допри ја втората точка');return}
+    dw.tl.push({a:pend.a,b:{t,p:price}});setMode(null);redrawSym(s);return}
+  if(mode==='del'){const ts=c.chart.timeScale(),X=v=>ts.timeToCoordinate(T(v)),Y=v=>c.cs.priceToCoordinate(v);let best=null,bd=14;
+    dw.lv.forEach((v,i)=>{const yy=Y(v);if(yy==null)return;const dd=Math.abs(yy-p.point.y);if(dd<bd){bd=dd;best=['lv',i]}});
+    dw.tl.forEach((v,i)=>{const ia=findIdx(c.d.k,v.a.t),ib=findIdx(c.d.k,v.b.t);if(ia<0||ib<0)return;
+      const x1=X(c.d.k[ia].t),y1=Y(v.a.p),x2=X(c.d.k[ib].t),y2=Y(v.b.p);if([x1,y1,x2,y2].some(z=>z==null))return;
+      const L2=(x2-x1)**2+(y2-y1)**2,u=L2?Math.max(0,Math.min(1,((p.point.x-x1)*(x2-x1)+(p.point.y-y1)*(y2-y1))/L2)):0,
+        dd=Math.hypot(p.point.x-(x1+u*(x2-x1)),p.point.y-(y1+u*(y2-y1)));if(dd<bd){bd=dd;best=['tl',i]}});
+    if(best){dw[best[0]].splice(best[1],1);redrawSym(s);st('Избришано')}}
 }
 function updIdx(id,i){
   const c=C[id],d=c.d,x=d.k[i],t=T(x.t);
@@ -301,7 +351,7 @@ async function refresh(){
   await Promise.all(store.panels.map(async p=>{const id=pid(p),e=cache[id],c=C[id];if(!e||!e.raw.length)return;
     try{const fresh=await klines(p.s,p.tf,2),touched=[];
       for(const x of fresh){const L=e.raw.length-1;if(x.t===e.raw[L].t){e.raw[L]=x;touched.push(L)}else if(x.t>e.raw[L].t){e.raw.push(x);touched.push(L+1)}}
-      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));legend(id)}}catch(err){}}));
+      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1)marks(id);legend(id)}}catch(err){}}));
   if(store.tab==='market')renderMarket();
   st('Live · '+new Date().toLocaleTimeString('mk-MK'));
 }
@@ -374,6 +424,9 @@ $('sync').addEventListener('click',()=>{store.sync=!store.sync;save();renderTfAl
 const addSyms=()=>{const add=$('addIn').value.split(/[\s,;]+/).map(norm).filter(Boolean);if(!add.length)return;
   store.panels=add.map(s=>({s,tf:store.tf})).concat(store.panels);$('addIn').value='';renderCards()};
 $('addBtn').addEventListener('click',addSyms);$('addIn').addEventListener('keydown',e=>{if(e.key==='Enter')addSyms()});
+$('draw').addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(b)setMode(b.dataset.m)});
+const sigUi=()=>$('sigBtn').classList.toggle('on',!!store.sig);
+$('sigBtn').addEventListener('click',()=>{store.sig=!store.sig;save();sigUi();for(const id in C)marks(id)});sigUi();
 $('favLoad').addEventListener('click',()=>{const f=[...favSet()];if(!f.length){st('Немаш Favorites – додај со ☆.');return}setPanels(f.map(norm).slice(0,24))});
 $('backBtn').addEventListener('click',()=>{if(!store.stash)return;store.panels=store.stash.panels;store.grid=store.stash.grid;store.stash=null;renderCards()});
 $('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;

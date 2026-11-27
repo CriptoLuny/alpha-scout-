@@ -306,7 +306,7 @@ function card(x) {
     `📐 ${esc(x.trend)} ${x.votes > 0 ? '+' : ''}${esc(x.votes)} · ${esc(x.loc)}${x.score != null ? ' · S' + x.score : ''} ${tags}`;
   if (x.flags.length) t += `\n🚩 ${esc(x.flags.join(' · '))}`;
   if (x.go !== 'GO' && x.why.length) t += `\n⛔ ${esc(x.why.join(' · '))}`;
-  t += `\n<a href="https://www.binance.com/en/futures/${x.coin}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${x.coin}USDT">CoinGlass</a>`;
+  t += '\n' + binLinks(x.coin, { label: '✅' + x.grade + (L ? ' L' : ' S'), side: L ? 'L' : 'S', t: x.closeT || x.t0 || Date.now() });
   return t;
 }
 const head = r => `<b>αSCOUT ${esc(state.lastFull?.ver || '')} ${esc(state.lastFull?.code || '')}</b> · 15m ${hhmm(r.rows[0]?.closeT || Date.now())} · A${r.k.A} B${r.k.B} / ${r.k.n}`;
@@ -370,7 +370,10 @@ async function loadAlarmPage() {
 }
 const pc = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
 const fp = p => !(p > 0) ? '—' : p >= 1000 ? p.toFixed(1) : p >= 1 ? p.toFixed(4) : p >= 0.01 ? p.toFixed(5) : p.toPrecision(4);
-const binLinks = c => `<a href="https://www.binance.com/en/futures/${c}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${c}USDT">CoinGlass</a>`;
+// 2026-11-27-b: 📈 link opens charts.html on 15m with this alarm drawn as a marker on its bar (label~L|S~ms)
+const chartUrl = (c, label, side, ms) => CFG.pageUrl.replace(/\/?$/, '/') + 'charts.html?tf=15m&s=' + encodeURIComponent(c + 'USDT') +
+  (ms > 0 ? '&mk=' + encodeURIComponent(label + '~' + side + '~' + Math.round(ms)) : '');
+const binLinks = (c, mk) => `<a href="${chartUrl(c, mk?.label || '', mk?.side || 'L', mk?.t || 0)}">📈 Графикон</a> · <a href="https://www.binance.com/en/futures/${c}USDT">Binance</a> · <a href="https://www.coinglass.com/tv/Binance_${c}USDT">CoinGlass</a>`;
 function leadTxt(e) {
   const L = state.igLog[e.coin]?.first;
   if (!L || !(L.px > 0) || !(e.pxN > 0)) return '';
@@ -384,7 +387,7 @@ function igMsg(e) {
       `PX ${esc(e.px)} · врв ${esc(e.peak)} (${pc(-e.dd)}, −${(+e.ddAtr).toFixed(1)} ATR) · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
       `потег ${pc(e.leg)} · ${e.sp} свеќи без нов врв · retrace ${(e.retr * 100).toFixed(0)}% · taker ${(e.taker * 100).toFixed(0)}%B\n` +
       `OBV↓ ${yn(e.obvDiv)} A/D↓ ${yn(e.adDiv)} · OI од врвот ${e.oiChg == null ? 'n/a' : (e.oiChg >= 0 ? '+' : '') + (+e.oiChg).toFixed(1) + '%'}${e.trapped ? ' (заробени лонгови)' : e.unwind ? ' (squeeze се одмотува)' : ''} · мом ${yn(e.mom)} · фитил ${yn(e.wick >= 0.5)}\n` +
-      `➡ Крај на тренд: без нов лонг / заштити профит. Шорт само по план: ретест .236 ${esc(e.f236)}, SL над ${esc(e.peak)}, цели .382 ${esc(e.f382)} / .5 ${esc(e.f5)}\n` + binLinks(e.coin);
+      `➡ Крај на тренд: без нов лонг / заштити профит. Шорт само по план: ретест .236 ${esc(e.f236)}, SL над ${esc(e.peak)}, цели .382 ${esc(e.f382)} / .5 ${esc(e.f5)}\n` + binLinks(e.coin, { label: '🧯 ГАСИ', side: 'S', t: e.t || Date.now() });
   }
   const up = e.dir > 0, run = e.kind === 'RUN', early = e.kind === 'EARLY';
   // v1.7 plan texts from /igstats 240h: after 🔥 the median 4h close is -3%, a .618 pull-back long hit TP 1 of 19;
@@ -398,7 +401,7 @@ function igMsg(e) {
   return head + '\n' +
     `PX ${esc(e.px)} · 5m ${pc(e.d5)} · 15m ${pc(e.d15)} · 24h ${(+e.chg24 >= 0 ? '+' : '') + (+e.chg24).toFixed(1)}%\n` +
     `vol ×${(+e.volX).toFixed(1)} (bar ×${(+e.barX).toFixed(0)}${early && e.lastX != null ? ', последна ×' + (+e.lastX).toFixed(0) : ''}) · пробив ${pc(e.brk)} · OI◆ ${e.oi == null ? 'n/a' : (e.oi >= 0 ? '+' : '') + (+e.oi).toFixed(1) + '%'} · taker ${(e.taker * 100).toFixed(0)}%B · OBV ${e.obv ? '✔' : '✗'} A/D ${e.ad ? '✔' : '✗'}\n` +
-    `база ${esc(e.lo)}–${esc(e.hi)}${e.chase ? ' · ⚠' + esc(e.chase) : ''}${leadTxt(e)}\n${plan}\n` + binLinks(e.coin);
+    `база ${esc(e.lo)}–${esc(e.hi)}${e.chase ? ' · ⚠' + esc(e.chase) : ''}${leadTxt(e)}\n${plan}\n` + binLinks(e.coin, { label: early ? '⚡ EARLY' : run ? '🔥 RUN' : '🔥 ПАЛИ', side: up ? 'L' : 'S', t: e.t || Date.now() });
 }
 // candidate log: first time each coin shows up in the ALARM sweep (any phase) -> how early could we have known
 function logCands(cands, t) {
