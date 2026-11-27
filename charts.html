@@ -189,7 +189,7 @@ async function loadFunding(){const t=await j('/fapi/v1/premiumIndex');fund={};t.
 async function loadInfo(){if(info)return info;const e=await j('/fapi/v1/exchangeInfo');info={};
   e.symbols.forEach(s=>{if(s.quoteAsset!=='USDT'||s.status!=='TRADING')return;const ct=String(s.contractType||'');
     if(ct!=='PERPETUAL'&&!ct.includes('TRAD'))return;info[s.symbol]={tradfi:ct!=='PERPETUAL',cats:Array.isArray(s.underlyingSubType)?s.underlyingSubType:[]}});return info}
-async function klines(s,tf,limit,end){const k=await j(`/fapi/v1/klines?symbol=${encodeURIComponent(s)}&interval=${tf}&limit=${limit}`+(end?`&endTime=${end}`:''));
+async function klines(s,tf,limit,end,start){const k=await j(`/fapi/v1/klines?symbol=${encodeURIComponent(s)}&interval=${tf}&limit=${limit}`+(end?`&endTime=${end}`:'')+(start?`&startTime=${start}`:''));
   return k.map(r=>({t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}))}
 function sma(a,n){const o=new Array(a.length).fill(null);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n}return o}
 function ema(a,n){const o=new Array(a.length).fill(null),k=2/(n+1);let e=null;for(let i=0;i<a.length;i++){e=e==null?a[i]:a[i]*k+e*(1-k);o[i]=e}return o}
@@ -425,11 +425,21 @@ async function loadMore(id){
   catch(err){st('Историјата не се вчита ('+err.message+')')}
   e.loading=false;
 }
+// bring a cached series up to now: every bar since the last cached one (not only the last 2),
+// so a phone that slept / a chart re-opened later has no hole and shows the newest candles
+async function catchUp(p){
+  const id=pid(p),e=cache[id];if(!e||!e.raw.length)return[];
+  const fresh=await klines(p.s,p.tf,99,0,e.raw[e.raw.length-1].t);
+  if(fresh.length>=99){const raw=await klines(p.s,p.tf,500);e.raw=raw;e.done=raw.length<500;return'full'}
+  const touched=[];for(const x of fresh){const L=e.raw.length-1;if(x.t===e.raw[L].t){e.raw[L]=x;touched.push(L)}else if(x.t>e.raw[L].t){e.raw.push(x);touched.push(L+1)}}
+  return touched;
+}
 async function loadPanel(p){
   const id=pid(p);
-  try{if(!cache[id]){const raw=await klines(p.s,p.tf,500);cache[id]={raw,done:raw.length<500,loading:false}}
+  try{if(!cache[id]){const raw=await klines(p.s,p.tf,500);cache[id]={raw,done:raw.length<500,loading:false}}else await catchUp(p);
     if(!C[id])return;setAll(id);const n=cache[id].raw.length;
-    C[id].chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-110),to:n+5});legend(id)}
+    const ts=C[id].chart.timeScale();ts.setVisibleLogicalRange({from:Math.max(0,n-110),to:n+5});
+    requestAnimationFrame(()=>{if(C[id])C[id].chart.timeScale().scrollToRealTime()});legend(id)}   // always open at the newest candle
   catch(e){const el=card(id);if(el)el.querySelector('.lg').textContent='Нема податоци за '+p.s+' '+p.tf}
 }
 function renderCards(){
@@ -457,9 +467,11 @@ function renderTfAll(){const all=store.panels.length&&store.panels.every(p=>p.tf
 async function refresh(){
   try{await loadTickers()}catch(e){st('Освежувањето не успеа ('+e.message+')');return}
   await Promise.all(store.panels.map(async p=>{const id=pid(p),e=cache[id],c=C[id];if(!e||!e.raw.length)return;
-    try{const fresh=await klines(p.s,p.tf,2),touched=[];
-      for(const x of fresh){const L=e.raw.length-1;if(x.t===e.raw[L].t){e.raw[L]=x;touched.push(L)}else if(x.t>e.raw[L].t){e.raw.push(x);touched.push(L+1)}}
-      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1){marks(id);adMarks(id)}legend(id)}}catch(err){}}));
+    try{const atEnd=c?c.chart.timeScale().scrollPosition()>-2:false,touched=await catchUp(p);
+      if(!c)return;
+      if(touched==='full'||touched.length>2){setAll(id);if(atEnd)c.chart.timeScale().scrollToRealTime()}   // gap -> redraw all, stay at "now"
+      else{c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));if(touched.length>1){marks(id);adMarks(id)}}
+      legend(id)}catch(err){}}));
   if(store.tab==='market')renderMarket();
   st('Live · '+new Date().toLocaleTimeString('mk-MK'));
 }
@@ -566,6 +578,8 @@ $('sTf').addEventListener('click',e=>{const b=e.target.closest('[data-tf]');if(!
   store.stf=store.stf.includes(t)?store.stf.filter(x=>x!==t):store.stf.concat(t);save();renderSTf()});
 $('scan').addEventListener('click',scan);
 $('sOpen').addEventListener('click',()=>{if(lastScan.length)setPanels(lastScan.slice(0,12),TFS.find(t=>store.stf.includes(t)))});
+// back to the tab/app (iPhone pauses timers in the background) -> catch up at once
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&store.live)refresh()});
 let timer=null;const setLive=()=>{clearInterval(timer);store.live=$('live').checked;save();if(store.live)timer=setInterval(refresh,15000)};
 $('live').checked=!!store.live;$('live').addEventListener('change',setLive);
 setInterval(()=>{document.querySelectorAll('.ch').forEach(el=>{const id=el.dataset.id,e=cache[id];if(!e||!e.raw.length)return;
