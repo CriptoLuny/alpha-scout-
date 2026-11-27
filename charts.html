@@ -42,7 +42,7 @@ label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px
 .tools button{background:none;border:0;color:var(--mut);min-height:32px;min-width:30px;padding:2px 5px;font-size:14px}
 .tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
 .box{position:relative;height:var(--bh);margin-top:3px}
-.cv{position:absolute;inset:0}
+.cv{position:absolute;inset:0;touch-action:manipulation}
 .lg,.ol{position:absolute;left:4px;z-index:3;pointer-events:none;font-size:11px;display:flex;gap:2px 8px;flex-wrap:wrap;max-width:calc(100% - 70px);text-shadow:0 0 3px #181a20}
 .lg{top:1px}.ol{top:77%}
 @media(max-width:700px){.dense .lg .m,.dense .lg .dt{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}}
@@ -225,7 +225,7 @@ function makeChart(id){
   const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
   chart.priceScale('left').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
   const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
-  chart.subscribeClick(p=>onClick(id,p));
+  chart.subscribeClick(p=>{if(mode){onClick(id,p);return}dbl(id,p)});
   chart.subscribeCrosshairMove(p=>{
     c.hover=(p&&p.logical!=null&&p.time!=null&&c.d)?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):null;legend(id);
     if(syncing||!store.sync)return;syncing=true;
@@ -288,6 +288,17 @@ function redrawSym(s){for(const id in C)if(id.split('@')[0]===s)drawAll(id);save
 function setMode(m){mode=mode===m?null:m;pend=null;
   document.querySelectorAll('#draw [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
   st(mode==='lv'?'Ниво: допри на графиконот на цената што ја сакаш':mode==='tl'?'Тренд линија: допри ја првата точка':mode==='del'?'Бриши: допри близу линијата (🗑 повторно = крај)':'Цртање исклучено')}
+// double click / double tap: on the price area -> price full height, on the OBV area -> OBV full height; again -> back to Сè
+let tap=null;
+function dbl(id,p){
+  if(!p||!p.point)return;const now=Date.now();
+  if(tap&&tap.id===id&&now-tap.t<350&&Math.hypot(p.point.x-tap.x,p.point.y-tap.y)<30){
+    tap=null;const pn=store.panels.find(x=>pid(x)===id),el=card(id);if(!pn||!el)return;
+    const v=pn.view||'all',h=el.querySelector('.cv').clientHeight;
+    pn.view=v!=='all'?'all':(p.point.y>h*0.76?'obv':'price');save();
+    el.querySelector('.pv').value=pn.view;applyView(id);return}
+  tap={id,t:now,x:p.point.x,y:p.point.y};
+}
 function onClick(id,p){
   const c=C[id];if(!mode||!c||!c.d||!p||!p.point)return;const s=id.split('@')[0],dw=drw(s);
   const price=c.cs.coordinateToPrice(p.point.y);if(price==null)return;
