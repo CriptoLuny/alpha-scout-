@@ -88,7 +88,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
     <button id="backBtn" hidden>← Назад</button>
   </div>
   <div id="charts"></div>
-  <p class="note">▲ L / ▼ S = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+  <p class="note">Долу: A/D & CCI + OBV Sync — горната линија A/D обоена по CCI(20) (зелено &gt;0, црвено &lt;0), долната истата A/D обоена по синхронизацијата OBV/A/D за 12 свеќи (зелено = двете нагоре, црвено = двете надолу, портокалово = се разминуваат, сиво = неутрално)<br>▲ L / ▼ S = скенер-сигнал на затворена свеќа (скор ≥ +3 / ≤ −3, исти правила како Скенер) · сини стрелки = аларм од αSCOUT/Telegram · цртежите се чуваат по коин и се гледаат на секој TF<br>Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
 </section>
 
 <section id="v-market" hidden>
@@ -179,7 +179,23 @@ function rsi(c,n=14){const o=new Array(c.length).fill(null);if(c.length<=n)retur
 function calc(k){const c=k.map(x=>x.c),m={};for(const[n]of MAS)m[n]=sma(c,n);
   const obv=[0];for(let i=1;i<k.length;i++)obv[i]=obv[i-1]+(c[i]>c[i-1]?k[i].v:c[i]<c[i-1]?-k[i].v:0);
   const e12=ema(c,12),e26=ema(c,26),mc=c.map((_,i)=>e12[i]-e26[i]);
-  return{k,m,obv,om:sma(obv,7),mc,sg:ema(mc,9),rs:rsi(c),dec:decOf(c[c.length-1])}}
+  return Object.assign({k,m,obv,om:sma(obv,7),mc,sg:ema(mc,9),rs:rsi(c),dec:decOf(c[c.length-1])},adSync(k,obv))}
+// ---- A/D & CCI + OBV Sync (port of the Pine v6 indicator; defaults CCI 20, sync 12 bars, threshold 0.05, auto offset 8x)
+const AD={cci:20,sync:12,thr:0.05,mult:8};
+const ADC={up:'#4caf50',dn:'#ff5252',zero:'#999915',desync:'#ff9800',gray:'#787b86'};
+function adSync(k,obv){
+  const n=k.length,ad=new Array(n),cci=new Array(n).fill(null),obvN=new Array(n).fill(0),adN=new Array(n).fill(0),sy=new Array(n).fill(0);
+  let cum=0;for(let i=0;i<n;i++){const x=k[i],clv=x.h===x.l?0:(2*x.c-x.l-x.h)/(x.h-x.l);cum+=clv*x.v;ad[i]=cum}
+  const L=AD.cci;for(let i=L-1;i<n;i++){let s=0;for(let j=i-L+1;j<=i;j++)s+=k[j].c;const mu=s/L;let md=0;for(let j=i-L+1;j<=i;j++)md+=Math.abs(k[j].c-mu);md/=L;cci[i]=md?(k[i].c-mu)/(0.015*md):0}
+  const W=AD.sync,t=AD.thr;let vs=0;
+  for(let i=0;i<n;i++){vs+=k[i].v;if(i>=W)vs-=k[i-W].v;if(i<W||vs<=0)continue;
+    obvN[i]=(obv[i]-obv[i-W])/vs;adN[i]=(ad[i]-ad[i-W])/vs;
+    sy[i]=obvN[i]>t&&adN[i]>t?1:obvN[i]<-t&&adN[i]<-t?-1:(obvN[i]>t&&adN[i]<-t)||(obvN[i]<-t&&adN[i]>t)?2:0}
+  // auto offset = 8 x average |A/D move| (SMA 100), frozen at the first bar of the initial view, so both lines stay parallel
+  const f=Math.max(1,n-110);let a=0,cnt=0;for(let i=Math.max(1,f-99);i<=f&&i<n;i++){a+=Math.abs(ad[i]-ad[i-1]);cnt++}
+  return{ad,cci,obvN,adN,sy,adOff:AD.mult*(cnt?a/cnt:0)}}
+const cciCol=v=>v==null?ADC.gray:v>0?ADC.up:v<0?ADC.dn:ADC.zero;
+const syCol=v=>v===1?ADC.up:v===-1?ADC.dn:v===2?ADC.desync:ADC.gray;
 
 // signals on the last CLOSED bar (Lc); the open bar is only shown as price
 function signal(d,at){
@@ -223,8 +239,8 @@ function makeChart(id){
   chart.priceScale('vol').applyOptions({scaleMargins:{top:0.6,bottom:0.27}});
   const cs=chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',wickUpColor:'#2ebd85',wickDownColor:'#f6465d',borderVisible:false});
   const ma={};for(const[n,col]of MAS)ma[n]=chart.addLineSeries({color:col,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
-  const obv=chart.addLineSeries({color:'#f0b90b',lineWidth:1,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
-  const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
+  const obv=chart.addLineSeries({color:ADC.gray,lineWidth:2,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false,priceFormat:{type:'volume'}});   // A/D, CCI colour
+  const obm=chart.addLineSeries({color:ADC.gray,lineWidth:2,priceScaleId:'left',priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false,priceFormat:{type:'volume'}});   // A/D - offset, OBV sync colour
   chart.priceScale('left').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
   const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null,pl:[],tls:[]};
   chart.subscribeClick(p=>{if(mode){onClick(id,p);return}dbl(id,p)});
@@ -247,9 +263,9 @@ function setAll(id){
   c.vol.setData(d.k.map(x=>({time:T(x.t),value:x.v,color:x.c>=x.o?'rgba(46,189,133,.4)':'rgba(246,70,93,.4)'})));
   c.cs.setData(d.k.map(x=>({time:T(x.t),open:x.o,high:x.h,low:x.l,close:x.c})));
   for(const[n]of MAS){c.ma[n].applyOptions({priceFormat:pf});c.ma[n].setData(d.k.map((x,i)=>d.m[n][i]==null?null:{time:T(x.t),value:d.m[n][i]}).filter(Boolean))}
-  c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.obv[i]})));
-  c.obm.setData(d.k.map((x,i)=>d.om[i]==null?null:{time:T(x.t),value:d.om[i]}).filter(Boolean));
-  marks(id);drawAll(id);applyView(id);
+  c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.ad[i],color:cciCol(d.cci[i])})));
+  c.obm.setData(d.k.map((x,i)=>({time:T(x.t),value:d.ad[i]-d.adOff,color:syCol(d.sy[i])})));
+  c.adOff=d.adOff;marks(id);drawAll(id);applyView(id);
 }
 // ---------- pane view per chart: Сè / Цена (price full height) / OBV (OBV full height with its own axis) ----------
 function applyView(id){
@@ -321,7 +337,7 @@ function updIdx(id,i){
   c.vol.update({time:t,value:x.v,color:x.c>=x.o?'rgba(46,189,133,.4)':'rgba(246,70,93,.4)'});
   c.cs.update({time:t,open:x.o,high:x.h,low:x.l,close:x.c});
   for(const[n]of MAS)if(d.m[n][i]!=null)c.ma[n].update({time:t,value:d.m[n][i]});
-  c.obv.update({time:t,value:d.obv[i]});if(d.om[i]!=null)c.obm.update({time:t,value:d.om[i]});
+  if(c.adOff==null)c.adOff=d.adOff;c.obv.update({time:t,value:d.ad[i],color:cciCol(d.cci[i])});c.obm.update({time:t,value:d.ad[i]-c.adOff,color:syCol(d.sy[i])});
 }
 function legend(id){
   const c=C[id],el=card(id);if(!c||!c.d||!el)return;
@@ -329,7 +345,8 @@ function legend(id){
   const dt=new Date(x.t).toLocaleString('mk-MK',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
   el.querySelector('.lg').innerHTML=`<span class="dt">${esc(dt)}</span><span class="${cl}">O ${esc(fmt(x.o,d.dec))} H ${esc(fmt(x.h,d.dec))} L ${esc(fmt(x.l,d.dec))} C ${esc(fmt(x.c,d.dec))}</span><span class="${cl}">${esc(x.o?pct((x.c-x.o)/x.o*100):'–')}</span><span class="m">Ампл. ${esc(x.l?((x.h-x.l)/x.l*100).toFixed(2).replace('.',',')+'%':'–')}</span><span class="m">Vol ${esc(big(x.v))}</span>`+
     MAS.map(([n,col])=>`<span class="m" style="color:${col}">MA(${n}) ${esc(fmt(d.m[n][i],d.dec))}</span>`).join('');
-  el.querySelector('.ol').innerHTML=`<span style="color:#f0b90b">OBV ${esc(big(d.obv[i]))}</span><span style="color:#e040b0">MA(7) ${esc(big(d.om[i]))}</span>`;
+  const sy=d.sy[i],syT=sy===1?'Sync ↑':sy===-1?'Sync ↓':sy===2?'Desync':'Sync –',cv=d.cci[i];
+  el.querySelector('.ol').innerHTML=`<span style="color:${cciCol(cv)}">A/D ${esc(big(d.ad[i]))} · CCI ${cv==null?'–':esc(cv.toFixed(0))}</span><span style="color:${syCol(sy)}">${syT}</span><span class="m">OBVn ${esc(d.obvN[i].toFixed(2))} · A/Dn ${esc(d.adN[i].toFixed(2))}</span>`;
   const t=tick[s],pc=t?+t.priceChangePercent:0,pcl=pc>=0?'up':'dn';
   const px=el.querySelector('.px');px.className='px '+pcl;px.textContent=fmt(d.k[L].c,d.dec);
   const p=el.querySelector('.pc');p.className='pc '+pcl;p.textContent=t?pct(pc):'';
@@ -357,7 +374,7 @@ function renderCards(){
   $('charts').innerHTML=store.panels.map(p=>{const id=pid(p),fv=isFav(p.s);
     return `<div class="ch" data-id="${esc(id)}"><div class="hd"><b>${esc(p.s.replace(/USDT$/,''))}</b><span class="px">–</span><span class="pc"></span><span class="cd"></span>
     <span class="tools"><select class="ptf" aria-label="TF">${TFS.map(t=>`<option${t===p.tf?' selected':''}>${t}</option>`).join('')}</select>
-    <select class="pv" aria-label="Приказ">${[['all','Сè'],['price','Цена'],['obv','OBV']].map(([k,l])=>`<option value="${k}"${(p.view||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
+    <select class="pv" aria-label="Приказ">${[['all','Сè'],['price','Цена'],['obv','A/D']].map(([k,l])=>`<option value="${k}"${(p.view||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
     <button data-a="mtf">MTF</button><button data-a="now" aria-label="Назад на сега">⟲</button><button data-a="big" aria-label="Голем приказ">⤢</button>
     <button data-a="fav" class="fv${fv?' on':''}" aria-label="Favorite">${fv?'★':'☆'}</button><button data-a="x" aria-label="Отстрани">×</button></span></div>
     <div class="box"><div class="lg"></div><div class="ol"></div><div class="cv"></div></div></div>`}).join('')||'<p class="note">Нема графикони. Додај коин или отвори од Пазар/Скенер.</p>';
