@@ -528,6 +528,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
   <button class="btn btn-clear" onclick="openFavShare()" title="Пренеси ⭐ FAV на друг уред (линк / QR)">⭐🔗</button>
   <button class="btn btn-clear" onclick="openLab()" title="PUMP LAB — што покажувале коините пред пумпа">🧪</button>
   <a class="btn btn-clear" href="./tools.html" title="TOOLS — калкулатор на ризик, пауза, шема по час" style="text-decoration:none;display:inline-block;color:var(--alpha);border-color:rgba(240,192,0,.35)">🧮</a>
+  <button class="btn btn-clear" onclick="openCharts()" title="CHARTS — графикони само за коините во тековниот филтриран приказ" style="color:var(--alpha);border-color:rgba(240,192,0,.35)">📈</button>
   <div class="tfi-tgl" id="tfiTgl" onclick="toggleTradFi()">🏛 TradFi OFF</div>
   <div class="tf-wrap">
     <div class="tf"        id="tf-1m"  onclick="setTF('1m',this)">1m</div>
@@ -1286,6 +1287,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 //    Digest: OI@ gets "*" and the tags get "OI FIX n" when points were removed; OI24h
 //    cell gets "*"; CLEAN15 line gets "OIfix n". Trade-off: a REAL flush of >= 25% that
 //    fully rebuilds within 16 periods is hidden too -- the FIX tag says where to look.
+//  2026-11-27-a  📈 CHARTS link in the control row (next to 🧮) -> ./charts.html, a separate page.
+//    Sends the first 12 coins of the CURRENT filtered view (applyFilters, same sort) + the scan TF (1m->5m, all->15m).
+//    charts.html: interactive multi-charts (MA25/50/99/200, volume, OBV+MA7, history, zoom, sync crosshair,
+//    per-chart TF 5m-1w, grid 1/2/4/6, MTF), market list, own multi-TF scanner. Shares the 'favs' key.
+//    No scan, gate, SCORE, ALARM or bot logic changed.
 //  2026-11-26-a  CLEAN15 G9 SWEEP: TP1 1.0-2.0R passes WITHOUT a TP2 >= 2R (grade B, flag 'TP1 x.xR без TP2≥2R').
 //    Bot forward tracking 7 days (/nearstats, 4h window, SL/TP same bar = SL): G9·SWEEP 9/10 = 155 cases,
 //    +0.27R. Split by the G9 note: TP1 1.0-2.0R n 23 · SL 7 · TP1 14 (TP2 9) · +0.73R; TP1 0.5-1.0R +0.14R;
@@ -1390,7 +1396,7 @@ const APP_VER='2.7';
 const APP_CODENAME='STRUCT';
 // Build stamp: PWA-то кешира, па верзијата сама по себе не кажува кој билд е вчитан.
 // Секоја испорака добива нов стринг тука — без исклучок, дури и за две линии измена.
-const APP_BUILD='2026-11-26-a';
+const APP_BUILD='2026-11-27-a';
 
 // -- SIGNAL INFO -------------------------------------------
 const SIG_INFO={
@@ -3932,6 +3938,13 @@ function copyFavLink(){
 function toggleFav(coin){S.favorites.has(coin)?S.favorites.delete(coin):S.favorites.add(coin);localStorage.setItem('favs',JSON.stringify([...S.favorites]));S.signals.forEach(s=>{if(s.coin===coin)s.isFav=S.favorites.has(coin);});renderList();}
 function toggleFavFromDetail(){if(!S.detailCoin)return;toggleFav(S.detailCoin);const fav=isFav(S.detailCoin);const fb=document.getElementById('dpFavBtn');fb.textContent=fav?'★':'☆';fb.className='dp-fav-btn'+(fav?' on':'');toast(fav?`⭐ ${S.detailCoin} додаден`:`${S.detailCoin} отстранет`);}
 function openBinance(coin,tf){const url=`https://www.binance.com/en/futures/${coin}USDT?type=isolated&interval=${BN_TF[tf]||tf}`;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();document.body.removeChild(a);}
+// 2026-11-27-a CHARTS: the 📈 button sends exactly the current filtered view (applyFilters, same order) to ./charts.html
+function openCharts(){
+  const seen=new Set(),coins=[];
+  for(const x of applyFilters()){if(!seen.has(x.coin)){seen.add(x.coin);coins.push(x.coin+'USDT');}if(coins.length>=12)break;}
+  const tf=({'1m':'5m','all':'15m'})[S.tf]||S.tf;
+  location.href='./charts.html?tf='+encodeURIComponent(tf)+(coins.length?'&s='+encodeURIComponent(coins.join(',')):'');
+}
 function setTF(tf,el){S.tf=tf;document.querySelectorAll('.tf').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(S.scanning){stopScan();setTimeout(startScan,400);}}
 function setFil(f,el){
   if(f==='all'){S.filters.clear();document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}

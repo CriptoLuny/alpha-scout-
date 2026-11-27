@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="mk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#181a20">
+<title>αSCOUT Charts</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#181a20;--panel:#1e2329;--line:#2b3139;--ink:#eaecef;--mut:#848e9c;--up:#2ebd85;--dn:#f6465d;--y:#f0b90b;--bh:360px}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 10px 6px}
+.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;margin:0;color:var(--y);white-space:nowrap}
+a.back{color:var(--mut);text-decoration:none;font-size:13px}
+.tabs{display:flex;gap:2px;margin-left:auto}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--mut);padding:6px 8px;min-height:36px;font-size:15px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--y)}
+select,input,button{font:inherit;font-size:16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-height:38px}
+button{cursor:pointer}button.pri{background:var(--y);color:#000;border-color:var(--y);font-weight:600}
+button:disabled{opacity:.5}
+label.lv{color:var(--mut);display:flex;gap:4px;align-items:center;font-size:13px}
+#status{color:var(--mut);font-size:12px;margin-top:4px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{min-height:32px;padding:4px 9px;font-size:13px;border-radius:5px;color:var(--mut)}
+.chip.on{color:#000;background:var(--y);border-color:var(--y);font-weight:600}
+.lbl{color:var(--mut);font-size:12px}
+.sep{width:1px;height:24px;background:var(--line)}
+#addIn{width:150px}
+#charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.ch{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:5px 6px}
+.ch.big{grid-column:1/-1}.ch.big .box{height:calc(100vh - 150px)}
+.hd{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap}
+.hd b{font-size:17px}.px{font-weight:600}
+.cd{color:var(--mut);font-size:12px}
+.tools{margin-left:auto;display:flex;gap:2px;align-items:center}
+.tools select{min-height:30px;padding:2px 4px;font-size:13px}
+.tools button{background:none;border:0;color:var(--mut);min-height:32px;min-width:30px;padding:2px 5px;font-size:14px}
+.tools button:hover{color:var(--ink)}.tools .fv.on{color:var(--y)}
+.box{position:relative;height:var(--bh);margin-top:3px}
+.cv{position:absolute;inset:0}
+.lg,.ol{position:absolute;left:4px;z-index:3;pointer-events:none;font-size:11px;display:flex;gap:2px 8px;flex-wrap:wrap;max-width:calc(100% - 70px);text-shadow:0 0 3px #181a20}
+.lg{top:1px}.ol{top:77%}
+@media(max-width:700px){.dense .lg .m,.dense .lg .dt{display:none}.dense .hd b{font-size:14px}.dense .cd{display:none}}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--mut);font-weight:500;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--bg)}
+th:nth-child(2),td:nth-child(2){text-align:left}
+th:first-child,td:first-child{width:30px;text-align:center}
+td.s{white-space:normal;text-align:left;font-size:12px;color:var(--mut);min-width:150px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel)}
+td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
+.note{color:var(--mut);font-size:12px;padding:4px 10px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <a class="back" href="./index.html">← αSCOUT</a>
+    <h1>Charts</h1>
+    <label class="lv"><input type="checkbox" id="live" style="min-height:auto"> Live</label>
+    <nav class="tabs">
+      <button data-v="charts">Графикони</button><button data-v="market">Пазар</button><button data-v="scan">Скенер</button>
+    </nav>
+  </div>
+  <div id="status">Се вчитува…</div>
+</header>
+
+<section id="v-charts">
+  <div class="bar">
+    <span class="lbl">TF сите:</span><div class="chips" id="tfAll"></div>
+    <span class="sep"></span>
+    <span class="lbl">Мрежа:</span><div class="chips" id="grid"></div>
+    <button class="chip" id="sync">⌖ Sync</button>
+    <span class="sep"></span>
+    <input id="addIn" placeholder="Додај: BTC, ETH" aria-label="Додај коин"><button id="addBtn">+</button>
+    <button id="favLoad">⭐ Favorites</button>
+    <button id="backBtn" hidden>← Назад</button>
+  </div>
+  <div id="charts"></div>
+  <p class="note">Влечи лево за историја · тркалце/pinch за зум · влечи ја скалата на цената за вертикален зум · MTF = истиот коин во 15m/1h/4h/1d · ⟲ сега · ⤢ голем приказ</p>
+</section>
+
+<section id="v-market" hidden>
+  <div class="bar">
+    <input id="mSearch" placeholder="Пребарај" aria-label="Пребарај">
+    <button class="pri" id="mOpen">📈 Отвори ги првите</button>
+  </div>
+  <div class="bar"><div class="chips" id="cats"></div></div>
+  <div class="scroll"><table>
+    <thead><tr><th>☆</th><th data-k="s">Симбол</th><th data-k="p">Цена</th><th data-k="c">24h %</th><th data-k="v">Волумен</th><th data-k="f">Funding</th></tr></thead>
+    <tbody id="mtb"></tbody>
+  </table></div>
+</section>
+
+<section id="v-scan" hidden>
+  <div class="bar">
+    <span class="lbl">TF (може повеќе):</span><div class="chips" id="sTf"></div>
+  </div>
+  <div class="bar">
+    <select id="dir" aria-label="Насока"><option value="all">Сите сетапи</option><option value="long">Само Long</option><option value="short">Само Short</option></select>
+    <select id="topn" aria-label="Број коини"><option value="50">Топ 50</option><option value="100" selected>Топ 100</option><option value="200">Топ 200</option></select>
+    <button id="scan" class="pri">Скенирај</button>
+    <button id="sOpen" disabled>📈 Отвори резултати</button>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>☆</th><th>Симбол</th><th>Цена</th><th>24h</th><th>Скор по TF</th><th>Сетап</th><th>Вкупно</th></tr></thead>
+    <tbody id="stb"><tr><td></td><td colspan="6" class="s">Избери еден или повеќе TF и притисни „Скенирај“. Со повеќе TF остануваат само коините каде што сите TF се во иста насока.</td></tr></tbody>
+  </table></div>
+  <p class="note">Сигналите се на последната ЗАТВОРЕНА свеќа. Скор по TF: тренд (цена/MA200 + MA25 vs MA99) ±2 · MA25×MA99 крос (5 свеќи) ±2 · пробив на 20-свеќен опсег ±2 · MACD крос (3 свеќи) ±1 · волуменски скок ≥2.5× ±1 · OBV над/под MA(7) ±1. RSI и екстремен funding се само ознаки. Не е финансиски совет.</p>
+</section>
+
+<script>
+{
+const API='https://fapi.binance.com';
+const TFS=['5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w'];
+const TFMS={'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'6h':216e5,'8h':288e5,'12h':432e5,'1d':864e5,'3d':2592e5,'1w':6048e5};
+const MAS=[[25,'#f0b90b'],[99,'#eaecef'],[50,'#e0486b'],[200,'#3d6bff']];
+const TZ=-new Date().getTimezoneOffset()*60;
+const LW=window.LightweightCharts;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const decOf=p=>p>=100?2:p>=1?4:p>=0.01?5:7;
+const fmt=(v,d)=>v==null||isNaN(v)?'–':v.toLocaleString('mk-MK',{minimumFractionDigits:d,maximumFractionDigits:d});
+const big=v=>{if(v==null)return'–';const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(2)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':v.toFixed(0)};
+const pct=(v,n=2)=>(v>=0?'+':'')+v.toFixed(n).replace('.',',')+'%';
+const T=ms=>ms/1000+TZ;
+const norm=x=>{let s=String(x).toUpperCase().replace(/\.P$/,'').replace(/[^A-Z0-9]/g,'');return s?(s.endsWith('USDT')?s:s+'USDT'):''};
+const pid=p=>p.s+'@'+p.tf;
+const st=t=>$('status').textContent=t;
+
+// ---------- state ----------
+let store={};try{store=JSON.parse(localStorage.getItem('ascout-charts')||'{}')}catch(e){}
+store.panels=store.panels||['CLOUSDT','BEATUSDT','KITEUSDT','SIRENUSDT'].map(s=>({s,tf:'4h'}));
+store.tf=store.tf||'4h';store.grid=store.grid||4;store.sync=store.sync??true;store.live=store.live??true;
+store.stf=store.stf||['1h','4h'];store.tab=store.tab||'charts';
+const q=new URLSearchParams(location.search);
+if(q.get('s')||q.get('tf')){
+  const tf=TFS.includes(q.get('tf'))?q.get('tf'):store.tf;store.tf=tf;
+  if(q.get('s')){store.panels=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))].slice(0,24).map(s=>({s,tf}));store.tab='charts';store.stash=null}
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+}
+const save=()=>{try{localStorage.setItem('ascout-charts',JSON.stringify(store))}catch(e){}};
+const favSet=()=>{try{return new Set(JSON.parse(localStorage.getItem('favs')||'[]'))}catch(e){return new Set()}};   // shared with αSCOUT
+const isFav=s=>favSet().has(s.replace(/USDT$/,''));
+function toggleFav(s){const f=favSet(),c=s.replace(/USDT$/,'');f.has(c)?f.delete(c):f.add(c);try{localStorage.setItem('favs',JSON.stringify([...f]))}catch(e){}}
+
+const cache={},C={};let tick={},fund={},info=null,syncing=false,lastScan=[];
+
+// ---------- data ----------
+async function j(u){const r=await fetch(API+u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+async function loadTickers(){const t=await j('/fapi/v1/ticker/24hr');tick={};t.forEach(x=>tick[x.symbol]=x)}
+async function loadFunding(){const t=await j('/fapi/v1/premiumIndex');fund={};t.forEach(x=>fund[x.symbol]=+x.lastFundingRate)}
+async function loadInfo(){if(info)return info;const e=await j('/fapi/v1/exchangeInfo');info={};
+  e.symbols.forEach(s=>{if(s.quoteAsset!=='USDT'||s.status!=='TRADING')return;const ct=String(s.contractType||'');
+    if(ct!=='PERPETUAL'&&!ct.includes('TRAD'))return;info[s.symbol]={tradfi:ct!=='PERPETUAL',cats:Array.isArray(s.underlyingSubType)?s.underlyingSubType:[]}});return info}
+async function klines(s,tf,limit,end){const k=await j(`/fapi/v1/klines?symbol=${encodeURIComponent(s)}&interval=${tf}&limit=${limit}`+(end?`&endTime=${end}`:''));
+  return k.map(r=>({t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}))}
+function sma(a,n){const o=new Array(a.length).fill(null);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n}return o}
+function ema(a,n){const o=new Array(a.length).fill(null),k=2/(n+1);let e=null;for(let i=0;i<a.length;i++){e=e==null?a[i]:a[i]*k+e*(1-k);o[i]=e}return o}
+function rsi(c,n=14){const o=new Array(c.length).fill(null);if(c.length<=n)return o;let g=0,l=0;
+  for(let i=1;i<=n;i++){const d=c[i]-c[i-1];d>0?g+=d:l-=d}g/=n;l/=n;o[n]=l?100-100/(1+g/l):100;
+  for(let i=n+1;i<c.length;i++){const d=c[i]-c[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=l?100-100/(1+g/l):100}return o}
+function calc(k){const c=k.map(x=>x.c),m={};for(const[n]of MAS)m[n]=sma(c,n);
+  const obv=[0];for(let i=1;i<k.length;i++)obv[i]=obv[i-1]+(c[i]>c[i-1]?k[i].v:c[i]<c[i-1]?-k[i].v:0);
+  return{k,m,obv,om:sma(obv,7),dec:decOf(c[c.length-1])}}
+
+// signals on the last CLOSED bar (Lc); the open bar is only shown as price
+function signal(d){
+  const{k,m,obv,om}=d,Lc=k.length-2;
+  if(Lc<35)return{tr:'Нов',tags:['малку податоци'],sc:0};
+  const c=k[Lc].c,a=m[25],b=m[99],s2=m[200][Lc],cl=k.map(x=>x.c);let sc=0,tr='Range';const tags=[];
+  if(b[Lc]!=null){
+    if(c>(s2??b[Lc])&&a[Lc]>b[Lc]){tr='Bull';sc+=2}else if(c<(s2??b[Lc])&&a[Lc]<b[Lc]){tr='Bear';sc-=2}
+    for(let i=Lc;i>Lc-5;i--){if(b[i-1]==null)break;
+      if(a[i-1]<=b[i-1]&&a[i]>b[i]){tags.push('MA25×99↑');sc+=2;break}
+      if(a[i-1]>=b[i-1]&&a[i]<b[i]){tags.push('MA25×99↓');sc-=2;break}}}
+  const prev=k.slice(Lc-20,Lc),hh=Math.max(...prev.map(x=>x.h)),ll=Math.min(...prev.map(x=>x.l));
+  if(c>hh){tags.push('Breakout '+fmt(hh,d.dec));sc+=2}else if(c<ll){tags.push('Breakdown '+fmt(ll,d.dec));sc-=2}
+  const e12=ema(cl,12),e26=ema(cl,26),mc=cl.map((_,i)=>e12[i]-e26[i]),sg=ema(mc,9);
+  for(let i=Lc;i>Lc-3;i--){if(mc[i-1]<=sg[i-1]&&mc[i]>sg[i]){tags.push('MACD↑');sc+=1;break}if(mc[i-1]>=sg[i-1]&&mc[i]<sg[i]){tags.push('MACD↓');sc-=1;break}}
+  const av=prev.reduce((s,x)=>s+x.v,0)/prev.length,vx=av?k[Lc].v/av:0;
+  if(vx>=2.5){const upb=k[Lc].c>=k[Lc].o;tags.push('Vol ×'+vx.toFixed(1)+(upb?'↑':'↓'));sc+=upb?1:-1}
+  const r=rsi(cl)[Lc];if(r!=null&&(r>=70||r<=30))tags.push('RSI '+r.toFixed(0)+(r>=70?' OB':' OS'));
+  const ms=[a[Lc],m[50][Lc],b[Lc]].filter(v=>v!=null);
+  if(ms.length===3&&(Math.max(...ms)-Math.min(...ms))/c<0.015)tags.push('Компресија MA');
+  if(obv[Lc]>om[Lc]){sc+=1;tags.push('OBV↑')}else{sc-=1;tags.push('OBV↓')}
+  return{tr,tags,sc}}
+
+// ---------- charts ----------
+function layout(){
+  const g=store.grid,narrow=innerWidth<700,cols=g===1?1:g===2?(narrow?1:2):g===4?2:(narrow?2:3),rows=Math.ceil(g/cols);
+  const ch=$('charts');ch.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;ch.classList.toggle('dense',cols>1);
+  const used=document.querySelector('header').offsetHeight+(document.querySelector('#v-charts .bar').offsetHeight||0);
+  const cardHd=cols>1&&narrow?60:40;
+  document.documentElement.style.setProperty('--bh',Math.max(150,Math.floor((innerHeight-used)/rows)-cardHd)+'px');
+}
+function card(id){return document.querySelector(`.ch[data-id="${CSS.escape(id)}"]`)}
+function makeChart(id){
+  const cv=card(id).querySelector('.cv');
+  const chart=LW.createChart(cv,{autoSize:true,
+    layout:{background:{type:'solid',color:'#181a20'},textColor:'#848e9c',fontSize:11},
+    grid:{vertLines:{color:'#22262d'},horzLines:{color:'#22262d'}},crosshair:{mode:0},
+    rightPriceScale:{borderColor:'#2b3139',scaleMargins:{top:0.06,bottom:0.27}},
+    timeScale:{borderColor:'#2b3139',timeVisible:true,secondsVisible:false,rightOffset:5,barSpacing:6},
+    handleScroll:{vertTouchDrag:false}});
+  const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false});
+  chart.priceScale('vol').applyOptions({scaleMargins:{top:0.6,bottom:0.27}});
+  const cs=chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',wickUpColor:'#2ebd85',wickDownColor:'#f6465d',borderVisible:false});
+  const ma={};for(const[n,col]of MAS)ma[n]=chart.addLineSeries({color:col,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  const obv=chart.addLineSeries({color:'#f0b90b',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
+  const obm=chart.addLineSeries({color:'#e040b0',lineWidth:1,priceScaleId:'obv',priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'volume'}});
+  chart.priceScale('obv').applyOptions({scaleMargins:{top:0.8,bottom:0.01}});
+  const c=C[id]={chart,cs,ma,obv,obm,vol,d:null,hover:null};
+  chart.subscribeCrosshairMove(p=>{
+    c.hover=(p&&p.logical!=null&&p.time!=null&&c.d)?Math.max(0,Math.min(c.d.k.length-1,Math.round(p.logical))):null;legend(id);
+    if(syncing||!store.sync)return;syncing=true;
+    try{for(const oid in C){if(oid===id)continue;const o=C[oid];if(!o.d)continue;
+      if(c.hover==null){o.hover=null;o.chart.clearCrosshairPosition&&o.chart.clearCrosshairPosition();legend(oid);continue}
+      const jx=findIdx(o.d.k,c.d.k[c.hover].t);
+      if(jx<0){o.hover=null;o.chart.clearCrosshairPosition&&o.chart.clearCrosshairPosition()}
+      else{o.hover=jx;o.chart.setCrosshairPosition&&o.chart.setCrosshairPosition(o.d.k[jx].c,T(o.d.k[jx].t),o.cs)}
+      legend(oid)}}catch(e){}finally{syncing=false}});
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r&&r.from<15)loadMore(id)});
+  return c;
+}
+function findIdx(k,t){if(!k.length||t<k[0].t)return-1;let lo=0,hi=k.length-1;while(lo<hi){const m=(lo+hi+1)>>1;k[m].t<=t?lo=m:hi=m-1}return lo}
+function setAll(id){
+  const c=C[id];if(!c)return;const raw=cache[id].raw,d=c.d=calc(raw),pf={type:'price',precision:d.dec,minMove:10**-d.dec};
+  c.cs.applyOptions({priceFormat:pf});
+  c.vol.setData(d.k.map(x=>({time:T(x.t),value:x.v,color:x.c>=x.o?'rgba(46,189,133,.4)':'rgba(246,70,93,.4)'})));
+  c.cs.setData(d.k.map(x=>({time:T(x.t),open:x.o,high:x.h,low:x.l,close:x.c})));
+  for(const[n]of MAS){c.ma[n].applyOptions({priceFormat:pf});c.ma[n].setData(d.k.map((x,i)=>d.m[n][i]==null?null:{time:T(x.t),value:d.m[n][i]}).filter(Boolean))}
+  c.obv.setData(d.k.map((x,i)=>({time:T(x.t),value:d.obv[i]})));
+  c.obm.setData(d.k.map((x,i)=>d.om[i]==null?null:{time:T(x.t),value:d.om[i]}).filter(Boolean));
+}
+function updIdx(id,i){
+  const c=C[id],d=c.d,x=d.k[i],t=T(x.t);
+  c.vol.update({time:t,value:x.v,color:x.c>=x.o?'rgba(46,189,133,.4)':'rgba(246,70,93,.4)'});
+  c.cs.update({time:t,open:x.o,high:x.h,low:x.l,close:x.c});
+  for(const[n]of MAS)if(d.m[n][i]!=null)c.ma[n].update({time:t,value:d.m[n][i]});
+  c.obv.update({time:t,value:d.obv[i]});if(d.om[i]!=null)c.obm.update({time:t,value:d.om[i]});
+}
+function legend(id){
+  const c=C[id],el=card(id);if(!c||!c.d||!el)return;
+  const d=c.d,L=d.k.length-1,i=c.hover??L,x=d.k[i],cl=x.c>=x.o?'up':'dn',s=id.split('@')[0];
+  const dt=new Date(x.t).toLocaleString('mk-MK',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  el.querySelector('.lg').innerHTML=`<span class="dt">${esc(dt)}</span><span class="${cl}">O ${esc(fmt(x.o,d.dec))} H ${esc(fmt(x.h,d.dec))} L ${esc(fmt(x.l,d.dec))} C ${esc(fmt(x.c,d.dec))}</span><span class="m">Vol ${esc(big(x.v))}</span>`+
+    MAS.map(([n,col])=>`<span class="m" style="color:${col}">MA(${n}) ${esc(fmt(d.m[n][i],d.dec))}</span>`).join('');
+  el.querySelector('.ol').innerHTML=`<span style="color:#f0b90b">OBV ${esc(big(d.obv[i]))}</span><span style="color:#e040b0">MA(7) ${esc(big(d.om[i]))}</span>`;
+  const t=tick[s],pc=t?+t.priceChangePercent:0,pcl=pc>=0?'up':'dn';
+  const px=el.querySelector('.px');px.className='px '+pcl;px.textContent=fmt(d.k[L].c,d.dec);
+  const p=el.querySelector('.pc');p.className='pc '+pcl;p.textContent=t?pct(pc):'';
+}
+async function loadMore(id){
+  const e=cache[id],c=C[id];if(!e||!c||e.loading||e.done||!e.raw.length)return;e.loading=true;
+  try{const[s,tf]=id.split('@');const old=await klines(s,tf,500,e.raw[0].t-1);
+    if(!old.length)e.done=true;else{
+      const r=c.chart.timeScale().getVisibleLogicalRange();e.raw=old.concat(e.raw);if(old.length<500)e.done=true;
+      if(C[id]){setAll(id);if(r)c.chart.timeScale().setVisibleLogicalRange({from:r.from+old.length,to:r.to+old.length})}
+      st(`${s} ${tf}: историја од ${new Date(e.raw[0].t).toLocaleDateString('mk-MK')} (${e.raw.length} свеќи)`)}}
+  catch(err){st('Историјата не се вчита ('+err.message+')')}
+  e.loading=false;
+}
+async function loadPanel(p){
+  const id=pid(p);
+  try{if(!cache[id]){const raw=await klines(p.s,p.tf,500);cache[id]={raw,done:raw.length<500,loading:false}}
+    if(!C[id])return;setAll(id);const n=cache[id].raw.length;
+    C[id].chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-110),to:n+5});legend(id)}
+  catch(e){const el=card(id);if(el)el.querySelector('.lg').textContent='Нема податоци за '+p.s+' '+p.tf}
+}
+function renderCards(){
+  for(const id in C){C[id].chart.remove();delete C[id]}
+  const seen=new Set();store.panels=store.panels.filter(p=>{const id=pid(p);if(seen.has(id))return false;seen.add(id);return true});save();
+  $('charts').innerHTML=store.panels.map(p=>{const id=pid(p),fv=isFav(p.s);
+    return `<div class="ch" data-id="${esc(id)}"><div class="hd"><b>${esc(p.s.replace(/USDT$/,''))}</b><span class="px">–</span><span class="pc"></span><span class="cd"></span>
+    <span class="tools"><select class="ptf" aria-label="TF">${TFS.map(t=>`<option${t===p.tf?' selected':''}>${t}</option>`).join('')}</select>
+    <button data-a="mtf">MTF</button><button data-a="now" aria-label="Назад на сега">⟲</button><button data-a="big" aria-label="Голем приказ">⤢</button>
+    <button data-a="fav" class="fv${fv?' on':''}" aria-label="Favorite">${fv?'★':'☆'}</button><button data-a="x" aria-label="Отстрани">×</button></span></div>
+    <div class="box"><div class="lg"></div><div class="ol"></div><div class="cv"></div></div></div>`}).join('')||'<p class="note">Нема графикони. Додај коин или отвори од Пазар/Скенер.</p>';
+  $('backBtn').hidden=!store.stash;
+  renderTfAll();layout();
+  if(!LW){st('Библиотеката за графикони не се вчита (потребен е интернет до unpkg.com).');return}
+  store.panels.forEach(p=>makeChart(pid(p)));
+  return Promise.all(store.panels.map(loadPanel));
+}
+function setPanels(list,tf){store.panels=list.map(s=>({s,tf:tf||store.tf}));store.stash=null;save();renderCards();showTab('charts')}
+function renderTfAll(){const all=store.panels.length&&store.panels.every(p=>p.tf===store.panels[0].tf)?store.panels[0].tf:null;
+  $('tfAll').innerHTML=TFS.map(t=>`<button class="chip${t===all?' on':''}" data-tf="${t}">${t}</button>`).join('');
+  $('grid').innerHTML=[1,2,4,6].map(g=>`<button class="chip${g===store.grid?' on':''}" data-g="${g}">${g}</button>`).join('');
+  $('sync').classList.toggle('on',!!store.sync)}
+
+async function refresh(){
+  try{await loadTickers()}catch(e){st('Освежувањето не успеа ('+e.message+')');return}
+  await Promise.all(store.panels.map(async p=>{const id=pid(p),e=cache[id],c=C[id];if(!e||!e.raw.length)return;
+    try{const fresh=await klines(p.s,p.tf,2),touched=[];
+      for(const x of fresh){const L=e.raw.length-1;if(x.t===e.raw[L].t){e.raw[L]=x;touched.push(L)}else if(x.t>e.raw[L].t){e.raw.push(x);touched.push(L+1)}}
+      if(c){c.d=calc(e.raw);touched.forEach(i=>updIdx(id,i));legend(id)}}catch(err){}}));
+  if(store.tab==='market')renderMarket();
+  st('Live · '+new Date().toLocaleTimeString('mk-MK'));
+}
+
+// ---------- market ----------
+let mSort={k:'c',dir:-1},mCat='all',mRows=[];
+async function loadMarket(){
+  try{await Promise.all([loadInfo(),loadTickers(),loadFunding()])}catch(e){st('Не може да се поврзе со Binance API ('+e.message+')');return}
+  const cnt={};Object.values(info).forEach(x=>x.cats.forEach(c=>cnt[c]=(cnt[c]||0)+1));
+  const cats=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).slice(0,14);
+  $('cats').innerHTML=[['all','Сите'],['fav','⭐ Favorites'],['tradfi','TradFi'],...cats.map(c=>[c,c])].map(([k,l])=>`<button class="chip${k===mCat?' on':''}" data-c="${esc(k)}">${esc(l)}</button>`).join('');
+  renderMarket();st('Пазар · '+Object.keys(info).length+' perp договори');
+}
+function renderMarket(){
+  if(!info)return;const qy=$('mSearch').value.trim().toUpperCase(),fv=favSet();
+  mRows=Object.keys(info).filter(s=>tick[s]).filter(s=>{const x=info[s];
+    if(qy&&!s.includes(qy))return false;
+    if(mCat==='all')return !x.tradfi;if(mCat==='fav')return fv.has(s.replace(/USDT$/,''));if(mCat==='tradfi')return x.tradfi;return x.cats.includes(mCat)})
+    .map(s=>({s,p:+tick[s].lastPrice,c:+tick[s].priceChangePercent,v:+tick[s].quoteVolume,f:fund[s]??0}));
+  mRows.sort((a,b)=>mSort.k==='s'?mSort.dir*a.s.localeCompare(b.s):mSort.dir*(a[mSort.k]-b[mSort.k]));
+  $('mtb').innerHTML=mRows.slice(0,300).map(r=>{const on=fv.has(r.s.replace(/USDT$/,''));
+    return `<tr data-s="${esc(r.s)}"><td class="st${on?' on':''}" data-fav="1">${on?'★':'☆'}</td><td><b>${esc(r.s.replace(/USDT$/,''))}</b> <span class="lbl">Perp</span></td>
+    <td>${esc(fmt(r.p,decOf(r.p)))}</td><td class="${r.c>=0?'up':'dn'}">${esc(pct(r.c))}</td><td>${esc(big(r.v))}</td>
+    <td class="${r.f>=0?'up':'dn'}">${esc((r.f*100).toFixed(4).replace('.',','))}%</td></tr>`}).join('')||'<tr><td></td><td colspan="5" class="s">Нема коини.</td></tr>';
+  document.querySelectorAll('#v-market th[data-k]').forEach(th=>{th.textContent=th.textContent.replace(/ [▲▼]$/,'')+(th.dataset.k===mSort.k?(mSort.dir>0?' ▲':' ▼'):'')});
+  $('mOpen').textContent=`📈 Отвори ги првите ${Math.min(12,mRows.length)}`;
+}
+
+// ---------- scanner ----------
+async function pool(items,n,fn){let i=0;await Promise.all(Array.from({length:n},async()=>{while(i<items.length){const x=items[i++];await fn(x)}}))}
+function renderSTf(){$('sTf').innerHTML=TFS.map(t=>`<button class="chip${store.stf.includes(t)?' on':''}" data-tf="${t}">${t}</button>`).join('')}
+async function scan(){
+  const tfs=TFS.filter(t=>store.stf.includes(t));if(!tfs.length){st('Избери барем еден TF.');return}
+  const dir=$('dir').value,n=+$('topn').value,btn=$('scan');btn.disabled=true;
+  try{
+    await Promise.all([loadInfo(),loadTickers(),loadFunding()]);
+    const syms=Object.values(tick).filter(t=>info[t.symbol]&&!info[t.symbol].tradfi).sort((a,b)=>b.quoteVolume-a.quoteVolume).slice(0,n).map(t=>t.symbol);
+    const res=[];let done=0;
+    await pool(syms,8,async s=>{try{const per={};let d0=null;
+      for(const tf of tfs){const d=calc(await klines(s,tf,320));if(!d0)d0=d;per[tf]=signal(d)}
+      res.push({s,d:d0,per,tot:tfs.reduce((a,t)=>a+per[t].sc,0)})}catch(e){}
+      if(++done%10===0)st(`Скенирање ${done}/${syms.length} · ${tfs.join('+')}…`)});
+    const L=r=>tfs.every(t=>r.per[t].sc>=1)&&r.tot>=3,S=r=>tfs.every(t=>r.per[t].sc<=-1)&&r.tot<=-3;
+    let out=res.filter(dir==='long'?L:dir==='short'?S:r=>L(r)||S(r));
+    out.sort((a,b)=>Math.abs(b.tot)-Math.abs(a.tot));lastScan=out.map(r=>r.s);
+    const fv=favSet();
+    $('stb').innerHTML=out.length?out.map(r=>{const t=tick[r.s],pc=+t.priceChangePercent,f=fund[r.s]??0,on=fv.has(r.s.replace(/USDT$/,''));
+      const tags=[...r.per[tfs[0]].tags];if(tfs.length>1)tags.unshift('MTF ✓');if(Math.abs(f)>=0.0005)tags.push('FR '+(f*100).toFixed(3)+'%');
+      return `<tr data-s="${esc(r.s)}"><td class="st${on?' on':''}" data-fav="1">${on?'★':'☆'}</td><td><b>${esc(r.s.replace(/USDT$/,''))}</b><br><span class="lbl">${esc(r.per[tfs[0]].tr)}</span></td>
+      <td>${esc(fmt(r.d.k[r.d.k.length-1].c,r.d.dec))}</td><td class="${pc>=0?'up':'dn'}">${esc(pct(pc,1))}</td>
+      <td>${tfs.map(tf=>{const v=r.per[tf].sc;return `<span class="${v>0?'up':v<0?'dn':''}">${tf} ${v>0?'+':''}${v}</span>`}).join('<br>')}</td>
+      <td class="s">${esc(tags.join(' · '))}</td><td class="${r.tot>0?'up':'dn'}"><b>${r.tot>0?'+':''}${r.tot}</b></td></tr>`}).join('')
+      :`<tr><td></td><td colspan="6" class="s">Нема сетапи што се совпаѓаат на ${esc(tfs.join(' + '))}.</td></tr>`;
+    $('sOpen').disabled=!out.length;$('sOpen').textContent=`📈 Отвори резултати (${Math.min(12,out.length)})`;
+    st(`Скенирани ${res.length} · ${tfs.join('+')} · ${out.length} сетапи · `+new Date().toLocaleTimeString('mk-MK'));
+  }catch(e){st('Скенирањето не успеа ('+e.message+')')}
+  btn.disabled=false;
+}
+
+// ---------- tabs & events ----------
+function showTab(v){store.tab=v;save();
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  ['charts','market','scan'].forEach(x=>$('v-'+x).hidden=x!==v);
+  if(v==='market'&&!info)loadMarket();else if(v==='market')renderMarket();
+  if(v==='charts')layout();}
+document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)showTab(b.dataset.v)});
+$('tfAll').addEventListener('click',e=>{const b=e.target.closest('[data-tf]');if(!b)return;store.tf=b.dataset.tf;store.panels.forEach(p=>p.tf=store.tf);renderCards()});
+$('grid').addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;store.grid=+b.dataset.g;save();renderTfAll();layout()});
+$('sync').addEventListener('click',()=>{store.sync=!store.sync;save();renderTfAll();if(!store.sync)for(const id in C)C[id].chart.clearCrosshairPosition&&C[id].chart.clearCrosshairPosition()});
+const addSyms=()=>{const add=$('addIn').value.split(/[\s,;]+/).map(norm).filter(Boolean);if(!add.length)return;
+  store.panels=add.map(s=>({s,tf:store.tf})).concat(store.panels);$('addIn').value='';renderCards()};
+$('addBtn').addEventListener('click',addSyms);$('addIn').addEventListener('keydown',e=>{if(e.key==='Enter')addSyms()});
+$('favLoad').addEventListener('click',()=>{const f=[...favSet()];if(!f.length){st('Немаш Favorites – додај со ☆.');return}setPanels(f.map(norm).slice(0,24))});
+$('backBtn').addEventListener('click',()=>{if(!store.stash)return;store.panels=store.stash.panels;store.grid=store.stash.grid;store.stash=null;renderCards()});
+$('charts').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+  const el=b.closest('.ch'),id=el.dataset.id,[s]=id.split('@'),c=C[id],a=b.dataset.a;
+  if(a==='now'&&c)c.chart.timeScale().scrollToRealTime();
+  else if(a==='big'){el.classList.toggle('big');el.scrollIntoView({block:'start',behavior:'smooth'})}
+  else if(a==='fav'){toggleFav(s);const on=isFav(s);b.classList.toggle('on',on);b.textContent=on?'★':'☆'}
+  else if(a==='mtf'){if(!store.stash)store.stash={panels:store.panels,grid:store.grid};store.panels=['15m','1h','4h','1d'].map(tf=>({s,tf}));store.grid=4;renderCards()}
+  else if(a==='x'){store.panels=store.panels.filter(p=>pid(p)!==id);if(c){c.chart.remove();delete C[id]}save();el.remove();renderTfAll()}});
+$('charts').addEventListener('change',e=>{const sel=e.target.closest('.ptf');if(!sel)return;const id=sel.closest('.ch').dataset.id;
+  const p=store.panels.find(x=>pid(x)===id);if(p){p.tf=sel.value;renderCards()}});
+$('mSearch').addEventListener('input',renderMarket);
+$('cats').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b)return;mCat=b.dataset.c;
+  document.querySelectorAll('#cats .chip').forEach(x=>x.classList.toggle('on',x===b));renderMarket()});
+document.querySelector('#v-market thead').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;
+  mSort=mSort.k===th.dataset.k?{k:mSort.k,dir:-mSort.dir}:{k:th.dataset.k,dir:th.dataset.k==='s'?1:-1};renderMarket()});
+$('mOpen').addEventListener('click',()=>{if(mRows.length)setPanels(mRows.slice(0,12).map(r=>r.s))});
+const rowClick=e=>{const tr=e.target.closest('tr[data-s]');if(!tr)return;const s=tr.dataset.s;
+  if(e.target.closest('[data-fav]')){toggleFav(s);const td=e.target.closest('[data-fav]'),on=isFav(s);td.classList.toggle('on',on);td.textContent=on?'★':'☆';return}
+  const tf=tr.closest('#stb')?TFS.find(t=>store.stf.includes(t)):store.tf;
+  if(!store.panels.some(p=>p.s===s&&p.tf===tf))store.panels.unshift({s,tf});renderCards();showTab('charts');scrollTo({top:0})};
+$('mtb').addEventListener('click',rowClick);$('stb').addEventListener('click',rowClick);
+$('sTf').addEventListener('click',e=>{const b=e.target.closest('[data-tf]');if(!b)return;const t=b.dataset.tf;
+  store.stf=store.stf.includes(t)?store.stf.filter(x=>x!==t):store.stf.concat(t);save();renderSTf()});
+$('scan').addEventListener('click',scan);
+$('sOpen').addEventListener('click',()=>{if(lastScan.length)setPanels(lastScan.slice(0,12),TFS.find(t=>store.stf.includes(t)))});
+let timer=null;const setLive=()=>{clearInterval(timer);store.live=$('live').checked;save();if(store.live)timer=setInterval(refresh,15000)};
+$('live').checked=!!store.live;$('live').addEventListener('change',setLive);
+setInterval(()=>{document.querySelectorAll('.ch').forEach(el=>{const id=el.dataset.id,e=cache[id];if(!e||!e.raw.length)return;
+  const ms=TFMS[id.split('@')[1]],r=Math.max(0,e.raw[e.raw.length-1].t+ms-Date.now())/1000|0,dd=r/86400|0,h=(r%86400)/3600|0,m=(r%3600)/60|0,sc=r%60;
+  el.querySelector('.cd').textContent='⏱ '+(dd?dd+'d ':'')+[h,m,sc].map(v=>String(v).padStart(2,'0')).join(':')})},1000);
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(layout,150)});
+
+renderSTf();showTab(store.tab);
+(async()=>{try{await loadTickers()}catch(e){st('Не може да се поврзе со Binance API ('+e.message+'). Отвори во Chrome/Safari.');}
+  await renderCards();if(store.tab==='charts')st('Вчитано · влечи лево за историја');setLive()})();
+}
+</script>
+</body>
+</html>
