@@ -251,7 +251,7 @@ function legend(id){
   const c=C[id],el=card(id);if(!c||!c.d||!el)return;
   const d=c.d,L=d.k.length-1,i=c.hover??L,x=d.k[i],cl=x.c>=x.o?'up':'dn',s=id.split('@')[0];
   const dt=new Date(x.t).toLocaleString('mk-MK',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  el.querySelector('.lg').innerHTML=`<span class="dt">${esc(dt)}</span><span class="${cl}">O ${esc(fmt(x.o,d.dec))} H ${esc(fmt(x.h,d.dec))} L ${esc(fmt(x.l,d.dec))} C ${esc(fmt(x.c,d.dec))}</span><span class="m">Vol ${esc(big(x.v))}</span>`+
+  el.querySelector('.lg').innerHTML=`<span class="dt">${esc(dt)}</span><span class="${cl}">O ${esc(fmt(x.o,d.dec))} H ${esc(fmt(x.h,d.dec))} L ${esc(fmt(x.l,d.dec))} C ${esc(fmt(x.c,d.dec))}</span><span class="${cl}">${esc(x.o?pct((x.c-x.o)/x.o*100):'–')}</span><span class="m">Ампл. ${esc(x.l?((x.h-x.l)/x.l*100).toFixed(2).replace('.',',')+'%':'–')}</span><span class="m">Vol ${esc(big(x.v))}</span>`+
     MAS.map(([n,col])=>`<span class="m" style="color:${col}">MA(${n}) ${esc(fmt(d.m[n][i],d.dec))}</span>`).join('');
   el.querySelector('.ol').innerHTML=`<span style="color:#f0b90b">OBV ${esc(big(d.obv[i]))}</span><span style="color:#e040b0">MA(7) ${esc(big(d.om[i]))}</span>`;
   const t=tick[s],pc=t?+t.priceChangePercent:0,pcl=pc>=0?'up':'dn';
