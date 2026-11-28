@@ -138,7 +138,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
 
 <script>
 {
-const CH_BUILD='2026-11-28-b';
+const CH_BUILD='2026-11-28-c';
 const API='https://fapi.binance.com';
 const TFS=['5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w'];
 const TFMS={'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'6h':216e5,'8h':288e5,'12h':432e5,'1d':864e5,'3d':2592e5,'1w':6048e5};
@@ -263,7 +263,7 @@ function makeChart(id){
     grid:{vertLines:{color:'#22262d'},horzLines:{color:'#22262d'}},crosshair:{mode:0},
     rightPriceScale:{borderColor:'#2b3139',scaleMargins:{top:0.06,bottom:0.27}},
     timeScale:{borderColor:'#2b3139',timeVisible:true,secondsVisible:false,rightOffset:5,barSpacing:6},
-    handleScroll:{vertTouchDrag:false}});
+    handleScroll:{vertTouchDrag:false,horzTouchDrag:false}});   // touch panning only in ✋ mode / maximized
   const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false});
   chart.priceScale('vol').applyOptions({scaleMargins:{top:0.6,bottom:0.27}});
   const cs=chart.addCandlestickSeries({upColor:'#2ebd85',downColor:'#f6465d',wickUpColor:'#2ebd85',wickDownColor:'#f6465d',borderVisible:false});
@@ -275,7 +275,10 @@ function makeChart(id){
   chart.subscribeClick(p=>{if(mode)onClick(id,p)});bindDbl(id);
   // until the user touches this chart, keep it pinned to the newest candle: on every size change
   // (iPhone lays the page out late) and whenever it scrolls into view
-  const bx=card(id).querySelector('.box');['pointerdown','touchstart','wheel'].forEach(ev=>bx.addEventListener(ev,()=>{c.user=true},{passive:true}));
+  const bx=card(id).querySelector('.box');// "touched by the user" = a real chart gesture: mouse, wheel, two fingers, or any touch in ✋ mode. Scrolling the page with one finger is not.
+  bx.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')c.user=true},{passive:true});
+  bx.addEventListener('wheel',()=>{c.user=true},{passive:true});
+  bx.addEventListener('touchstart',e=>{if(e.touches.length>1||card(id)?.classList.contains('lock'))c.user=true},{passive:true});
   c.ro=new ResizeObserver(()=>{if(!c.user)toNow(id)});c.ro.observe(bx);
   c.io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)&&!c.user)toNow(id)});c.io.observe(bx);
   chart.subscribeCrosshairMove(p=>{
@@ -366,7 +369,7 @@ function setMode(m){mode=mode===m?null:m;pend=null;
 // the page does not scroll over it. Off = the page scrolls vertically over the chart. Maximized charts are always in this mode.
 function setLock(id,on){const el=card(id),c=C[id];if(!el)return;el.classList.toggle('lock',on);
   const b=el.querySelector('.lk');if(b)b.classList.toggle('on',on);
-  if(c)c.chart.applyOptions({handleScroll:{vertTouchDrag:on,horzTouchDrag:true,pressedMouseMove:true,mouseWheel:true},handleScale:{pinch:true,mouseWheel:true,axisPressedMouseMove:{time:true,price:true}}})}
+  if(c)c.chart.applyOptions({handleScroll:{vertTouchDrag:on,horzTouchDrag:on,pressedMouseMove:true,mouseWheel:true},handleScale:{pinch:true,mouseWheel:true,axisPressedMouseMove:{time:true,price:true}}})}
 const maxPrev={};
 function setBig(id,on,view){
   const el=card(id),c=C[id],pn=store.panels.find(x=>pid(x)===id);if(!el)return;
