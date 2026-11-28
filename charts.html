@@ -138,7 +138,7 @@ td.st{color:var(--mut);font-size:17px}td.st.on{color:var(--y)}
 
 <script>
 {
-const CH_BUILD='2026-11-28-a';
+const CH_BUILD='2026-11-28-b';
 const API='https://fapi.binance.com';
 const TFS=['5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w'];
 const TFMS={'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'2h':72e5,'4h':144e5,'6h':216e5,'8h':288e5,'12h':432e5,'1d':864e5,'3d':2592e5,'1w':6048e5};
@@ -173,7 +173,11 @@ if(q.get('s')||q.get('tf')){
       const sd=side==='S'?'S':'L',lb=mkLabel(label,sd);
       const L=store.ext[sy]=store.ext[sy]||[];if(+ms>0&&!L.some(e=>e.t===+ms&&e.label===lb))L.push({label:lb,side:sd,t:+ms})});
     const lim=Date.now()-30*864e5;for(const k in store.ext)store.ext[k]=store.ext[k].filter(e=>e.t>lim).slice(-20)}
-  if(q.get('s')){store.panels=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))].slice(0,24).map(s=>({s,tf}));store.tab='charts';store.stash=null}
+  // one coin (Telegram link) -> added on top of your list; several coins (αSCOUT 📈 button) -> they replace the list
+  if(q.get('s')){const L=[...new Set(q.get('s').split(',').map(norm).filter(Boolean))];
+    if(L.length===1){store.panels=[{s:L[0],tf}].concat((store.panels||[]).filter(p=>!(p.s===L[0]&&p.tf===tf))).slice(0,24)}
+    else store.panels=L.slice(0,24).map(s=>({s,tf}));
+    store.tab='charts';store.stash=null}
   try{history.replaceState(null,'',location.pathname)}catch(e){}
 }
 const save=()=>{try{localStorage.setItem('ascout-charts',JSON.stringify(store))}catch(e){}};
@@ -464,9 +468,15 @@ function renderCards(){
   $('backBtn').hidden=!store.stash;
   renderTfAll();layout();
   if(!LW){st('Библиотеката за графикони не се вчита (потребен е интернет до unpkg.com).');return}
-  store.panels.forEach(p=>makeChart(pid(p)));
-  return Promise.all(store.panels.map(loadPanel));
+  // lazy: a chart is created (and loaded) only when its card comes near the screen, so it is born at its real size
+  // and drawn at the newest candle at once (no late jump on iPhone); charts you never scroll to cost nothing
+  if(lazyIO)lazyIO.disconnect();
+  lazyIO=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return;lazyIO.unobserve(e.target);
+    const id=e.target.closest('.ch').dataset.id,p=store.panels.find(x=>pid(x)===id);if(!p||C[id])return;makeChart(id);loadPanel(p)}),{rootMargin:'300px 0px'});
+  document.querySelectorAll('#charts .ch .box').forEach(b=>lazyIO.observe(b));
+  return Promise.resolve();
 }
+let lazyIO=null;
 function setPanels(list,tf){store.panels=list.map(s=>({s,tf:tf||store.tf}));store.stash=null;save();renderCards();showTab('charts')}
 function renderTfAll(){const all=store.panels.length&&store.panels.every(p=>p.tf===store.panels[0].tf)?store.panels[0].tf:null;
   $('tfAll').innerHTML=TFS.map(t=>`<button class="chip${t===all?' on':''}" data-tf="${t}">${t}</button>`).join('');
